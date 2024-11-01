@@ -21,7 +21,7 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 
 
 # Initial settings
-log_wandb = False # False
+log_wandb = True # False
 use_gpu = True
 device_id = [0, 1, 2, 3]
 batch_size = 32
