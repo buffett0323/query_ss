@@ -1,0 +1,17 @@
+callbacks:
+  checkpoint:
+    monitor: val/loss
+    mode: min
+    save_top_k: 3
+    save_last: True
+max_epochs: 150
+accumulate_grad_batches: null
+gradient_clip_val: 10.0
+gradient_clip_algorithm: norm
+logger:
+  save_dir: /home/buffett/research/query-bandit-buffett/logs # ${oc.env:LOG_ROOT}/e2e
+
+# Added
+gpus: 1
+accelerator: gpu
+devices: [0]

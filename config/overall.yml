@@ -1,0 +1,39 @@
+# SEED
+seed: 42
+
+
+# Data configuration
+data: "config/data/vdbo/moisesdb-vdbo.yml"
+
+
+# Model configuration
+model: "config/models/bandit-vdbo.yml"
+
+
+# Loss configuration
+loss: "config/losses/both_l1snr.yml"
+
+
+# Optim configuration
+optim: "config/optim/adam.yml"
+
+
+# Trainer configuration
+trainer: "config/trainer/default.yml"
+
+
+# Stems configuration
+stems:
+  - "vocals"
+  - "bass"
+  - "drums"
+  - "vdbo_others"
+
+# Fast run flag
+fast_run: false
+
+# Effective batch size (optional, only if required)
+effective_batch_size: null
+
+# Commitment weight (optional, only if required)
+commitment_weight: 1.0

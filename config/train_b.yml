@@ -1,0 +1,44 @@
+# SEED
+seed: 23
+
+
+# Data configuration
+data: "config/data/setup-b/moisesdb-vdbgp-query-d-aug-bal.yml" # "config/data/setup-a/moisesdb-vdb-query.yml"
+
+
+# Model configuration
+model: "config/models/bandit-query.yml"
+
+
+# Loss configuration
+loss: "config/losses/both_l1snr.yml"
+
+
+# Optim configuration
+optim: "config/optim/adam.yml"
+
+
+# Trainer configuration
+trainer: "config/trainer/default.yml"
+
+
+# Stems configuration
+stems:
+  - "bass"
+  - "drums"
+  - "lead_male_singer"
+  - "lead_female_singer"
+  - "distorted_electric_guitar"
+  - "clean_electric_guitar"
+  - "acoustic_guitar"
+  - 'grand_piano'
+  - 'electric_piano'
+
+# Fast run flag
+fast_run: false
+
+# Effective batch size (optional, only if required)
+effective_batch_size: null
+
+# Commitment weight (optional, only if required)
+commitment_weight: 1.0
