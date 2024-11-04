@@ -18,7 +18,9 @@ from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
-
+import torchvision
+torchvision.disable_beta_transforms_warning()
+torch.set_float32_matmul_precision('high') 
 
 # Initial settings
 log_wandb = True # False
@@ -26,12 +28,10 @@ use_gpu = True
 device_id = [0, 1, 2, 3]
 batch_size = 32
 lr = 4e-4
-clip_value = 0.5
 early_stop_patience = 260000
 best_val_loss = float('inf')
-np_improvement_steps = 0
 max_steps = 10000000
-root = "/home/buffett/NAS_189/dismix_data/MusicSlots/data/jsb_multi"
+root = "/mnt/gestalt/home/ddmanddman/MusicSlots/data/jsb_multi"
 os.environ["WANDB_MODE"] = "online"
 
 # Initialize data module
@@ -42,8 +42,7 @@ dm = MusicalObjectDataModule(
 )
 
 
-img_transforms = [transforms.Lambda(
-    partial(spec_crop, height=128, width=10))]
+img_transforms = [transforms.Lambda(partial(spec_crop, height=128, width=32))]
 
 train_transforms = transforms.Compose(img_transforms)
 test_transforms = transforms.Compose(img_transforms)
@@ -59,11 +58,12 @@ model = DisMixModel(
     latent_dim=64, 
     hidden_dim=256, 
     gru_hidden_dim=256,
-    num_frames=10,
+    num_frames=32,#10,
     pitch_classes=52,
     output_dim=128,
     learning_rate=4e-4,
     num_layers=2,   
+    clip_value=0.5,
 )
 
 
@@ -117,7 +117,8 @@ trainer = Trainer(
     logger=wandb_logger,
     strategy=strategy,
     callbacks=cb,
-    precision='16-mixed' if use_gpu else 32
+    precision='16-mixed' if use_gpu else 32,
+    gradient_clip_val=model.clip_value,
 )
 
 trainer.fit(model, dm)

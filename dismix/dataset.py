@@ -208,7 +208,7 @@ class MusicalObjectDataset(Dataset):
             allow_pickle=True)
         
         self.examples = torch.load(
-            os.path.join(self.out_path, '{}_examples.pt'.format(split)))
+            os.path.join(self.out_path, '{}_examples.pt'.format(split)), weights_only=True)
         
         # notes = torch.unique(self.examples)
         # self.notes = notes[notes.nonzero(as_tuple=True)]
@@ -217,7 +217,7 @@ class MusicalObjectDataset(Dataset):
     
     def __getitem__(self, index):
         spec_file = self.spec_list[index]
-        spec = torch.load(spec_file)
+        spec = torch.load(spec_file, weights_only=True)
         instrument_list = self.instrument_list[index]
 
         if self.to_db:
@@ -230,7 +230,7 @@ class MusicalObjectDataset(Dataset):
             instrument_name = self.all_instrument_names[inst].replace(" ", "")
             note_spec = torch.load(os.path.join(
                 self.root, 'notes/{}'.format(instrument_name), str(note.item()),
-                '{}_spec.pt'.format(self.spec)))
+                '{}_spec.pt'.format(self.spec)), weights_only=True)
             note_spec_list.append(note_spec)
 
         note_tensors = torch.cat(note_spec_list, dim=0)
@@ -245,6 +245,7 @@ class MusicalObjectDataset(Dataset):
         # Mixture, note, midi label, instrument_label: 
         # torch.Size([1, 128, 35]) torch.Size([4, 128, 35]) tensor([18, 20, 25, 34]) tensor([0, 1, 1, 2])
         pick_note = random.randint(0, note_tensors.shape[0]-1)
+        # return spec, note_tensors, midi_label, instrument_label
         return spec.squeeze(0), note_tensors[pick_note].squeeze(0), midi_label[pick_note], instrument_label[pick_note] # return spec.squeeze(0), note_tensors, midi_label, instrument_label
 
     def __len__(self):
@@ -365,7 +366,7 @@ class MusicalObjectDataModule(LightningDataModule):
 if __name__ == '__main__':
     
     # check that all datasets load correctly
-    roots = ['/home/buffett/NAS_189/MusicSlots/data/jsb_multi']
+    roots = ["/mnt/gestalt/home/ddmanddman/MusicSlots/data/jsb_multi"]
     
     for root in roots:
         dm = MusicalObjectDataModule(root=root,
@@ -378,9 +379,30 @@ if __name__ == '__main__':
         ))
         
         spec, note_tensors, midi_label, instrument_label = dm.train_ds[0]
-        for i in range(30):
+        for i in range(3):
             spec, note_tensors, midi_label, instrument_label = dm.train_ds[i]
-            print(spec.shape, note_tensors.shape, midi_label, instrument_label)
+            
+            # Sum the note_tensors along the first dimension to create the mixture
+            # mixed_tensor = note_tensors.sum(dim=0).unsqueeze(0)  # Shape will be (1, 128, 35)
+            # spec_transform = torchaudio.transforms.MelSpectrogram(
+            #     sample_rate=16000, #self.resample_rate,
+            #     n_fft=1024, #self.n_fft,
+            #     win_length=None, #self.win_length,
+            #     hop_length=512, #self.hop_length,
+            #     n_mels = 128, #self.n_mels
+            # )#.to(self.device)
+
+            # example_spec = spec_transform(mixed_tensor)
+
+            # print("Mixed Tensor Shape:", example_spec.shape)
+            # print("Spec Shape:", spec.shape)
+            
+            # # Calculate the difference or similarity with `spec`
+            # import torch.nn.functional as F
+            # difference = F.mse_loss(example_spec, spec)  # Mean Squared Error as a comparison metric
+            
+            # print("Difference (MSE) between mixed_tensor and spec:", difference.item())
+            # print(spec.shape, note_tensors.shape, midi_label, instrument_label)
             
 
             

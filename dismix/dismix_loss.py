@@ -1,12 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import torch.distributions as dist
 
 
 class ELBOLoss(nn.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        reduction_method='mean',
+    ):
         super(ELBOLoss, self).__init__()
+        self.reduction_method = reduction_method
 
     def forward(self, x_m, x_m_recon, tau_means, tau_logvars, nu_logits, y_pitch):
         """
@@ -24,26 +28,20 @@ class ELBOLoss(nn.Module):
             torch.Tensor: Scalar loss value.
         """
 
-        # Number of sources in the mixture
-        N_s = len(tau_means)
 
-        # Reconstruction loss (MSE)
-        recon_loss = F.mse_loss(x_m_recon, x_m, reduction='mean')
+        # 1. Reconstruction loss (MSE)
+        recon_loss = F.mse_loss(x_m_recon, x_m, reduction=self.reduction_method)
 
-        # Pitch supervision loss
-        pitch_loss = 0.0
-        for nu_logit, y in zip(nu_logits, y_pitch):
-            # Assume nu_logit is raw logits; apply CrossEntropyLoss
-            pitch_loss += F.cross_entropy(nu_logit, y, reduction='mean')
+        # 2. Pitch supervision loss
+        pitch_loss = F.mse_loss(nu_logits, y_pitch, reduction=self.reduction_method)
 
-        # KL divergence loss for timbre latents
+        # 3. KL divergence loss for timbre latents
         kl_loss = 0.0
         for mu, logvar in zip(tau_means, tau_logvars):
             # KL divergence between N(mu, sigma^2) and N(0, 1)
-            kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            kl_loss += kl
+            kl_loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-        # Average KL loss over the batch
+        # Average loss over the batch
         kl_loss = kl_loss / x_m.size(0)
 
         # Total ELBO loss (negative ELBO)
@@ -54,9 +52,14 @@ class ELBOLoss(nn.Module):
     
 
 class BarlowTwinsLoss(nn.Module):
-    def __init__(self, epsilon=1e-9):
+    def __init__(
+        self, 
+        epsilon=1e-9,
+        consider_off_diagonal=False,
+    ):
         super(BarlowTwinsLoss, self).__init__()
         self.epsilon = epsilon  # Small constant to prevent NaNs
+        self.consider_off_diagonal = consider_off_diagonal
 
     def forward(self, e_q, tau):
         """
@@ -69,7 +72,7 @@ class BarlowTwinsLoss(nn.Module):
         Returns:
         - loss (Tensor): Barlow Twins loss value.
         """
-        N_s, D_tau = e_q.size()
+        N_s, _ = e_q.size()
 
         # Calculate mean and std, add epsilon to std to avoid division by zero
         e_q_mean = e_q.mean(dim=0, keepdim=True)
@@ -85,7 +88,7 @@ class BarlowTwinsLoss(nn.Module):
         tau_norm = torch.nan_to_num(tau_norm, nan=0.0)
 
         # Compute the cross-correlation matrix C
-        C = torch.einsum('bi, bj -> ij', e_q_norm, tau_norm) / (N_s + self.epsilon)
+        C = torch.einsum('bi, bj -> ij', e_q_norm, tau_norm) / N_s #(N_s + self.epsilon)
         
         # Clamp C to avoid extreme values leading to NaNs
         C = C.clamp(-1 + self.epsilon, 1 - self.epsilon)
@@ -94,6 +97,23 @@ class BarlowTwinsLoss(nn.Module):
         c_diff = (1 - torch.diag(C)) ** 2
         loss = c_diff.sum()
         
+        # # Cross-correlation matrix C
+        # e_q = (e_q - e_q.mean(0)) / (e_q.std(0) - self.epsilon)
+        # tau = (tau - tau.mean(0)) / (tau.std(0) - self.epsilon)
+
+        # cross_corr = torch.mm(e_q.T, tau) / N_s
+
+        # # Compute Barlow Twins loss
+        # loss = 0
+        # if self.consider_off_diagonal:
+        #     for d in range(self.timbre_dim):
+        #         loss += (1 - cross_corr[d, d]) ** 2  # Diagonal elements should be close to 1
+        #         loss += (cross_corr[:, d].sum() - cross_corr[d, d]) ** 2  # Off-diagonal elements should be close to 0
+        
+        # else:
+        #     # Only consider diagonal elements
+        #     loss = ((1 - torch.diag(cross_corr)) ** 2).sum()
+
         return loss
 
     

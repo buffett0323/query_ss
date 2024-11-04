@@ -203,7 +203,7 @@ class DisMixDecoder(nn.Module):
         timbre_dim=64, 
         gru_hidden_dim=256, 
         output_dim=128, 
-        num_frames=10,
+        num_frames=32, #10,
         num_layers=2
     ):
         super(DisMixDecoder, self).__init__()
@@ -242,16 +242,18 @@ class DisMixModel(pl.LightningModule):
         latent_dim=64, 
         hidden_dim=256, 
         gru_hidden_dim=256,
-        num_frames=10,
+        num_frames=32, #10,
         pitch_classes=52,
         output_dim=128,
         learning_rate=4e-4,
         num_layers=2,
+        clip_value=0.5,
     ):
         super(DisMixModel, self).__init__()
         self.save_hyperparameters()
         self.learning_rate = learning_rate
         self.pitch_classes = pitch_classes
+        self.clip_value = clip_value
 
         # Model components
         self.mixture_encoder = MixtureQueryEncoder(
@@ -267,7 +269,7 @@ class DisMixModel(pl.LightningModule):
         self.pitch_encoder = PitchEncoder(
             input_dim=input_dim, 
             hidden_dim=hidden_dim, 
-            pitch_classes=pitch_classes,  # true labels not 0-51
+            pitch_classes=pitch_classes,
             output_dim=latent_dim,
         )
         self.timbre_encoder = TimbreEncoder(
@@ -409,9 +411,8 @@ class DisMixModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
-        # Gradient Clipping: We clip gradients to a maximum of 0.5
-        optimizer.param_groups[0]['grad_clip'] = 0.5
-        return optimizer
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+        return [optimizer], [scheduler]
 
 
 if __name__ == "__main__":
