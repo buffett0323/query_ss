@@ -356,7 +356,7 @@ class DisMixModel(pl.LightningModule):
     def evaluate(self, batch, stage='val'):
         spec, note_tensors, pitch_annotation, _ = batch
         batch_size = spec.size(0)  # Extract batch size
-        note_numbers = [i.shape[0] for i in note_tensors] # [4, 4, 4, 3, 4, 4, 4, 3, 3, 4, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4]
+        note_numbers = [i.shape[0] for i in note_tensors] # [4, 3, 4, ..., 4]
 
         """ Reconstruct spec, note_tensors, pitch_annotation """
         repeated_slices = [spec[i].repeat(count, 1, 1) for i, count in enumerate(note_numbers)]
