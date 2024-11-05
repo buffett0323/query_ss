@@ -91,13 +91,13 @@ if use_gpu:
     accelerator = "gpu"
     if str(-1) in device_id:
         devices = -1
-        strategy = DDPStrategy(find_unused_parameters=True)
+        strategy = DDPStrategy(find_unused_parameters=False)
     else:
         devices = [int(i) for i in device_id]
         if len(devices) == 1:
             strategy = "auto"
         else:
-            strategy = DDPStrategy(find_unused_parameters=True)
+            strategy = DDPStrategy(find_unused_parameters=False)
 else:
     accelerator = "cpu"
     devices = 1
