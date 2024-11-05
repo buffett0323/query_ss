@@ -314,51 +314,57 @@ class DisMixModel(pl.LightningModule):
         timbre_latent, timbre_mean, timbre_logvar = self.timbre_encoder(em, eq)
         
         # Decode to reconstruct the mixture
-        rec_spec = self.decoder(pitch_latent, timbre_latent)
-        
+        rec_source_spec = self.decoder(pitch_latent, timbre_latent)
+            
         # Summing up along the source dimension (num_sources)
-        mixture_latent = source_latents.sum(dim=1)  # Shape: [batch_size, latent_dim]
-        return rec_spec, pitch_latent, pitch_logits, timbre_latent, timbre_mean, timbre_logvar, eq
+        # rec_spec = source_latents.sum(dim=1)  # Shape: [batch_size, latent_dim]
+        return rec_source_spec, pitch_latent, pitch_logits, timbre_latent, timbre_mean, timbre_logvar, eq
 
 
     def training_step(self, batch, batch_idx):
         spec, note_tensors, pitch_annotation, _ = batch
         batch_size = spec.size(0)  # Extract batch size
-        note_numbers = [i.shape[0] for i in note_tensors]
-        print(note_numbers) # [4, 4, 4, 3, 4, 4, 4, 3, 3, 4, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4]
-        # note_tensors, pitch_annotation = torch.stack(note_tensors), torch.stack(pitch_annotation)
-        
+        note_numbers = [i.shape[0] for i in note_tensors] # [4, 4, 4, 3, 4, 4, 4, 3, 3, 4, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4]
+
         """ Reconstruct spec, note_tensors, pitch_annotation """
+        note_tensors = torch.cat(note_tensors, dim=0)
+        pitch_annotation = torch.cat(pitch_annotation, dim=0)
         
-        
-        # # Forward pass
-        # rec_mixture, pitch_latent, pitch_logits, timbre_latent, \
-        #     timbre_mean, timbre_logvar, eq = self(spec, note_tensors)
+        # Forward pass
+        rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
+            timbre_mean, timbre_logvar, eq = self(spec, note_tensors)
 
-        # # Get pitch priors
-        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # Get pitch priors
+        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
-        # # Compute losses
-        # elbo_loss = self.elbo_loss_fn(
-        #     spec, rec_mixture,
-        #     timbre_latent, timbre_mean, timbre_logvar,
-        #     pitch_latent, pitch_priors,
-        # )
-        
-        # ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
-        # # bt_loss = self.bt_loss_fn(eq, timbre_latent)
+        # Get reconstruct mixture by splitting the combined tensor according to the sizes in split_sizes
+        splits = torch.split(rec_source_spec, note_numbers, dim=0)
 
-        # # Total loss
-        # total_loss = elbo_loss + ce_loss #+ bt_loss
+        # Sum each split along the first dimension and concatenate
+        summed_splits = [s.sum(dim=0, keepdim=True) for s in splits]
+        rec_mixture = torch.cat(summed_splits, dim=0)
+                
+        # Compute losses
+        elbo_loss = self.elbo_loss_fn(
+            spec, rec_mixture,
+            timbre_latent, timbre_mean, timbre_logvar,
+            pitch_latent, pitch_priors,
+        )
+        
+        ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
+        # bt_loss = self.bt_loss_fn(eq, timbre_latent)
+
+        # Total loss
+        total_loss = elbo_loss + ce_loss #+ bt_loss
         
         # # Log losses with batch size
         # self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # # self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         
-        # return total_loss
+        return total_loss
 
     def evaluate(self, batch, stage='val'):
         spec, note_tensors, pitch_annotation, _ = batch
