@@ -393,7 +393,7 @@ class DisMixModel(pl.LightningModule):
         # Get accuracy
         predicted_classes = torch.argmax(pitch_logits, dim=1)
         correct_predictions = (predicted_classes == pitch_annotation).float().sum()
-        accuracy = correct_predictions / batch_size
+        accuracy = correct_predictions / len(predicted_classes)
 
         
         # Log losses and metrics

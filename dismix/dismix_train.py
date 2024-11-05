@@ -27,6 +27,7 @@ torch.set_float32_matmul_precision('high')
 # Initial settings
 log_wandb = True # False
 use_gpu = True
+find_unused_parameters = True # False if train all params
 device_id = [0, 1, 2, 3]
 batch_size = 32
 num_frames = 10 #32
@@ -91,13 +92,13 @@ if use_gpu:
     accelerator = "gpu"
     if str(-1) in device_id:
         devices = -1
-        strategy = DDPStrategy(find_unused_parameters=False)
+        strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
     else:
         devices = [int(i) for i in device_id]
         if len(devices) == 1:
             strategy = "auto"
         else:
-            strategy = DDPStrategy(find_unused_parameters=False)
+            strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
 else:
     accelerator = "cpu"
     devices = 1

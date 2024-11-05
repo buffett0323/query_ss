@@ -35,7 +35,7 @@ class ELBOLoss(nn.Module):
         # recon_loss = self.gaussian_likelihood(x_m_recon, self.log_scale, x_m)
 
         # 2. Pitch supervision loss
-        # pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
+        pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
 
         # 3. KL Divergence for timbre latent (using standard Gaussian prior)
         kl_loss = -0.5 * torch.sum(1 + tau_logvars - tau_means.pow(2) - tau_logvars.exp(), dim=1)
@@ -45,7 +45,7 @@ class ELBOLoss(nn.Module):
             kl_loss = kl_loss.sum()
         
         # Total ELBO loss
-        loss = recon_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
+        loss = pitch_loss # recon_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
 
         return loss
     
