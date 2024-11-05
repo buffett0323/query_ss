@@ -7,12 +7,37 @@ import torch.distributions as dist
 class ELBOLoss(nn.Module):
     def __init__(
         self,
-        reduction_method='mean',
+        reduction='mean',
     ):
         super(ELBOLoss, self).__init__()
-        self.reduction_method = reduction_method
+        self.reduction = reduction
+        self.log_scale = nn.Parameter(torch.Tensor([0.0]))
+        
+    def gaussian_likelihood(self, mean, logscale, sample):
+        scale = torch.exp(logscale)
+        dist = torch.distributions.Normal(mean, scale)
+        log_pxz = dist.log_prob(sample)
+        return log_pxz.sum(dim=(1, 2))
 
-    def forward(self, x_m, x_m_recon, tau_means, tau_logvars, nu_logits, y_pitch):
+    def kl_divergence(self, z, mu, std):
+        # --------------------------
+        # Monte carlo KL divergence
+        # --------------------------
+        # 1. define the first two probabilities (in this case Normal for both)
+        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
+        q = torch.distributions.Normal(mu, std)
+
+        # 2. get the probabilities from the equation
+        log_qzx = q.log_prob(z)
+        log_pz = p.log_prob(z)
+
+        # kl
+        kl = (log_qzx - log_pz)
+        kl = kl.sum(-1)
+        return kl
+    
+
+    def forward(self, x_m, x_m_recon, timbre_latent, tau_means, tau_logvars, pitch_latent, pitch_priors):
         """
         Computes the ELBO loss.
 
@@ -30,22 +55,31 @@ class ELBOLoss(nn.Module):
 
 
         # 1. Reconstruction loss (MSE)
-        recon_loss = F.mse_loss(x_m_recon, x_m, reduction=self.reduction_method)
+        recon_loss = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
+        # recon_loss = self.gaussian_likelihood(x_m_recon, self.log_scale, x_m)
 
         # 2. Pitch supervision loss
-        pitch_loss = F.mse_loss(nu_logits, y_pitch, reduction=self.reduction_method)
+        pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
 
         # 3. KL divergence loss for timbre latents
-        kl_loss = 0.0
-        for mu, logvar in zip(tau_means, tau_logvars):
-            # KL divergence between N(mu, sigma^2) and N(0, 1)
-            kl_loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        # kl_loss = 0.0
+        # for mu, logvar in zip(tau_means, tau_logvars):
+        #     # KL divergence between N(mu, sigma^2) and N(0, 1)
+        #     kl_loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-        # Average loss over the batch
-        kl_loss = kl_loss / x_m.size(0)
+        # # Average loss over the batch
+        # kl_loss = kl_loss / x_m.size(0)
+   
 
+        # KL Divergence for timbre latent (using standard Gaussian prior)
+        kl_loss = -0.5 * torch.sum(1 + tau_logvars - tau_means.pow(2) - tau_logvars.exp(), dim=1)
+        if self.reduction == 'mean':
+            kl_loss = kl_loss.mean()
+        elif self.reduction == 'sum':
+            kl_loss = kl_loss.sum()
+        
         # Total ELBO loss (negative ELBO)
-        loss = recon_loss + pitch_loss + kl_loss
+        loss = recon_loss + pitch_loss + kl_loss #recon_loss + pitch_loss # recon_loss + pitch_loss + kl_loss
 
         return loss
     

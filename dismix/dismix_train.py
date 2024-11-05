@@ -23,10 +23,11 @@ torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = True # False
+log_wandb = False # False
 use_gpu = True
-device_id = [0, 1, 2, 3]
+device_id = [2] #[0, 1, 2, 3]
 batch_size = 32
+num_frames = 10 #32
 lr = 4e-4
 early_stop_patience = 260000
 best_val_loss = float('inf')
@@ -42,7 +43,7 @@ dm = MusicalObjectDataModule(
 )
 
 
-img_transforms = [transforms.Lambda(partial(spec_crop, height=128, width=32))]
+img_transforms = [transforms.Lambda(partial(spec_crop, height=128, width=num_frames))]
 
 train_transforms = transforms.Compose(img_transforms)
 test_transforms = transforms.Compose(img_transforms)
@@ -58,7 +59,7 @@ model = DisMixModel(
     latent_dim=64, 
     hidden_dim=256, 
     gru_hidden_dim=256,
-    num_frames=32,#10,
+    num_frames=num_frames,
     pitch_classes=52,
     output_dim=128,
     learning_rate=4e-4,
@@ -87,13 +88,13 @@ if use_gpu:
     accelerator = "gpu"
     if str(-1) in device_id:
         devices = -1
-        strategy = DDPStrategy(find_unused_parameters=False)
+        strategy = DDPStrategy(find_unused_parameters=True)
     else:
         devices = [int(i) for i in device_id]
         if len(devices) == 1:
             strategy = "auto"
         else:
-            strategy = DDPStrategy(find_unused_parameters=False)
+            strategy = DDPStrategy(find_unused_parameters=True)
 else:
     accelerator = "cpu"
     devices = 1

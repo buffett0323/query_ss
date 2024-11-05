@@ -214,6 +214,14 @@ class MusicalObjectDataset(Dataset):
         # self.notes = notes[notes.nonzero(as_tuple=True)]
         self.notes = self.metadata["note_list"]
         self.instrument_tokens = np.array(self.metadata["instrument_tokens"])
+    #     self.preprocessing()
+        
+    # def preprocessing(self):
+    #     # print(len(self.spec_list))
+    #     # print(len(self.instrument_list))
+    #     # print(len(self.examples))
+    #     for i in range(len(self.instrument_list)):
+    #         print(len(self.instrument_list[i]))
     
     def __getitem__(self, index):
         spec_file = self.spec_list[index]
@@ -244,9 +252,9 @@ class MusicalObjectDataset(Dataset):
 
         # Mixture, note, midi label, instrument_label: 
         # torch.Size([1, 128, 35]) torch.Size([4, 128, 35]) tensor([18, 20, 25, 34]) tensor([0, 1, 1, 2])
-        pick_note = random.randint(0, note_tensors.shape[0]-1)
-        # return spec, note_tensors, midi_label, instrument_label
-        return spec.squeeze(0), note_tensors[pick_note].squeeze(0), midi_label[pick_note], instrument_label[pick_note] # return spec.squeeze(0), note_tensors, midi_label, instrument_label
+        # pick_note = random.randint(0, note_tensors.shape[0]-1)
+        return spec.squeeze(0), note_tensors, midi_label, instrument_label
+        # return spec.squeeze(0), note_tensors[pick_note].squeeze(0), midi_label[pick_note], instrument_label[pick_note] # return spec.squeeze(0), note_tensors, midi_label, instrument_label
 
     def __len__(self):
         return len(self.spec_list)
@@ -363,6 +371,7 @@ class MusicalObjectDataModule(LightningDataModule):
         self.setup(stage = 'fit')
         return len(self.train_ds.instrument_tokens)
     
+    
 if __name__ == '__main__':
     
     # check that all datasets load correctly
@@ -381,6 +390,8 @@ if __name__ == '__main__':
         spec, note_tensors, midi_label, instrument_label = dm.train_ds[0]
         for i in range(3):
             spec, note_tensors, midi_label, instrument_label = dm.train_ds[i]
+            if note_tensors.shape == 3:
+                print("HEll no")
             
             # Sum the note_tensors along the first dimension to create the mixture
             # mixed_tensor = note_tensors.sum(dim=0).unsqueeze(0)  # Shape will be (1, 128, 35)

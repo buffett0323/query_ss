@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 
 
@@ -57,19 +56,15 @@ class StochasticBinarizationLayer(nn.Module):
     def forward(self, logits):
         """
         Forward pass of the stochastic binarization layer.
-        
-        Parameters:
-        - logits: The raw outputs from the pitch encoder (before sigmoid activation).
-        
-        Returns:
-        - binarized_output: Binary tensor after stochastic binarization.
         """
+        prob = torch.sigmoid(logits)
+        if self.training:
+            h = torch.rand_like(prob)  # Use random threshold during training
+        else:
+            h = torch.full_like(prob, 0.5)  # Fixed threshold of 0.5 during inference
+            
+        return (prob > h).float()  # Binarize based on the threshold h
         
-        probabilities = torch.sigmoid(logits) # Apply sigmoid to get probabilities
-        h = torch.rand_like(probabilities) # Sample a uniform random threshold for binarization
-        binarized_output = (probabilities > h).float() # Binarize based on the threshold h
-        
-        return binarized_output # Return the binarized output with a straight-through estimator
 
 
 
@@ -87,7 +82,10 @@ class TimbreEncoder(nn.Module):
             nn.Linear(input_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim), # First layer
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), 
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
@@ -96,9 +94,9 @@ class TimbreEncoder(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim), # Last layer
             nn.LayerNorm(hidden_dim),
-            nn.ReLU()
+            nn.ReLU(),
         )
 
         # Gaussian parameterization layers
@@ -106,10 +104,13 @@ class TimbreEncoder(nn.Module):
         self.logvar_layer = nn.Linear(hidden_dim, output_dim)
 
     def reparameterize(self, mean, logvar):
-        """Reparameterization trick to sample from N(mean, var)"""
+        """
+            Reparameterization trick to sample from N(mean, var)
+            Sampling by μφτ (·) + ε σφτ (·)
+        """
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return mean + eps * std
+        return mean + (eps * std)
 
     def forward(self, em, eq):
         # Concatenate the mixture and query embeddings
@@ -124,6 +125,9 @@ class TimbreEncoder(nn.Module):
 
         # Sample the timbre latent using the reparameterization trick
         timbre_latent = self.reparameterize(mean, logvar)
+        # std = torch.exp(logvar / 2)
+        # q = torch.distributions.Normal(mean, std)
+        # timbre_latent = q.rsample()
         
         return timbre_latent, mean, logvar
 
@@ -158,8 +162,7 @@ class PitchEncoder(nn.Module):
             nn.Linear(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, pitch_classes)  # Output logits for pitch classification
-            # No Sigmoid here, SB layer will handle it
+            nn.Linear(hidden_dim, pitch_classes),  # Output logits for pitch classification
         )
 
         # Stochastic Binarization (SB) Layer: Converts pitch logits to a binary representation
@@ -177,9 +180,16 @@ class PitchEncoder(nn.Module):
 
     def forward(self, em, eq):
         concat_input = torch.cat([em, eq], dim=-1)  # Concatenate em and eq
+        
+        # Transcriber
         pitch_logits = self.transcriber(concat_input)
+
+        # SB Layer
         y_bin = self.sb_layer(pitch_logits)  # Apply binarisation
+        
+        # Projection Layer
         pitch_latent = self.fc_proj(y_bin)
+        
         return pitch_latent, pitch_logits
     
     
@@ -212,24 +222,23 @@ class DisMixDecoder(nn.Module):
         self.film = FiLM(pitch_dim, timbre_dim)
         self.gru = nn.GRU(input_size=pitch_dim, hidden_size=gru_hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
         self.linear = nn.Linear(gru_hidden_dim * 2, output_dim)  # Bi-directional GRU output dimension is doubled
-        self.output_transform = nn.Sequential(
-            nn.Conv1d(output_dim, output_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(output_dim),
-            nn.ReLU(),
-            nn.Conv1d(output_dim, output_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(output_dim),
-            nn.ReLU(),
-            nn.Conv1d(output_dim, output_dim, kernel_size=1),  # Convert back to 1D waveform or spectrogram
-        )
+        # self.output_transform = nn.Sequential(
+        #     nn.Conv1d(output_dim, output_dim, kernel_size=3, padding=1),
+        #     nn.BatchNorm1d(output_dim),
+        #     nn.ReLU(),
+        #     nn.Conv1d(output_dim, output_dim, kernel_size=3, padding=1),
+        #     nn.BatchNorm1d(output_dim),
+        #     nn.ReLU(),
+        #     nn.Conv1d(output_dim, output_dim, kernel_size=1),  # Convert back to 1D waveform or spectrogram
+        # )
     
     def forward(self, pitch_latents, timbre_latents):
         # FiLM layer: modulates pitch latents based on timbre latents
         source_latents = self.film(pitch_latents, timbre_latents)
         source_latents = source_latents.unsqueeze(1).repeat(1, self.num_frames, 1) # Expand source_latents along time axis if necessary
-        
         output, _ = self.gru(source_latents)
-        output = self.linear(output).transpose(1, 2)
-        output = self.output_transform(output)
+        output = self.linear(output).transpose(1, 2) # torch.Size([32, 10, 64])
+        # output = self.output_transform(output)
         
         return output # reconstructed spectrogram
 
@@ -305,13 +314,55 @@ class DisMixModel(pl.LightningModule):
         timbre_latent, timbre_mean, timbre_logvar = self.timbre_encoder(em, eq)
         
         # Decode to reconstruct the mixture
-        reconstructed_spectrogram = self.decoder(pitch_latent, timbre_latent)
-        return reconstructed_spectrogram, pitch_latent, pitch_logits, timbre_latent, timbre_mean, timbre_logvar, eq
+        rec_spec = self.decoder(pitch_latent, timbre_latent)
+        
+        # Summing up along the source dimension (num_sources)
+        mixture_latent = source_latents.sum(dim=1)  # Shape: [batch_size, latent_dim]
+        return rec_spec, pitch_latent, pitch_logits, timbre_latent, timbre_mean, timbre_logvar, eq
 
 
     def training_step(self, batch, batch_idx):
         spec, note_tensors, pitch_annotation, _ = batch
         batch_size = spec.size(0)  # Extract batch size
+        note_numbers = [i.shape[0] for i in note_tensors]
+        print(note_numbers) # [4, 4, 4, 3, 4, 4, 4, 3, 3, 4, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4]
+        # note_tensors, pitch_annotation = torch.stack(note_tensors), torch.stack(pitch_annotation)
+        
+        """ Reconstruct spec, note_tensors, pitch_annotation """
+        
+        
+        # # Forward pass
+        # rec_mixture, pitch_latent, pitch_logits, timbre_latent, \
+        #     timbre_mean, timbre_logvar, eq = self(spec, note_tensors)
+
+        # # Get pitch priors
+        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        
+        # # Compute losses
+        # elbo_loss = self.elbo_loss_fn(
+        #     spec, rec_mixture,
+        #     timbre_latent, timbre_mean, timbre_logvar,
+        #     pitch_latent, pitch_priors,
+        # )
+        
+        # ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
+        # # bt_loss = self.bt_loss_fn(eq, timbre_latent)
+
+        # # Total loss
+        # total_loss = elbo_loss + ce_loss #+ bt_loss
+        
+        # # Log losses with batch size
+        # self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # # self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        
+        # return total_loss
+
+    def evaluate(self, batch, stage='val'):
+        spec, note_tensors, pitch_annotation, _ = batch
+        batch_size = spec.size(0)  # Extract batch size
         note_tensors, pitch_annotation = torch.stack(note_tensors), torch.stack(pitch_annotation)
         
         # Forward pass
@@ -325,88 +376,38 @@ class DisMixModel(pl.LightningModule):
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
             spec, rec_mixture,
-            timbre_mean, timbre_logvar,
+            timbre_latent, timbre_mean, timbre_logvar,
             pitch_latent, pitch_priors,
         )
         
         ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
-        bt_loss = self.bt_loss_fn(eq, timbre_latent)
+        # bt_loss = self.bt_loss_fn(eq, timbre_latent)
+        
+        predicted_classes = torch.argmax(pitch_logits, dim=1)
+        correct_predictions = (predicted_classes == pitch_annotation).float().sum()
+        accuracy = correct_predictions / batch_size
 
         # Total loss
-        total_loss = elbo_loss + ce_loss + bt_loss
+        total_loss = elbo_loss + ce_loss #+ bt_loss
         
-        # Log losses with batch size
-        self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        
+        # Log losses and metrics
+        self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+
         return total_loss
+
+
 
     def validation_step(self, batch, batch_idx):
-        spec, note_tensors, pitch_annotation, _ = batch
-        batch_size = spec.size(0)  # Extract batch size
-        note_tensors, pitch_annotation = torch.stack(note_tensors), torch.stack(pitch_annotation)
-        
-        # Forward pass
-        rec_mixture, pitch_latent, pitch_logits, timbre_latent, \
-            timbre_mean, timbre_logvar, eq = self(spec, note_tensors)
-
-        # Get pitch priors
-        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
-        
-        # Compute losses
-        elbo_loss = self.elbo_loss_fn(
-            spec, rec_mixture,
-            timbre_mean, timbre_logvar,
-            pitch_latent, pitch_priors,
-        )
-        
-        ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
-        bt_loss = self.bt_loss_fn(eq, timbre_latent)
-
-        # Total loss
-        total_loss = elbo_loss + ce_loss + bt_loss
-        
-        # Log validation loss with batch size
-        self.log('val_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
-        self.log('val_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('val_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('val_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-
-        return total_loss
-
+        pass
+        # return self.evaluate(batch, stage='val')
 
     def test_step(self, batch, batch_idx):
-        spec, note_tensors, pitch_annotation, _ = batch
-        batch_size = spec.size(0)  # Extract batch size
-        note_tensors, pitch_annotation = torch.stack(note_tensors), torch.stack(pitch_annotation)
-        
-        # Forward pass
-        rec_mixture, pitch_latent, pitch_logits, timbre_latent, \
-            timbre_mean, timbre_logvar, eq = self(spec, note_tensors)
-
-        # Get pitch priors
-        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
-        
-        # Compute losses
-        elbo_loss = self.elbo_loss_fn(
-            spec, rec_mixture,
-            timbre_mean, timbre_logvar,
-            pitch_latent, pitch_priors,
-        )
-        
-        ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
-        bt_loss = self.bt_loss_fn(eq, timbre_latent)
-
-        # Total loss
-        total_loss = elbo_loss + ce_loss + bt_loss
-        
-        # Log validation loss with batch size
-        print("Test loss:", total_loss)
-        return total_loss
+        pass
+        # return self.evaluate(batch, stage='test')
 
 
     def configure_optimizers(self):
