@@ -1,8 +1,16 @@
+import os
 import torch
 import torch.nn as nn
+import numpy as np
 import torch.nn.functional as F
 import torch.optim as optim
 import pytorch_lightning as pl
+import matplotlib.pyplot as plt
+
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from matplotlib.colors import ListedColormap
+
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 
 
@@ -293,6 +301,10 @@ class DisMixModel(pl.LightningModule):
         # Pitch Priors
         self.pitch_prior = self.pitch_encoder.fc_proj
         
+        # Add storage for stored test timbre latents and instrument labels
+        self.test_timbre_latents = []
+        self.test_instrument_labels = []
+        
 
     def forward(self, mixture, query):
         # Encode mixture and query
@@ -354,7 +366,7 @@ class DisMixModel(pl.LightningModule):
         return total_loss
 
     def evaluate(self, batch, stage='val'):
-        spec, note_tensors, pitch_annotation, _ = batch
+        spec, note_tensors, pitch_annotation, instrument_label = batch
         batch_size = spec.size(0)  # Extract batch size
         note_numbers = [i.shape[0] for i in note_tensors] # [4, 3, 4, ..., 4]
 
@@ -363,11 +375,16 @@ class DisMixModel(pl.LightningModule):
         repeated_spec = torch.cat(repeated_slices, dim=0)
         note_tensors = torch.cat(note_tensors, dim=0)
         pitch_annotation = torch.cat(pitch_annotation, dim=0)
+        instrument_label = torch.cat(instrument_label, dim=0)
         
         # Forward pass
         rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
             timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
-
+            
+        if stage == 'test':
+            self.test_timbre_latents.append(timbre_latent.detach().cpu())
+            self.test_instrument_labels.append(instrument_label.detach().cpu())
+            
         # Get pitch priors
         ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
         pitch_priors = self.pitch_prior(ohe_pitch_annotation)
@@ -417,6 +434,47 @@ class DisMixModel(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
         return [optimizer], [scheduler]
+    
+    def on_test_epoch_end(self):
+        # Concatenate stored latents and labels
+        timbre_latents = torch.cat(self.test_timbre_latents, dim=0).numpy()
+        instrument_labels = torch.cat(self.test_instrument_labels, dim=0).numpy()
+        
+        # Reset storage lists for the next epoch
+        self.test_timbre_latents = []
+        self.test_instrument_labels = []
+
+        # Perform T-SNE or PCA
+        tsne = TSNE(n_components=2, random_state=42)
+        latent_2d = tsne.fit_transform(timbre_latents)
+
+        # Define unique labels and colormap
+        unique_labels = np.unique(instrument_labels)
+        colors = plt.cm.tab10.colors[:len(unique_labels)]  # Use colors from tab10 colormap
+        cmap = ListedColormap(colors)
+        
+        # Plotting
+        plt.figure(figsize=(8, 6))
+        for i, label in enumerate(unique_labels):
+            plt.scatter(latent_2d[instrument_labels == label, 0], 
+                        latent_2d[instrument_labels == label, 1], 
+                        color=cmap(i), 
+                        label=f"Instrument {label}", 
+                        alpha=0.7)
+        
+        plt.title("T-SNE of Timbre Latent Embeddings (Test)")
+        plt.xlabel("Dimension 1")
+        plt.ylabel("Dimension 2")
+        plt.legend(title="Instrument Label", loc="best")  # Add legend instead of colorbar
+        
+        # Save the figure to a file
+        output_dir = "plots"
+        os.makedirs(output_dir, exist_ok=True)
+        plt.savefig(os.path.join(output_dir, "timbre_latent_tsne_test.png"), format="png", dpi=300)
+
+        # Show the plot
+        plt.show()
+
 
 
 if __name__ == "__main__":

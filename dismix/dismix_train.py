@@ -1,9 +1,11 @@
 import os
 import wandb
 import torch
+import torchvision
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchvision import transforms
@@ -14,11 +16,11 @@ from dataset import MusicalObjectDataModule, spec_crop # CocoChoralesTinyDataset
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
-import torchvision
+
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
 torchvision.disable_beta_transforms_warning()
@@ -30,9 +32,9 @@ use_gpu = True
 find_unused_parameters = True # False if train all params
 device_id = [0, 1, 2, 3]
 batch_size = 32
-num_frames = 10 #32
+num_frames = 32 #10
 lr = 4e-4
-early_stop_patience = 260000
+early_stop_patience = 1000 #260000
 best_val_loss = float('inf')
 max_steps = 10000000
 comp_path = "/home/buffett/NAS_NTU"
@@ -110,8 +112,17 @@ cb = [TQDMProgressBar(refresh_rate=10)]
 model_ckpt = ModelCheckpoint(monitor="val_loss", mode="min")
 cb.append(model_ckpt)
 
-if log_wandb:
-    cb.append(LearningRateMonitor(logging_interval="epoch"))  # Log only once per epoch to save space
+early_stop_callback = EarlyStopping(
+    monitor="val_loss",
+    min_delta=0.00,
+    patience=early_stop_patience,
+    verbose=True,
+    mode="min"                  # "min" for minimizing the loss, "max" for maximizing a metric (e.g., accuracy)
+)
+cb.append(early_stop_callback)
+
+# if log_wandb:
+#     cb.append(LearningRateMonitor(logging_interval="epoch"))  # Log only once per epoch to save space
 
 
 # Trainer settings
