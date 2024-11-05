@@ -222,15 +222,6 @@ class DisMixDecoder(nn.Module):
         self.film = FiLM(pitch_dim, timbre_dim)
         self.gru = nn.GRU(input_size=pitch_dim, hidden_size=gru_hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
         self.linear = nn.Linear(gru_hidden_dim * 2, output_dim)  # Bi-directional GRU output dimension is doubled
-        # self.output_transform = nn.Sequential(
-        #     nn.Conv1d(output_dim, output_dim, kernel_size=3, padding=1),
-        #     nn.BatchNorm1d(output_dim),
-        #     nn.ReLU(),
-        #     nn.Conv1d(output_dim, output_dim, kernel_size=3, padding=1),
-        #     nn.BatchNorm1d(output_dim),
-        #     nn.ReLU(),
-        #     nn.Conv1d(output_dim, output_dim, kernel_size=1),  # Convert back to 1D waveform or spectrogram
-        # )
     
     def forward(self, pitch_latents, timbre_latents):
         # FiLM layer: modulates pitch latents based on timbre latents
@@ -238,7 +229,6 @@ class DisMixDecoder(nn.Module):
         source_latents = source_latents.unsqueeze(1).repeat(1, self.num_frames, 1) # Expand source_latents along time axis if necessary
         output, _ = self.gru(source_latents)
         output = self.linear(output).transpose(1, 2) # torch.Size([32, 10, 64])
-        # output = self.output_transform(output)
         
         return output # reconstructed spectrogram
 

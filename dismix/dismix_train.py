@@ -19,20 +19,23 @@ from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies.ddp import DDPStrategy
 import torchvision
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
 torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
 log_wandb = True # False
 use_gpu = True
-device_id = [1, 2, 3] #[0, 1, 2, 3]
+device_id = [0, 1, 2, 3]
 batch_size = 32
 num_frames = 10 #32
 lr = 4e-4
 early_stop_patience = 260000
 best_val_loss = float('inf')
 max_steps = 10000000
-root = "/mnt/gestalt/home/ddmanddman/MusicSlots/data/jsb_multi"
+comp_path = "/home/buffett/NAS_NTU"
+root = f"{comp_path}/MusicSlots/data/jsb_multi"
 os.environ["WANDB_MODE"] = "online"
 
 # Initialize data module

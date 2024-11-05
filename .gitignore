@@ -2,6 +2,7 @@
 wandb/
 beats/pt_dict/
 mamba/
+dismix/__pycache__/
 dismix/wandb/
 dismix/best_model.pth
 dismix/train_file_list.pkl

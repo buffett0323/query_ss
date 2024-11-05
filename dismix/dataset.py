@@ -214,14 +214,6 @@ class MusicalObjectDataset(Dataset):
         # self.notes = notes[notes.nonzero(as_tuple=True)]
         self.notes = self.metadata["note_list"]
         self.instrument_tokens = np.array(self.metadata["instrument_tokens"])
-    #     self.preprocessing()
-        
-    # def preprocessing(self):
-    #     # print(len(self.spec_list))
-    #     # print(len(self.instrument_list))
-    #     # print(len(self.examples))
-    #     for i in range(len(self.instrument_list)):
-    #         print(len(self.instrument_list[i]))
     
     def __getitem__(self, index):
         spec_file = self.spec_list[index]
@@ -390,33 +382,3 @@ if __name__ == '__main__':
         spec, note_tensors, midi_label, instrument_label = dm.train_ds[0]
         for i in range(3):
             spec, note_tensors, midi_label, instrument_label = dm.train_ds[i]
-            if note_tensors.shape == 3:
-                print("HEll no")
-            
-            # Sum the note_tensors along the first dimension to create the mixture
-            # mixed_tensor = note_tensors.sum(dim=0).unsqueeze(0)  # Shape will be (1, 128, 35)
-            # spec_transform = torchaudio.transforms.MelSpectrogram(
-            #     sample_rate=16000, #self.resample_rate,
-            #     n_fft=1024, #self.n_fft,
-            #     win_length=None, #self.win_length,
-            #     hop_length=512, #self.hop_length,
-            #     n_mels = 128, #self.n_mels
-            # )#.to(self.device)
-
-            # example_spec = spec_transform(mixed_tensor)
-
-            # print("Mixed Tensor Shape:", example_spec.shape)
-            # print("Spec Shape:", spec.shape)
-            
-            # # Calculate the difference or similarity with `spec`
-            # import torch.nn.functional as F
-            # difference = F.mse_loss(example_spec, spec)  # Mean Squared Error as a comparison metric
-            
-            # print("Difference (MSE) between mixed_tensor and spec:", difference.item())
-            # print(spec.shape, note_tensors.shape, midi_label, instrument_label)
-            
-
-            
-        # print(spec.shape, note_tensors.shape, midi_label, instrument_label)
-        # print('Spectrogram shape: {}, note spectrograms shape: {}'.format(spec.shape, note_tensors.shape))
-    

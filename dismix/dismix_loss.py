@@ -11,30 +11,6 @@ class ELBOLoss(nn.Module):
     ):
         super(ELBOLoss, self).__init__()
         self.reduction = reduction
-        self.log_scale = nn.Parameter(torch.Tensor([0.0]))
-        
-    def gaussian_likelihood(self, mean, logscale, sample):
-        scale = torch.exp(logscale)
-        dist = torch.distributions.Normal(mean, scale)
-        log_pxz = dist.log_prob(sample)
-        return log_pxz.sum(dim=(1, 2))
-
-    def kl_divergence(self, z, mu, std):
-        # --------------------------
-        # Monte carlo KL divergence
-        # --------------------------
-        # 1. define the first two probabilities (in this case Normal for both)
-        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
-        q = torch.distributions.Normal(mu, std)
-
-        # 2. get the probabilities from the equation
-        log_qzx = q.log_prob(z)
-        log_pz = p.log_prob(z)
-
-        # kl
-        kl = (log_qzx - log_pz)
-        kl = kl.sum(-1)
-        return kl
     
 
     def forward(self, x_m, x_m_recon, timbre_latent, tau_means, tau_logvars, pitch_latent, pitch_priors):
@@ -68,7 +44,7 @@ class ELBOLoss(nn.Module):
         elif self.reduction == 'sum':
             kl_loss = kl_loss.sum()
         
-        # Total ELBO loss (negative ELBO)
+        # Total ELBO loss
         loss = recon_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
 
         return loss
@@ -120,23 +96,6 @@ class BarlowTwinsLoss(nn.Module):
         # Compute the loss: sum over diagonal elements
         c_diff = (1 - torch.diag(C)) ** 2
         loss = c_diff.sum()
-        
-        # # Cross-correlation matrix C
-        # e_q = (e_q - e_q.mean(0)) / (e_q.std(0) - self.epsilon)
-        # tau = (tau - tau.mean(0)) / (tau.std(0) - self.epsilon)
-
-        # cross_corr = torch.mm(e_q.T, tau) / N_s
-
-        # # Compute Barlow Twins loss
-        # loss = 0
-        # if self.consider_off_diagonal:
-        #     for d in range(self.timbre_dim):
-        #         loss += (1 - cross_corr[d, d]) ** 2  # Diagonal elements should be close to 1
-        #         loss += (cross_corr[:, d].sum() - cross_corr[d, d]) ** 2  # Off-diagonal elements should be close to 0
-        
-        # else:
-        #     # Only consider diagonal elements
-        #     loss = ((1 - torch.diag(cross_corr)) ** 2).sum()
 
         return loss
 
