@@ -23,9 +23,9 @@ torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = False # False
+log_wandb = True # False
 use_gpu = True
-device_id = [2] #[0, 1, 2, 3]
+device_id = [1, 2, 3] #[0, 1, 2, 3]
 batch_size = 32
 num_frames = 10 #32
 lr = 4e-4
