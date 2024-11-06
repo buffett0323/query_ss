@@ -45,7 +45,7 @@ class ELBOLoss(nn.Module):
             kl_loss = kl_loss.sum()
         
         # Total ELBO loss
-        loss = pitch_loss # recon_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
+        loss = pitch_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
 
         return loss
     

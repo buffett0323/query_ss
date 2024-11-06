@@ -380,10 +380,9 @@ class DisMixModel(pl.LightningModule):
         # Forward pass
         rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
             timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
-            
-        if stage == 'test':
-            self.test_timbre_latents.append(timbre_latent.detach().cpu())
-            self.test_instrument_labels.append(instrument_label.detach().cpu())
+
+        self.test_timbre_latents.append(timbre_latent.detach().cpu())
+        self.test_instrument_labels.append(instrument_label.detach().cpu())
             
         # Get pitch priors
         ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
@@ -435,7 +434,13 @@ class DisMixModel(pl.LightningModule):
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
         return [optimizer], [scheduler]
     
+    def on_validation_epoch_end(self):
+        return self.plotting(stage='val')
+    
     def on_test_epoch_end(self):
+        return self.plotting(stage='test')
+    
+    def plotting(self, stage='val'):
         # Concatenate stored latents and labels
         timbre_latents = torch.cat(self.test_timbre_latents, dim=0).numpy()
         instrument_labels = torch.cat(self.test_instrument_labels, dim=0).numpy()
@@ -462,7 +467,7 @@ class DisMixModel(pl.LightningModule):
                         label=f"Instrument {label}", 
                         alpha=0.7)
         
-        plt.title("T-SNE of Timbre Latent Embeddings (Test)")
+        plt.title(f"T-SNE of Timbre Latent Embeddings ({stage})")
         plt.xlabel("Dimension 1")
         plt.ylabel("Dimension 2")
         plt.legend(title="Instrument Label", loc="best")  # Add legend instead of colorbar
@@ -470,7 +475,7 @@ class DisMixModel(pl.LightningModule):
         # Save the figure to a file
         output_dir = "plots"
         os.makedirs(output_dir, exist_ok=True)
-        plt.savefig(os.path.join(output_dir, "timbre_latent_tsne_test.png"), format="png", dpi=300)
+        plt.savefig(os.path.join(output_dir, f"timbre_latent_tsne_{stage}.png"), format="png", dpi=300)
 
         # Show the plot
         plt.show()
