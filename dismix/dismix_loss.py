@@ -32,7 +32,6 @@ class ELBOLoss(nn.Module):
 
         # 1. Reconstruction loss (MSE)
         recon_loss = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
-        # recon_loss = self.gaussian_likelihood(x_m_recon, self.log_scale, x_m)
 
         # 2. Pitch supervision loss
         pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
@@ -45,7 +44,7 @@ class ELBOLoss(nn.Module):
             kl_loss = kl_loss.sum()
         
         # Total ELBO loss
-        loss = pitch_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
+        loss = recon_loss + pitch_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
 
         return loss
     
