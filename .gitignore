@@ -13,3 +13,8 @@ stem_store.pkl
 timbre_store.pkl
 dismix/Dismix_jsb_multi/
 dismix/lightning_logs/
+
+
+__pycache__/
+*.pyc
+
