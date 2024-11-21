@@ -9,7 +9,7 @@ accumulate_grad_batches: null
 gradient_clip_val: 10.0
 gradient_clip_algorithm: norm
 logger:
-  save_dir: /home/buffett/research/query-bandit-buffett/logs # ${oc.env:LOG_ROOT}/e2e
+  save_dir: /home/buffett/research/query_ss/logs # ${oc.env:LOG_ROOT}/e2e
 
 # Added
 gpus: 1

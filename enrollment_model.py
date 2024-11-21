@@ -184,7 +184,6 @@ class MyModel(nn.Module):
         """
         # Transform to mono
         batch.mixture.audio = batch.mixture.audio.mean(dim=1, keepdim=True)
-        # batch.mixture.audio = batch.mixture.audio[:, :, :SET_LENGTH].mean(dim=1, keepdim=True)
 
         # Compute the STFT spectrogram
         with torch.no_grad():
@@ -194,10 +193,6 @@ class MyModel(nn.Module):
                 for stem in batch.sources.keys():
                     # Transform to mono
                     batch.sources[stem].audio = batch.sources[stem].audio.mean(dim=1, keepdim=True)
-                    # batch.sources[stem].audio = batch.sources[stem].audio[:, :, :SET_LENGTH].mean(dim=1, keepdim=True)
-                    # batch.sources[stem].spectrogram = self.stft(batch.sources[stem].audio) # Not used
-            
-            # batch.query.audio = batch.query.audio.mean(dim=1, keepdim=False)
                     
         return batch
     

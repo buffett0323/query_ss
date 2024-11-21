@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 
 
 from enrollment_model import MyModel
+from htdemucs_qss import Query_HTDemucs
 # from load_data import BEATS_path, ORIG_mixture, ORIG_target #, stems
 # from dataset import MusicDataset
 from loss import L1SNR_Recons_Loss, L1SNRDecibelMatchLoss
@@ -56,7 +57,7 @@ Dataset Structure:
 wandb_use = False # False
 lr = 1e-3 # 1e-4
 num_epochs = 500
-batch_size = 2 # 8
+batch_size = 1 # 8
 n_srcs = 1
 emb_dim = 768 # For BEATs
 query_size = 512 # 512
@@ -64,7 +65,7 @@ mix_query_mode = "Hyper_FiLM" # "Transformer"
 q_enc = "Passt"
 config_path = "config/train.yml"
 mask_type = "L1"
-device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print("Training on device:", device)
 
 
@@ -135,6 +136,9 @@ for epoch in tqdm(range(num_epochs)):
         optimizer.zero_grad()
         
         # Forward pass
+        print("mix:", batch.mixture.audio.shape)
+        print("query:", batch.query.audio.shape)
+        
         batch = model(batch)
 
         # Compute the loss
