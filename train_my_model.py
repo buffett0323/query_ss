@@ -135,10 +135,7 @@ for epoch in tqdm(range(num_epochs)):
         
         optimizer.zero_grad()
         
-        # Forward pass
-        print("mix:", batch.mixture.audio.shape)
-        print("query:", batch.query.audio.shape)
-        
+        # Forward pass        
         batch = model(batch)
 
         # Compute the loss

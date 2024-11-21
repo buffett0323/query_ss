@@ -323,14 +323,15 @@ class Query_HTDemucs(nn.Module):
         
         self.condition = FiLM(
             cond_embedding_dim=768, #768,
-            channels=512, #512, 
+            channels=384, #512, 
             additive=True, 
             multiplicative=True
         )
 
     def conditioning(self, mixture, query):
-        Z = self.passt(query)
-        return self.condition(mixture, Z)
+        # Query extraction
+        query = self.passt(query)
+        return self.condition(mixture, query)
         
     
         
@@ -460,7 +461,6 @@ class Query_HTDemucs(nn.Module):
         mean = x.mean(dim=(1, 2, 3), keepdim=True)
         std = x.std(dim=(1, 2, 3), keepdim=True)
         x = (x - mean) / (1e-5 + std)
-        # x will be the freq. branch input.
 
         # Prepare the time branch input.
         xt = mix
@@ -499,6 +499,9 @@ class Query_HTDemucs(nn.Module):
             saved.append(x)
             
             
+        # Condition before Cross Transformer
+        x = self.conditioning(x, query)
+        
         # 2. Cross Transformer
         if self.crosstransformer:
             if self.bottom_channels:
@@ -508,9 +511,7 @@ class Query_HTDemucs(nn.Module):
                 x = rearrange(x, "b c (f t)-> b c f t", f=f)
                 xt = self.channel_upsampler_t(xt)
 
-            print("BF:", x.shape, xt.shape)
             x, xt = self.crosstransformer(x, xt) # B, C, F, T: torch.Size([2, 384, 8, 336]) torch.Size([2, 384, 1344])
-            print("AF:", x.shape, xt.shape)
             
             if self.bottom_channels:
                 x = rearrange(x, "b c f t-> b c (f t)")
@@ -586,10 +587,10 @@ if __name__ == "__main__":
     model = Query_HTDemucs().to(device)
     
     
-    samples = int(7.8 * 44100)
     Batch_size = 1
-    random_audio = torch.rand((Batch_size, 2, samples)) * 2 - 1
-    print(random_audio.shape)
+    random_audio = torch.rand((Batch_size, 2, 294400)).to(device)
+    query_audio = torch.rand((Batch_size, 2, 441000)).to(device)
+    print(random_audio.shape, query_audio.shape)
     
-    res = model(random_audio.to(device), None)
+    res = model(random_audio, query_audio)
     print("RESULT:", res.shape)
