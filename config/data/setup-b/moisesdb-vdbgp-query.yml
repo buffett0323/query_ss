@@ -1,4 +1,4 @@
-data_root: /home/buffett/NAS_NTU/moisesdb # ${oc.env:DATA_ROOT}/moisesdb
+data_root: ${oc.env:DATA_ROOT}/moisesdb
 cls: MoisesDataModule
 batch_size: 4
 effective_batch_size: null
