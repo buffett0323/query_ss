@@ -128,11 +128,12 @@ class TimbreEncoder(nn.Module):
         hidden_state = self.shared_layers(concat_input)  # Shared hidden state output
 
         # Calculate mean and log variance
-        mean = self.mean_layer(hidden_state)  # Mean of the Gaussian distribution
-        logvar = self.logvar_layer(hidden_state)  # Log variance of the Gaussian distribution
+        mean, logvar = self.mean_layer(hidden_state), self.logvar_layer(hidden_state)  # Gaussian distribution
 
         # Sample the timbre latent using the reparameterization trick
         timbre_latent = self.reparameterize(mean, logvar)
+       
+        # # sample z from q
         # std = torch.exp(logvar / 2)
         # q = torch.distributions.Normal(mean, std)
         # timbre_latent = q.rsample()

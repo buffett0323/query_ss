@@ -244,9 +244,7 @@ class MusicalObjectDataset(Dataset):
 
         # Mixture, note, midi label, instrument_label: 
         # torch.Size([1, 128, 35]) torch.Size([4, 128, 35]) tensor([18, 20, 25, 34]) tensor([0, 1, 1, 2])
-        # pick_note = random.randint(0, note_tensors.shape[0]-1)
         return spec.squeeze(0), note_tensors, midi_label, instrument_label
-        # return spec.squeeze(0), note_tensors[pick_note].squeeze(0), midi_label[pick_note], instrument_label[pick_note] # return spec.squeeze(0), note_tensors, midi_label, instrument_label
 
     def __len__(self):
         return len(self.spec_list)

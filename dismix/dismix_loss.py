@@ -11,7 +11,33 @@ class ELBOLoss(nn.Module):
     ):
         super(ELBOLoss, self).__init__()
         self.reduction = reduction
+        
+        # for the gaussian likelihood
+        self.log_scale = nn.Parameter(torch.Tensor([0.0]))
     
+
+    def gaussian_likelihood(self, mean, logscale, sample):
+        scale = torch.exp(logscale)
+        dist = torch.distributions.Normal(mean, scale)
+        log_pxz = dist.log_prob(sample)
+        return log_pxz.sum(dim=(0, 1, 2)) #log_pxz.sum(dim=(1, 2, 3))
+
+    def kl_divergence(self, z, mu, std):
+        # --------------------------
+        # Monte carlo KL divergence
+        # --------------------------
+        # 1. define the first two probabilities (in this case Normal for both)
+        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
+        q = torch.distributions.Normal(mu, std)
+
+        # 2. get the probabilities from the equation
+        log_qzx = q.log_prob(z)
+        log_pz = p.log_prob(z)
+
+        # kl
+        kl = (log_qzx - log_pz)
+        kl = kl.sum(-1)
+        return kl
 
     def forward(self, x_m, x_m_recon, timbre_latent, tau_means, tau_logvars, pitch_latent, pitch_priors):
         """
@@ -32,6 +58,7 @@ class ELBOLoss(nn.Module):
 
         # 1. Reconstruction loss (MSE)
         recon_loss = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
+        # recon_loss = self.gaussian_likelihood(x_m_recon, self.log_scale, x_m)
 
         # 2. Pitch supervision loss
         pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
@@ -42,9 +69,13 @@ class ELBOLoss(nn.Module):
             kl_loss = kl_loss.mean()
         elif self.reduction == 'sum':
             kl_loss = kl_loss.sum()
+        # kl_loss = self.kl_divergence(timbre_latent, tau_means, tau_logvars)
         
         # Total ELBO loss
-        loss = recon_loss + pitch_loss + kl_loss  # recon_loss + pitch_loss + kl_loss
+        # print("recon:", recon_loss.mean(), "kl:", kl_loss.mean(), "pitch:", pitch_loss)
+        # loss = (kl_loss.mean() - recon_loss.mean()) + pitch_loss 
+        # loss = recon_loss + pitch_loss + kl_loss
+        loss = pitch_loss
 
         return loss
     
