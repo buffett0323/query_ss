@@ -15,6 +15,7 @@ dismix/Dismix_jsb_multi/
 dismix/lightning_logs/
 
 lightning_logs/
+checkpoints/
 __pycache__/
 *.pyc
 
