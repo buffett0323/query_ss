@@ -117,7 +117,7 @@ early_stop_callback = EarlyStopping(
     min_delta=0.00,
     patience=early_stop_patience,
     verbose=True,
-    mode="min"                  # "min" for minimizing the loss, "max" for maximizing a metric (e.g., accuracy)
+    mode="min",
 )
 cb.append(early_stop_callback)
 

@@ -61,7 +61,7 @@ class ELBOLoss(nn.Module):
         # recon_loss = self.gaussian_likelihood(x_m_recon, self.log_scale, x_m)
 
         # Added source reconstruction loss
-        source_recon_loss = F.mse_loss(x_s, x_s_recon, reduction=self.reduction)
+        # source_recon_loss = F.mse_loss(x_s, x_s_recon, reduction=self.reduction)
 
         # 2. Pitch supervision loss
         # pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
@@ -72,8 +72,8 @@ class ELBOLoss(nn.Module):
         # kl_loss = self.kl_divergence(timbre_latent, tau_means, tau_logvars)
         
         # Total ELBO loss
-        loss = recon_loss + kl_loss + source_recon_loss # + pitch_loss
-        print(recon_loss.item(), kl_loss.item(), source_recon_loss.item())
+        loss = recon_loss + kl_loss #+ source_recon_loss # + pitch_loss
+        print(recon_loss.item(), kl_loss.item()) #, source_recon_loss.item())
         return loss
     
     
