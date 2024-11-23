@@ -78,7 +78,7 @@ class ELBOLoss(nn.Module):
         # print("recon:", recon_loss.mean(), "kl:", kl_loss.mean(), "pitch:", pitch_loss)
         # loss = (kl_loss.mean() - recon_loss.mean()) + pitch_loss 
         loss = recon_loss + kl_loss + source_recon_loss # + pitch_loss
-        print(recon_loss, kl_loss, source_recon_loss)
+        print(recon_loss.item(), kl_loss.item(), source_recon_loss.item())
         return loss
     
     

@@ -121,9 +121,6 @@ early_stop_callback = EarlyStopping(
 )
 cb.append(early_stop_callback)
 
-# if log_wandb:
-#     cb.append(LearningRateMonitor(logging_interval="epoch"))  # Log only once per epoch to save space
-
 
 # Trainer settings
 trainer = Trainer(
