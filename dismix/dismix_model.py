@@ -300,7 +300,7 @@ class DisMixModel(pl.LightningModule):
         self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
         
         # Pitch Priors
-        self.pitch_prior = self.pitch_encoder.fc_proj
+        # self.pitch_prior = self.pitch_encoder.fc_proj
         
         # Add storage for stored test timbre latents and instrument labels
         self.test_timbre_latents = []
@@ -337,8 +337,8 @@ class DisMixModel(pl.LightningModule):
             timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
 
         # Get pitch priors
-        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -346,10 +346,12 @@ class DisMixModel(pl.LightningModule):
         rec_mixture = torch.cat(summed_splits, dim=0)
                 
         # Compute losses
+        print(note_tensors.shape, rec_source_spec.shape)
         elbo_loss = self.elbo_loss_fn(
             spec, rec_mixture,
+            note_tensors, rec_source_spec,
             timbre_latent, timbre_mean, timbre_logvar,
-            pitch_latent, pitch_priors,
+            # pitch_latent, pitch_priors,
         )
         
         ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
@@ -424,10 +426,12 @@ class DisMixModel(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        return self.evaluate(batch, stage='val')
+        pass
+        # return self.evaluate(batch, stage='val')
 
     def test_step(self, batch, batch_idx):
-        return self.evaluate(batch, stage='test')
+        pass
+        # return self.evaluate(batch, stage='test')
 
 
     def configure_optimizers(self):

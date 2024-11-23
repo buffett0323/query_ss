@@ -27,12 +27,12 @@ torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = True # False
+log_wandb = False # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [0, 1, 2, 3]
+device_id = [0, 2, 3]
 batch_size = 32
-num_frames = 32 #10
+num_frames = 10 #32
 lr = 4e-4
 early_stop_patience = 100 #260000
 best_val_loss = float('inf')
