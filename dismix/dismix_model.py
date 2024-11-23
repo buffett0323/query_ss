@@ -336,7 +336,7 @@ class DisMixModel(pl.LightningModule):
         rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
             timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
 
-        # Get pitch priors
+        # # Get pitch priors
         # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
         # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
@@ -346,7 +346,6 @@ class DisMixModel(pl.LightningModule):
         rec_mixture = torch.cat(summed_splits, dim=0)
                 
         # Compute losses
-        print(note_tensors.shape, rec_source_spec.shape)
         elbo_loss = self.elbo_loss_fn(
             spec, rec_mixture,
             note_tensors, rec_source_spec,
@@ -387,9 +386,9 @@ class DisMixModel(pl.LightningModule):
         self.test_timbre_latents.append(timbre_latent.detach().cpu())
         self.test_instrument_labels.append(instrument_label.detach().cpu())
             
-        # Get pitch priors
-        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # # Get pitch priors
+        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -399,8 +398,9 @@ class DisMixModel(pl.LightningModule):
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
             spec, rec_mixture,
+            note_tensors, rec_source_spec,
             timbre_latent, timbre_mean, timbre_logvar,
-            pitch_latent, pitch_priors,
+            # pitch_latent, pitch_priors,
         )
         
         ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
@@ -426,12 +426,10 @@ class DisMixModel(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        pass
-        # return self.evaluate(batch, stage='val')
+        return self.evaluate(batch, stage='val')
 
     def test_step(self, batch, batch_idx):
-        pass
-        # return self.evaluate(batch, stage='test')
+        return self.evaluate(batch, stage='test')
 
 
     def configure_optimizers(self):
@@ -484,18 +482,3 @@ class DisMixModel(pl.LightningModule):
 
         # Show the plot
         plt.show()
-
-
-
-if __name__ == "__main__":
-    # Example usage
-    batch_size = 8
-    em = torch.randn(batch_size, 64)  # Example mixture encoder output
-    eq = torch.randn(batch_size, 64)  # Example query encoder output
-
-    model = TimbreEncoder()
-    timbre_embedding, mean, logvar = model(em, eq)
-
-    print("Timbre Embedding:", timbre_embedding.shape)  # Should be [batch_size, 64]
-    print("Mean:", mean.shape)  # Should be [batch_size, 64]
-    print("Log Variance:", logvar.shape)  # Should be [batch_size, 64]
