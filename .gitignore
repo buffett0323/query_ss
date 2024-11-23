@@ -18,4 +18,4 @@ lightning_logs/
 checkpoints/
 __pycache__/
 *.pyc
-
+*.DS_Store
