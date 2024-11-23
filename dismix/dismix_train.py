@@ -30,7 +30,7 @@ torch.set_float32_matmul_precision('high')
 log_wandb = False # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [0] #[0, 2, 3]
+device_id = [0] #[0, 1, 2, 3]
 batch_size = 32
 num_frames = 10 #32
 lr = 4e-4
