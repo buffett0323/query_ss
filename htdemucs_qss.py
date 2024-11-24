@@ -19,7 +19,7 @@ from models.e2e.querier.passt import Passt
 from models.types import InputType, OperationMode, SimpleishNamespace
 
 
-from conditioning import FiLM, Hyper_FiLM, FiLMHyperNetwork
+from conditioning import FiLM, FiLM_3D
 from transformer import TransformerPredictor
 
 from demucs.transformer import CrossTransformerEncoder
@@ -321,17 +321,26 @@ class Query_HTDemucs(nn.Module):
             passt_fs=44100, #44100,
         )
         
-        self.condition = FiLM(
+        self.x_condition = FiLM(
+            cond_embedding_dim=768, #768,
+            channels=384, #512, 
+            additive=True, 
+            multiplicative=True
+        )
+        self.xt_condition = FiLM_3D(
             cond_embedding_dim=768, #768,
             channels=384, #512, 
             additive=True, 
             multiplicative=True
         )
 
-    def conditioning(self, mixture, query):
+
+    def conditioning(self, x, xt, query):
         # Query extraction
         query = self.passt(query)
-        return self.condition(mixture, query)
+        x = self.x_condition(x, query)
+        xt = self.xt_condition(xt, query)
+        return x, xt
         
     
         
@@ -452,6 +461,7 @@ class Query_HTDemucs(nn.Module):
                     length_pre_pad = mix.shape[-1]
                     mix = F.pad(mix, (0, training_length - length_pre_pad))
         z = self._spec(mix)
+        gt_mask = mix / (z + 1e-9) # Added
         mag = self._magnitude(z).to(mix.device)
         x = mag
 
@@ -500,7 +510,7 @@ class Query_HTDemucs(nn.Module):
             
             
         # Condition before Cross Transformer
-        x = self.conditioning(x, query)
+        x, xt = self.conditioning(x, xt, query)
         
         # 2. Cross Transformer
         if self.crosstransformer:
@@ -577,7 +587,7 @@ class Query_HTDemucs(nn.Module):
         x = xt + x
         if length_pre_pad:
             x = x[..., :length_pre_pad]
-        return x
+        return x, zout, gt_mask # estimate, pred_mask, gt_mask
 
 
 

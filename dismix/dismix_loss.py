@@ -11,33 +11,7 @@ class ELBOLoss(nn.Module):
     ):
         super(ELBOLoss, self).__init__()
         self.reduction = reduction
-        
-        # # for the gaussian likelihood
-        # self.log_scale = nn.Parameter(torch.Tensor([0.0]))
-    
 
-    # def gaussian_likelihood(self, mean, logscale, sample):
-    #     scale = torch.exp(logscale)
-    #     dist = torch.distributions.Normal(mean, scale)
-    #     log_pxz = dist.log_prob(sample)
-    #     return log_pxz.sum(dim=(0, 1, 2)) #log_pxz.sum(dim=(1, 2, 3))
-
-    # def kl_divergence(self, z, mu, std):
-    #     # --------------------------
-    #     # Monte carlo KL divergence
-    #     # --------------------------
-    #     # 1. define the first two probabilities (in this case Normal for both)
-    #     p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
-    #     q = torch.distributions.Normal(mu, std)
-
-    #     # 2. get the probabilities from the equation
-    #     log_qzx = q.log_prob(z)
-    #     log_pz = p.log_prob(z)
-
-    #     # kl
-    #     kl = (log_qzx - log_pz)
-    #     kl = kl.sum(-1)
-    #     return kl
 
     def forward(self, x_m, x_m_recon, x_s, x_s_recon, timbre_latent, tau_means, tau_logvars, pitch_latent=None, pitch_priors=None):
         """

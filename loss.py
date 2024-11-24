@@ -156,20 +156,41 @@ class L1SNR_Recons_Loss(_Loss):
         return loss_masks + loss_l1snr + loss_dem
 
 
+class L1SNR_Recons_Loss_New(_Loss):
+    """ Self-defined Loss Function """
+    def __init__(
+        self, 
+        l1snr_eps=1e-3, 
+        dbeps=1e-3,
+        mask_type="MSE", 
+    ):
+        super().__init__()
+        self.l1snr = L1SNRLoss(l1snr_eps)
+        self.decibel_match = DecibelMatchLoss(dbeps)
+        self.mask_type = mask_type
+        
+        if mask_type == "MSE":
+            self.mask_loss = nn.MSELoss()
+        elif mask_type == "BCE":
+            self.mask_loss = nn.BCELoss()
+        elif mask_type == "L1":
+            self.mask_loss = nn.L1Loss()
+ 
+        
+    def forward(self, pred_mask, gt_mask, target_audio, source_audio):
+        
+        # 1. Calculate Loss for Mask prediction
+        if self.mask_type == "BCE":
+            pred_mask = torch.sigmoid(pred_mask)    
+        if self.mask_type != "None":
+            loss_masks = self.mask_loss(pred_mask, gt_mask)
+        else: loss_masks = 0.0
+        
+        # 2. Calculate the L1SNR Loss of Separated query track
+        loss_l1snr = self.l1snr(target_audio, source_audio)
+        
+        # 3. Calculate the L1SNR Loss of Reconstruction Loss
+        loss_dem = self.decibel_match(target_audio, source_audio)
+        
+        return loss_masks + loss_l1snr + loss_dem
 
-
-
-if __name__ == "__main__":
-    # Example usage
-    B, K, F, T, N = 4, 2, 512, 256, 65280  # Example dimensions
-    predicted_masks = torch.randn(B, K, F, T)  # Predicted masks [B, K, F, T]
-    gen_masks = torch.randn(B, K, F, T) 
-    gt_stft = torch.randn(B, K, N)
-    S_k = torch.randn(B, K, N)
-
-    # Instantiate loss function
-    loss_fn = L1SNRDecibelMatchLoss()
-
-    # Calculate loss
-    loss = loss_fn(predicted_masks, gen_masks, gt_stft, S_k)
-    print(f"Loss: {loss.item()}")

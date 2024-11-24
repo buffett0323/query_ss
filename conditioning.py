@@ -60,7 +60,75 @@ class FiLM(nn.Module):
             x = x + beta
 
         return x
-    
+
+
+class FiLM_3D(nn.Module):
+    def __init__(
+        self,
+        cond_embedding_dim: int,
+        input_channels: int,
+        additive: bool = True,
+        multiplicative: bool = False,
+        depth: int = 1,
+        activation: str = "ELU",
+    ):
+        super().__init__()
+
+        self.additive = additive
+        self.multiplicative = multiplicative
+        self.depth = depth
+
+        # Define activation function
+        Activation = getattr(nn, activation)
+
+        if self.multiplicative:
+            if depth == 1:
+                self.gamma = nn.Linear(cond_embedding_dim, input_channels)
+            else:
+                layers = [nn.Linear(cond_embedding_dim, input_channels)]
+                for _ in range(depth - 1):
+                    layers += [Activation(), nn.Linear(input_channels, input_channels)]
+                self.gamma = nn.Sequential(*layers)
+        else:
+            self.gamma = None
+
+        if self.additive:
+            if depth == 1:
+                self.beta = nn.Linear(cond_embedding_dim, input_channels)
+            else:
+                layers = [nn.Linear(cond_embedding_dim, input_channels)]
+                for _ in range(depth - 1):
+                    layers += [Activation(), nn.Linear(input_channels, input_channels)]
+                self.beta = nn.Sequential(*layers)
+        else:
+            self.beta = None
+
+    def forward(self, x, w):
+        """
+        Args:
+            x: Input tensor with shape [batch_size, channels, height, width]
+               (e.g., torch.Size([2, 384, 1344]))
+            w: Conditioning vector with shape [batch_size, cond_embedding_dim]
+               (e.g., torch.Size([2, 768]))
+        Returns:
+            Modulated input tensor with the same shape as x.
+        """
+        batch_size, channels, _, _ = x.size()
+
+        # Apply gamma (multiplicative) modulation
+        if self.multiplicative:
+            gamma = self.gamma(w)  # Shape: [batch_size, input_channels]
+            gamma = gamma[:, :, None]   # Reshape for broadcasting
+            x = gamma * x
+
+        # Apply beta (additive) modulation
+        if self.additive:
+            beta = self.beta(w)  # Shape: [batch_size, input_channels]
+            beta = beta[:, :, None]   # Reshape for broadcasting
+            x = x + beta
+
+        return x
+
 
 # Define the Hypernetwork for generating FiLM parameters
 class FiLMHyperNetwork(nn.Module):

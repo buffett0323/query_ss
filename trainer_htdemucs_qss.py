@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from typing import Optional
 from htdemucs_qss import Query_HTDemucs
 
+from loss import L1SNR_Recons_Loss_New
 from utils import _load_config
 from metrics import MetricHandler
 from models.types import InputType, OperationMode, SimpleishNamespace
@@ -49,31 +50,36 @@ class Q_HTD_MODEL(LightningModule):
         batch = InputType.from_dict(batch)
         batch = self._to_device(batch)
         
-        estimate = self(batch.mixture.audio, batch.query.audio)
-        non_target = batch.mixture.audio - batch.sources.target.audio
-        sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-        loss = self.criterion(estimate, sources, reduction='mean')
+        estimate, pred_mask, gt_mask = self(batch.mixture.audio, batch.query.audio)
+        # non_target = batch.mixture.audio - batch.sources.target.audio
+        # sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
+        
+        # pred_mask, gt_mask, target_audio, source_audio
+        loss = self.criterion(pred_mask, gt_mask, estimate, batch.mixture.audio)
+        
         self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        batch = InputType.from_dict(batch)
-        batch = self._to_device(batch)
+        pass
+        # batch = InputType.from_dict(batch)
+        # batch = self._to_device(batch)
         
-        estimate = self(batch.mixture.audio, batch.query.audio)
-        non_target = batch.mixture.audio - batch.sources.target.audio
-        sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-        val_loss = self.criterion(estimate, sources, reduction='mean')
-        self.val_metric_handler.calculate_snr(
-            estimate[:, 0], batch.sources["target"].audio, batch.metadata.stem
-        )
-        self.log("val_loss", val_loss.item(), sync_dist=True)
-        return val_loss
+        # estimate = self(batch.mixture.audio, batch.query.audio)
+        # non_target = batch.mixture.audio - batch.sources.target.audio
+        # sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
+        # val_loss = self.criterion(estimate, sources, reduction='mean')
+        # self.val_metric_handler.calculate_snr(
+        #     estimate[:, 0], batch.sources["target"].audio, batch.metadata.stem
+        # )
+        # self.log("val_loss", val_loss.item(), sync_dist=True)
+        # return val_loss
 
 
     def on_validation_epoch_end(self):
-        val_snr = self.val_metric_handler.get_mean_median()
-        self.log_dict(val_snr, prog_bar=True, sync_dist=True)
+        pass
+        # val_snr = self.val_metric_handler.get_mean_median()
+        # self.log_dict(val_snr, prog_bar=True, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, betas=(0.9, 0.999), weight_decay=0)
@@ -81,24 +87,26 @@ class Q_HTD_MODEL(LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def test_step(self, batch, batch_idx):
-        batch = InputType.from_dict(batch)
-        batch = self._to_device(batch)
+        pass
+        # batch = InputType.from_dict(batch)
+        # batch = self._to_device(batch)
         
-        estimate = self(batch.mixture.audio, batch.query.audio)
-        non_target = batch.mixture.audio - batch.sources.target.audio
-        sources = torch.concat(
-            (batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1
-        )
-        test_loss = self.criterion(estimate, sources, reduction='mean')
-        self.test_metric_handler.calculate_snr(
-            estimate[:, 0], batch.sources["target"].audio, batch.metadata.stem
-        )
-        self.log("test_loss", test_loss.item(), sync_dist=True)
+        # estimate = self(batch.mixture.audio, batch.query.audio)
+        # non_target = batch.mixture.audio - batch.sources.target.audio
+        # sources = torch.concat(
+        #     (batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1
+        # )
+        # test_loss = self.criterion(estimate, sources, reduction='mean')
+        # self.test_metric_handler.calculate_snr(
+        #     estimate[:, 0], batch.sources["target"].audio, batch.metadata.stem
+        # )
+        # self.log("test_loss", test_loss.item(), sync_dist=True)
 
 
     def on_test_epoch_end(self):
-        test_snr = self.test_metric_handler.get_mean_median()
-        self.log_dict(test_snr, prog_bar=True, sync_dist=True)
+        pass
+        # test_snr = self.test_metric_handler.get_mean_median()
+        # self.log_dict(test_snr, prog_bar=True, sync_dist=True)
         
     def _to_device(self, batch):
         batch.mixture.audio = batch.mixture.audio.to(self.device)
@@ -140,7 +148,9 @@ if __name__ == "__main__":
     )
 
     # Instantiate the enrollment model
-    query_model = Query_HTDemucs(num_sources=2)
+    query_model = Query_HTDemucs(
+        num_sources=1
+    )
 
 
     # Lightning model wrapper
@@ -149,7 +159,7 @@ if __name__ == "__main__":
         config=config,
         datamodule=datamodule,
         stems=stems,
-        criterion=F.l1_loss,
+        criterion=L1SNR_Recons_Loss_New, #F.l1_loss,
         lr=1e-3,
     )
 
