@@ -101,9 +101,9 @@ if __name__ == "__main__":
     config_path = "config/train.yml"
     config = _load_config(config_path)
     stems = config.data.train_kwargs.allowed_stems
-    devices_id = [0, 1, 2, 3]
+    devices_id = [0, 1] #[0, 1, 2, 3]
     wandb_use = False # False
-    batch_size = 2
+    batch_size = 8
 
     datamodule = MoisesDataModule(
         data_root=config.data.data_root,

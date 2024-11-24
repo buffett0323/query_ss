@@ -29,10 +29,7 @@ if hasattr(torch, "bfloat16"):
 else:
     HALF_PRECISION_DTYPES = (torch.float16,)
 
-    
 
-""" T = [(x - win_length) / hop_length] """
-SET_LENGTH = 261888
 
 
 class MyModel(nn.Module):
