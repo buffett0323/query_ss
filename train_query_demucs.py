@@ -62,7 +62,7 @@ query_size = 512 # 512
 mix_query_mode = "Hyper_FiLM" # "Transformer"
 q_enc = "Passt"
 config_path = "config/train.yml"
-mask_type = "L1"
+mask_type = None #"L1"
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print("Training on device:", device)
 
@@ -110,7 +110,7 @@ model = Query_HTDemucs(
 
 
 # Optimizer & Scheduler setup
-criterion=L1SNR_Recons_Loss()
+criterion=L1SNR_Recons_Loss(mask_type=mask_type)
 optimizer = optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999), weight_decay=0)
 scheduler = StepLR(optimizer, step_size=1, gamma=0.98)
 

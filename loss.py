@@ -149,7 +149,7 @@ class L1SNR_Recons_Loss(_Loss):
         # 1. Calculate Loss for Mask prediction
         if self.mask_type == "BCE":
             batch.masks.pred = torch.sigmoid(batch.masks.pred)    
-        if self.mask_type != "None":
+        if self.mask_type != None:
             loss_masks = self.mask_loss(batch.masks.pred.real, batch.masks.ground_truth.real) \
                         + self.mask_loss(batch.masks.pred.imag, batch.masks.ground_truth.imag)
         else: loss_masks = 0.0
