@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 
 
 from htdemucs_qss import Query_HTDemucs
-from loss import L1SNR_Recons_Loss, L1SNRDecibelMatchLoss
+from loss import L1SNR_Recons_Loss
 from utils import _load_config
 from metrics import (
     AverageMeter, cal_metrics, safe_signal_noise_ratio, MetricHandler
@@ -52,7 +52,7 @@ Dataset Structure:
 """
 
 # Init settings
-wandb_use = False # False
+wandb_use = True # False
 lr = 1e-3 # 1e-4
 num_epochs = 500
 batch_size = 8 # 8
@@ -110,6 +110,7 @@ model = Query_HTDemucs(
 
 
 # Optimizer & Scheduler setup
+criterion=L1SNR_Recons_Loss()
 optimizer = optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999), weight_decay=0)
 scheduler = StepLR(optimizer, step_size=1, gamma=0.98)
 
@@ -117,30 +118,46 @@ early_stop_counter, early_stop_thres = 0, 4
 min_val_loss = 1e10
 
 # Training loop
-for epoch in tqdm(range(num_epochs)):
+for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
     
     model.train()
     train_loss = 0.0
-    for batch in tqdm(datamodule.train_dataloader()):
+    
+    # Second loop with tqdm for batch progress
+    for batch_idx, batch in enumerate(tqdm(datamodule.train_dataloader(), desc=f"Epoch {epoch+1} Batch Progress", leave=False)):
         batch = InputType.from_dict(batch)
         batch = to_device(batch)
         
         optimizer.zero_grad()
         
         # Forward pass        
-        batch = self(batch)
+        batch = model(batch)
 
         # Compute the loss
-        loss = self.criterion(batch)
+        total_loss, loss_masks, loss_l1snr, loss_dem = criterion(batch)
+        train_loss += total_loss.item()
+        if wandb_use:
+            wandb.log({
+                "Batch Total Loss": total_loss.item(),
+                "Batch Mask Loss": loss_masks.item(),
+                "Batch L1SNR Loss": loss_l1snr.item(),
+                "Batch Decibel Loss": loss_dem.item(),
+                "Batch Index": batch_idx + 1,
+                "Epoch": epoch + 1
+            })
         
-        train_loss += loss.item()
-        print(loss.item())
+        # Update tqdm description with loss
+        if not wandb_use:
+            tqdm.write(f"Batch {batch_idx+1}, Loss: {total_loss.item():.4f}")
         
         # Backward pass and optimization
-        loss.backward()
+        total_loss.backward()
         optimizer.step()
     
     scheduler.step()
+
+    # Log epoch loss
+    print(f"Epoch {epoch+1}, Training Loss: {train_loss / len(datamodule.train_dataloader()):.4f}")
 
 
     # Validation step
@@ -154,11 +171,11 @@ for epoch in tqdm(range(num_epochs)):
                 batch = to_device(batch)
                 
                 # Forward pass        
-                batch = self(batch)
+                batch = model(batch)
         
                 # Compute the loss
-                loss = self.criterion(batch)
-                val_loss += loss.item()
+                total_loss, loss_masks, loss_l1snr, loss_dem = criterion(batch)
+                val_loss += total_loss.item()
 
                 # Calculate metrics
                 val_metric_handler.calculate_snr(
@@ -171,12 +188,11 @@ for epoch in tqdm(range(num_epochs)):
             val_snr = val_metric_handler.get_mean_median()
 
         
-        
         print(f"Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}, Val SNR: {val_snr}")
+        
         if wandb_use:
             wandb.log({"val_loss": val_loss})
             wandb.log(val_snr)
-            # wandb.log({"val_sdr": sdr, "val_sir": sir, "val_sar": sar})
             
         # Early stop
         if val_loss < min_val_loss:
@@ -205,11 +221,11 @@ with torch.no_grad():
         batch = to_device(batch)
     
         # Forward pass        
-        batch = self(batch)
+        batch = model(batch)
 
         # Compute the loss
-        loss = self.criterion(batch)
-        test_loss += loss.item()
+        total_loss, loss_masks, loss_l1snr, loss_dem = criterion(batch)
+        test_loss += total_loss.item()
 
         # Calculate metrics
         test_metric_handler.calculate_snr(

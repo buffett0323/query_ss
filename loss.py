@@ -150,8 +150,8 @@ class L1SNR_Recons_Loss(_Loss):
         if self.mask_type == "BCE":
             batch.masks.pred = torch.sigmoid(batch.masks.pred)    
         if self.mask_type != "None":
-            loss_masks = self.mask_loss(batch.masks.pred.real, batch.masks.ground_truth.real) \
-                        + self.mask_loss(batch.masks.pred.imag, batch.masks.ground_truth.imag)
+            loss_masks = self.mask_loss(batch.masks.pred.real, batch.masks.ground_truth.real, reduction='mean') \
+                        + self.mask_loss(batch.masks.pred.imag, batch.masks.ground_truth.imag, reduction='mean')
         else: loss_masks = 0.0
         
         # 2. Calculate the L1SNR Loss of Separated query track
@@ -160,5 +160,6 @@ class L1SNR_Recons_Loss(_Loss):
         # 3. Calculate the L1SNR Loss of Reconstruction Loss
         loss_dem = self.decibel_match(batch.estimates.target.audio, batch.sources.target.audio)
         
-        return loss_masks + loss_l1snr + loss_dem
+        total_loss = loss_masks + loss_l1snr + loss_dem
+        return total_loss, loss_masks, loss_l1snr, loss_dem
 
