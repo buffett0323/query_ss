@@ -105,7 +105,7 @@ datamodule = MoisesDataModule(
 
 # Instantiate the enrollment model
 model = Query_HTDemucs(
-    num_sources = 2,    
+    num_sources=1
 ).to(device)
 
 
@@ -128,12 +128,10 @@ for epoch in tqdm(range(num_epochs)):
         optimizer.zero_grad()
         
         # Forward pass        
-        estimate = model(batch.mixture.audio, batch.query.audio) # Shape: BS, Num Sources, Channel, length
+        batch = self(batch)
 
         # Compute the loss
-        non_target = batch.mixture.audio - batch.sources.target.audio
-        sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-        loss = F.l1_loss(estimate, sources, reduction='mean')
+        loss = self.criterion(batch)
         
         train_loss += loss.item()
         print(loss.item())
@@ -143,7 +141,6 @@ for epoch in tqdm(range(num_epochs)):
         optimizer.step()
     
     scheduler.step()
-    break
 
 
     # Validation step
@@ -157,16 +154,18 @@ for epoch in tqdm(range(num_epochs)):
                 batch = to_device(batch)
                 
                 # Forward pass        
-                estimate = model(batch.mixture.audio, batch.query.audio) # Shape: BS, Num Sources, Channel, length
-
+                batch = self(batch)
+        
                 # Compute the loss
-                non_target = batch.mixture.audio - batch.sources.target.audio
-                sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-                loss = F.l1_loss(estimate, sources, reduction='mean')
+                loss = self.criterion(batch)
                 val_loss += loss.item()
 
                 # Calculate metrics
-                val_metric_handler.calculate_snr(batch.estimates["target"].audio, batch.sources["target"].audio, batch.metadata.stem)
+                val_metric_handler.calculate_snr(
+                    batch.estimates.target.audio, 
+                    batch.sources.target.audio, 
+                    batch.metadata.stem
+                )
 
             # Record the validation SNR
             val_snr = val_metric_handler.get_mean_median()
@@ -206,16 +205,18 @@ with torch.no_grad():
         batch = to_device(batch)
     
         # Forward pass        
-        estimate = model(batch.mixture.audio, batch.query.audio) # Shape: BS, Num Sources, Channel, length
+        batch = self(batch)
 
         # Compute the loss
-        non_target = batch.mixture.audio - batch.sources.target.audio
-        sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-        loss = F.l1_loss(estimate, sources, reduction='mean')
+        loss = self.criterion(batch)
         test_loss += loss.item()
 
         # Calculate metrics
-        test_metric_handler.calculate_snr(batch.estimates["target"].audio, batch.sources["target"].audio, batch.metadata.stem)
+        test_metric_handler.calculate_snr(
+            batch.estimates.target.audioc, 
+            batch.sources.target.audio, 
+            batch.metadata.stem
+        )
 
     # Get the final result of test SNR
     test_snr = test_metric_handler.get_mean_median()
