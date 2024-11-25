@@ -63,7 +63,7 @@ mix_query_mode = "Hyper_FiLM" # "Transformer"
 q_enc = "Passt"
 config_path = "config/train.yml"
 mask_type = "L1"
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print("Training on device:", device)
 
 
