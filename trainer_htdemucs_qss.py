@@ -27,7 +27,25 @@ from data.moisesdb.datamodule import (
     MoisesVDBODataModule,
 )
 
-
+"""
+Dataset Structure:
+- estimates (predicted)
+    - target
+        - audio V
+- mixtures
+    - audio V
+    - spectrogram V
+- sources
+    - target
+        - audio V
+        - spectrogram X
+- query
+    - audio V
+- masks
+    - pred V
+    - ground_truth V
+- metadata
+"""
 
 class Q_HTD_MODEL(LightningModule):
     def __init__(self, model, config, datamodule, stems, criterion, lr=1e-3):
@@ -50,12 +68,15 @@ class Q_HTD_MODEL(LightningModule):
         batch = InputType.from_dict(batch)
         batch = self._to_device(batch)
         
-        estimate, pred_mask, gt_mask = self(batch.mixture.audio, batch.query.audio)
-        # non_target = batch.mixture.audio - batch.sources.target.audio
-        # sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-        
-        # pred_mask, gt_mask, target_audio, source_audio
-        loss = self.criterion(pred_mask, gt_mask, estimate, batch.mixture.audio)
+        print("BF training:", batch)
+        batch = self(batch)
+        print("AF training:", batch)
+        loss = self.criterion(
+            batch.masks.pred, 
+            batch.masks.ground_truth, 
+            batch.estimates.audio,
+            batch.mixture.audio
+        )
         
         self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -65,12 +86,11 @@ class Q_HTD_MODEL(LightningModule):
         # batch = InputType.from_dict(batch)
         # batch = self._to_device(batch)
         
-        # estimate = self(batch.mixture.audio, batch.query.audio)
-        # non_target = batch.mixture.audio - batch.sources.target.audio
-        # sources = torch.concat((batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1)
-        # val_loss = self.criterion(estimate, sources, reduction='mean')
+        # estimate, pred_mask, gt_mask = self(batch.mixture.audio, batch.query.audio)
+        # val_loss = self.criterion(pred_mask, gt_mask, estimate, batch.mixture.audio)
+        
         # self.val_metric_handler.calculate_snr(
-        #     estimate[:, 0], batch.sources["target"].audio, batch.metadata.stem
+        #     estimate, batch.sources["target"].audio, batch.metadata.stem
         # )
         # self.log("val_loss", val_loss.item(), sync_dist=True)
         # return val_loss
@@ -91,17 +111,14 @@ class Q_HTD_MODEL(LightningModule):
         # batch = InputType.from_dict(batch)
         # batch = self._to_device(batch)
         
-        # estimate = self(batch.mixture.audio, batch.query.audio)
-        # non_target = batch.mixture.audio - batch.sources.target.audio
-        # sources = torch.concat(
-        #     (batch.sources.target.audio.unsqueeze(1), non_target.unsqueeze(1)), dim=1
-        # )
-        # test_loss = self.criterion(estimate, sources, reduction='mean')
+        # estimate, pred_mask, gt_mask = self(batch.mixture.audio, batch.query.audio)
+        # test_loss = self.criterion(pred_mask, gt_mask, estimate, batch.mixture.audio)
+        
         # self.test_metric_handler.calculate_snr(
-        #     estimate[:, 0], batch.sources["target"].audio, batch.metadata.stem
+        #     estimate, batch.sources["target"].audio, batch.metadata.stem
         # )
         # self.log("test_loss", test_loss.item(), sync_dist=True)
-
+        # return test_loss
 
     def on_test_epoch_end(self):
         pass
@@ -124,7 +141,7 @@ if __name__ == "__main__":
     print("Training with stems: ", stems)
     
     devices_id = [0, 1, 2, 3]
-    wandb_use = True # False
+    wandb_use = False # False
     batch_size = 2
     lr = 1e-3
     num_epochs = 500

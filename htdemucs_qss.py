@@ -329,7 +329,7 @@ class Query_HTDemucs(nn.Module):
         )
         self.xt_condition = FiLM_3D(
             cond_embedding_dim=768, #768,
-            channels=384, #512, 
+            input_channels=384, #512, 
             additive=True, 
             multiplicative=True
         )
@@ -449,7 +449,10 @@ class Query_HTDemucs(nn.Module):
         return training_length
 
 
-    def forward(self, mix, query):
+    def forward(self, batch):
+        # Get mixture and query
+        mix, query = batch.mixture.audio, batch.query.audio
+        
         length = mix.shape[-1]
         length_pre_pad = None
         if self.use_train_segment:
@@ -461,9 +464,11 @@ class Query_HTDemucs(nn.Module):
                     length_pre_pad = mix.shape[-1]
                     mix = F.pad(mix, (0, training_length - length_pre_pad))
         z = self._spec(mix)
-        gt_mask = mix / (z + 1e-9) # Added
         mag = self._magnitude(z).to(mix.device)
         x = mag
+        
+        # Get Ground Truth Mask
+        batch.masks.ground_truth = z / (self._spec(batch.target.audio) + 1e-9)
 
         B, C, Fq, T = x.shape
 
@@ -587,7 +592,11 @@ class Query_HTDemucs(nn.Module):
         x = xt + x
         if length_pre_pad:
             x = x[..., :length_pre_pad]
-        return x, zout, gt_mask # estimate, pred_mask, gt_mask
+        
+        # Store result: estimate audio & predict mask
+        batch.estimates.audio = x
+        batch.masks.pred = zout
+        return batch
 
 
 
