@@ -131,7 +131,7 @@ class L1SNR_Recons_Loss(_Loss):
         self.mask_type = mask_type
         
         if mask_type == "MSE":
-            self.mask_loss = nn.MSELoss()
+            self.mask_loss = nn.MSELoss(reduction='mean')
         elif mask_type == "BCE":
             self.mask_loss = nn.BCELoss()
         elif mask_type == "L1":
@@ -150,8 +150,8 @@ class L1SNR_Recons_Loss(_Loss):
         if self.mask_type == "BCE":
             batch.masks.pred = torch.sigmoid(batch.masks.pred)    
         if self.mask_type != "None":
-            loss_masks = self.mask_loss(batch.masks.pred.real, batch.masks.ground_truth.real, reduction='mean') \
-                        + self.mask_loss(batch.masks.pred.imag, batch.masks.ground_truth.imag, reduction='mean')
+            loss_masks = self.mask_loss(batch.masks.pred.real, batch.masks.ground_truth.real) \
+                        + self.mask_loss(batch.masks.pred.imag, batch.masks.ground_truth.imag)
         else: loss_masks = 0.0
         
         # 2. Calculate the L1SNR Loss of Separated query track
