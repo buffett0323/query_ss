@@ -55,7 +55,7 @@ Dataset Structure:
 wandb_use = False # False
 lr = 1e-3 # 1e-4
 num_epochs = 500
-batch_size = 4 # 8
+batch_size = 8 # 8
 n_srcs = 1
 emb_dim = 768 # For BEATs
 query_size = 512 # 512
