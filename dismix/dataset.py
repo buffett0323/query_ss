@@ -1,6 +1,7 @@
 import torch
 import torchaudio
 import torchaudio.functional as AF
+import torchaudio.transforms as T
 from torchvision.transforms.functional import crop
 from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning import LightningDataModule
@@ -365,18 +366,23 @@ class MusicalObjectDataModule(LightningDataModule):
 if __name__ == '__main__':
     
     # check that all datasets load correctly
-    roots = ["/mnt/gestalt/home/ddmanddman/MusicSlots/data/jsb_multi"]
+    root = f"{os.getenv('DATA_ROOT')}/MusicSlots/data/jsb_multi"
     
-    for root in roots:
-        dm = MusicalObjectDataModule(root=root,
-                                     batch_size=32)
-        
-        dm.setup(stage='fit')
+    
 
-        print('Dataset sample count: {}, instrument count: {}, note count: {}'.format(
-            dm.num_samples, dm.num_notes, dm.num_instruments
-        ))
-        
-        spec, note_tensors, midi_label, instrument_label = dm.train_ds[0]
-        for i in range(3):
-            spec, note_tensors, midi_label, instrument_label = dm.train_ds[i]
+    dm = MusicalObjectDataModule(root=root,
+                                    batch_size=32)
+    
+    dm.setup(stage='fit')
+
+    print('Dataset sample count: {}, instrument count: {}, note count: {}'.format(
+        dm.num_samples, dm.num_notes, dm.num_instruments
+    ))
+    
+    spec, note_tensors, midi_label, instrument_label = dm.train_ds[0]
+    for i in range(3):
+        spec, note_tensors, midi_label, instrument_label = dm.train_ds[i]
+        example_audio_tensor = note_tensors.sum(dim=0)
+        print(spec, example_audio_tensor)
+        compare_spectrograms(spec, example_audio_tensor, figsize=(9,6))
+
