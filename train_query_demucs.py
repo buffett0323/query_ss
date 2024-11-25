@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 
 
 from htdemucs_qss import Query_HTDemucs
-from loss import L1SNR_Recons_Loss
+from loss import L1SNR_Recons_Loss, Banquet_L1SNRLoss
 from utils import _load_config
 from metrics import (
     AverageMeter, cal_metrics, safe_signal_noise_ratio, MetricHandler
@@ -83,7 +83,7 @@ if wandb_use:
             "dataset": "MoisesDB",
             "epochs": num_epochs,
         },
-        notes=f"{mix_query_mode} + {mask_type} Loss + 512 query size",
+        notes=f"HTDemucs Query Version",
     )
 
 
@@ -110,7 +110,7 @@ model = Query_HTDemucs(
 
 
 # Optimizer & Scheduler setup
-criterion=L1SNR_Recons_Loss(mask_type=mask_type)
+criterion = Banquet_L1SNRLoss() #L1SNR_Recons_Loss(mask_type=mask_type)
 optimizer = optim.Adam(model.parameters(), lr=3e-4, betas=(0.9, 0.999), weight_decay=0)
 scheduler = StepLR(optimizer, step_size=1, gamma=0.98)
 
@@ -134,24 +134,24 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
         batch = model(batch)
 
         # Compute the loss
-        total_loss, loss_masks, loss_l1snr, loss_dem = criterion(batch)
-        train_loss += total_loss.item()
+        loss, D_ss, D_real, D_imag = criterion(batch)
+        train_loss += loss.item()
         if wandb_use:
             wandb.log({
-                "Batch Total Loss": total_loss.item(),
-                "Batch Mask Loss": loss_masks.item(),
-                "Batch L1SNR Loss": loss_l1snr.item(),
-                "Batch Decibel Loss": loss_dem.item(),
+                "Batch Total Loss": loss.item(),
+                "Batch SS Loss": D_ss.item(),
+                "Batch Real Loss": D_real.item(),
+                "Batch Img Loss": D_imag.item(),
                 "Batch Index": batch_idx + 1,
                 "Epoch": epoch + 1
             })
         
         # Update tqdm description with loss
         if not wandb_use:
-            tqdm.write(f"Batch {batch_idx+1}, Loss: {total_loss.item():.4f}")
+            tqdm.write(f"Batch {batch_idx+1}, Loss: {train_loss.item():.4f}")
         
         # Backward pass and optimization
-        total_loss.backward()
+        train_loss.backward()
         optimizer.step()
     
     scheduler.step()
@@ -174,8 +174,8 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
                 batch = model(batch)
         
                 # Compute the loss
-                total_loss, loss_masks, loss_l1snr, loss_dem = criterion(batch)
-                val_loss += total_loss.item()
+                loss, D_ss, D_real, D_imag = criterion(batch)
+                val_loss += loss.item()
 
                 # Calculate metrics
                 val_metric_handler.calculate_snr(
@@ -224,8 +224,8 @@ with torch.no_grad():
         batch = model(batch)
 
         # Compute the loss
-        total_loss, loss_masks, loss_l1snr, loss_dem = criterion(batch)
-        test_loss += total_loss.item()
+        loss, D_ss, D_real, D_imag = criterion(batch)
+        test_loss += loss.item()
 
         # Calculate metrics
         test_metric_handler.calculate_snr(

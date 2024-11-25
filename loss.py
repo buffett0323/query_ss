@@ -163,3 +163,59 @@ class L1SNR_Recons_Loss(_Loss):
         total_loss = loss_masks + loss_l1snr + loss_dem
         return total_loss, loss_masks, loss_l1snr, loss_dem
 
+
+
+class Banquet_L1SNRLoss(torch.nn.Module):
+    def __init__(self, epsilon=1e-3):
+        """
+        Implements the Multichannel L1SNR Loss.
+        Args:
+            epsilon (float): Small constant for numerical stability.
+        """
+        super(Banquet_L1SNRLoss, self).__init__()
+        self.epsilon = epsilon
+
+
+    def forward(self, batch):
+        """
+        Args:
+            S_hat (torch.Tensor): Estimated signal, complex tensor of shape (B, C, T) or (B, T).
+            S (torch.Tensor): Ground truth signal, complex tensor of shape (B, C, T) or (B, T).
+        Returns:
+            torch.Tensor: The computed loss.
+        """
+
+        
+        # 1st term: Loss D(s_hat; s)
+        s_hat, s = batch.estimates.target.audio, batch.sources.target.audio
+        D_ss = self._l1_snr_loss(s_hat, s)
+
+        # Separate real and imaginary parts
+        S_hat_real, S_hat_imag = batch.masks.pred.real, batch.masks.pred.imag
+        S_real, S_imag = batch.masks.ground_truth.real, batch.masks.ground_truth.imag
+
+        # Compute D(ℜŜ; ℜS) and D(ℑŜ; ℑS)
+        D_real = self._l1_snr_loss(S_hat_real, S_real)
+        D_imag = self._l1_snr_loss(S_hat_imag, S_imag)
+
+        # Total loss
+        loss = D_ss + D_real + D_imag
+        return loss, D_ss, D_real, D_imag
+
+    def _l1_snr_loss(self, y_hat, y):
+        """
+        Compute the L1-SNR loss D(ŷ; y).
+        Args:
+            y_hat_vec (torch.Tensor): Flattened estimated signal (B, T_flat).
+            y_vec (torch.Tensor): Flattened ground truth signal (B, T_flat).
+        Returns:
+            torch.Tensor: Loss value.
+        """
+        
+        y_hat_vec = y_hat.view(y_hat.size(0), -1)  # Flatten (B, T) -> (B, T_flat)
+        y_vec = y.view(y.size(0), -1)  # Flatten (B, T) -> (B, T_flat)
+        
+        numerator = torch.norm(y_hat_vec - y_vec, p=1, dim=-1) + self.epsilon
+        denominator = torch.norm(y_vec, p=1, dim=-1) + self.epsilon
+        loss = 10 * torch.log10(numerator / denominator)
+        return loss.mean()

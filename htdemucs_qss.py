@@ -607,18 +607,3 @@ class Query_HTDemucs(nn.Module):
         assert batch.masks.pred.shape == batch.masks.ground_truth.shape
         return batch
 
-
-
-
-if __name__ == "__main__":
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    model = Query_HTDemucs().to(device)
-    
-    
-    Batch_size = 1
-    random_audio = torch.rand((Batch_size, 2, 294400)).to(device)
-    query_audio = torch.rand((Batch_size, 2, 441000)).to(device)
-    print(random_audio.shape, query_audio.shape)
-    
-    res = model(random_audio, query_audio)
-    print("RESULT:", res.shape)
