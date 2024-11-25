@@ -113,7 +113,7 @@ class FiLM_3D(nn.Module):
         Returns:
             Modulated input tensor with the same shape as x.
         """
-        batch_size, channels, _, _ = x.size()
+        batch_size, channels, _ = x.size()
 
         # Apply gamma (multiplicative) modulation
         if self.multiplicative:

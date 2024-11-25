@@ -452,7 +452,6 @@ class Query_HTDemucs(nn.Module):
     def forward(self, batch):
         # Get mixture and query
         mix, query = batch.mixture.audio, batch.query.audio
-        
         length = mix.shape[-1]
         length_pre_pad = None
         if self.use_train_segment:
@@ -463,15 +462,22 @@ class Query_HTDemucs(nn.Module):
                 if mix.shape[-1] < training_length:
                     length_pre_pad = mix.shape[-1]
                     mix = F.pad(mix, (0, training_length - length_pre_pad))
+                    batch.sources.target.audio = F.pad(
+                        batch.sources.target.audio, (0, training_length - length_pre_pad)
+                    )
+                    
         z = self._spec(mix)
         mag = self._magnitude(z).to(mix.device)
         x = mag
         
-        # Get Ground Truth Mask
-        batch.masks.ground_truth = z / (self._spec(batch.target.audio) + 1e-9)
-
         B, C, Fq, T = x.shape
-
+        
+        # Define Ground Truth Mask
+        batch.masks = SimpleishNamespace(
+            pred=None, 
+            ground_truth=z / (self._spec(batch.sources.target.audio) + 1e-9),
+        )
+        
         # unlike previous Demucs, we always normalize because it is easier.
         mean = x.mean(dim=(1, 2, 3), keepdim=True)
         std = x.std(dim=(1, 2, 3), keepdim=True)
@@ -592,10 +598,13 @@ class Query_HTDemucs(nn.Module):
         x = xt + x
         if length_pre_pad:
             x = x[..., :length_pre_pad]
+            batch.sources.target.audio = batch.sources.target.audio[..., :length_pre_pad]
         
         # Store result: estimate audio & predict mask
-        batch.estimates.audio = x
-        batch.masks.pred = zout
+        batch.estimates.target.audio = x.squeeze(1)
+        batch.masks.pred = zout.squeeze(1)
+        assert batch.estimates.target.audio.shape == batch.sources.target.audio.shape
+        assert batch.masks.pred.shape == batch.masks.ground_truth.shape
         return batch
 
 

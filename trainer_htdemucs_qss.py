@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from typing import Optional
 from htdemucs_qss import Query_HTDemucs
 
-from loss import L1SNR_Recons_Loss_New
+from loss import L1SNR_Recons_Loss
 from utils import _load_config
 from metrics import MetricHandler
 from models.types import InputType, OperationMode, SimpleishNamespace
@@ -28,78 +28,72 @@ from data.moisesdb.datamodule import (
 )
 
 """
-Dataset Structure:
-- estimates (predicted)
-    - target
-        - audio V
-- mixtures
-    - audio V
-    - spectrogram V
-- sources
-    - target
-        - audio V
-        - spectrogram X
-- query
-    - audio V
-- masks
-    - pred V
-    - ground_truth V
-- metadata
+    Dataset Structure:
+        - estimates (predicted)
+            - target
+                - audio V
+        - mixture
+            - audio V
+            - spectrogram X (Not stored)
+        - sources
+            - target
+                - audio V
+                - spectrogram V
+        - query
+            - audio V
+        - masks
+            - pred V
+            - ground_truth V
+        - metadata
 """
 
 class Q_HTD_MODEL(LightningModule):
-    def __init__(self, model, config, datamodule, stems, criterion, lr=1e-3):
+    def __init__(self, model, config, datamodule, stems, criterion, batch_size, lr=1e-3):
         super().__init__()
         self.model = model
         self.config = config
         self.datamodule = datamodule
         self.stems = stems
         self.criterion = criterion
+        self.batch_size = batch_size
         self.lr = lr
         
         self.val_metric_handler = MetricHandler(stems)
         self.test_metric_handler = MetricHandler(stems)
         self.min_val_loss = 1e10
 
-    def forward(self, mixture_audio, query_audio):
-        return self.model(mixture_audio, query_audio)
+    def forward(self, batch):
+        return self.model(batch)
 
     def training_step(self, batch, batch_idx):
         batch = InputType.from_dict(batch)
         batch = self._to_device(batch)
         
-        print("BF training:", batch)
         batch = self(batch)
-        print("AF training:", batch)
-        loss = self.criterion(
-            batch.masks.pred, 
-            batch.masks.ground_truth, 
-            batch.estimates.audio,
-            batch.mixture.audio
-        )
+        loss = self.criterion(batch)
         
-        self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        pass
-        # batch = InputType.from_dict(batch)
-        # batch = self._to_device(batch)
+        batch = InputType.from_dict(batch)
+        batch = self._to_device(batch)
         
-        # estimate, pred_mask, gt_mask = self(batch.mixture.audio, batch.query.audio)
-        # val_loss = self.criterion(pred_mask, gt_mask, estimate, batch.mixture.audio)
+        batch = self(batch)
+        val_loss = self.criterion(batch)
         
-        # self.val_metric_handler.calculate_snr(
-        #     estimate, batch.sources["target"].audio, batch.metadata.stem
-        # )
-        # self.log("val_loss", val_loss.item(), sync_dist=True)
-        # return val_loss
+        self.val_metric_handler.calculate_snr(
+            batch.estimates.target.audio, 
+            batch.sources.target.audio, 
+            batch.metadata.stem
+        )
+        self.log("val_loss", val_loss.item(), sync_dist=True, batch_size=self.batch_size)
+        return val_loss
 
 
     def on_validation_epoch_end(self):
-        pass
-        # val_snr = self.val_metric_handler.get_mean_median()
-        # self.log_dict(val_snr, prog_bar=True, sync_dist=True)
+        val_snr = self.val_metric_handler.get_mean_median()
+        self.log_dict(val_snr, prog_bar=True, sync_dist=True, batch_size=self.batch_size)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, betas=(0.9, 0.999), weight_decay=0)
@@ -107,23 +101,23 @@ class Q_HTD_MODEL(LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     def test_step(self, batch, batch_idx):
-        pass
-        # batch = InputType.from_dict(batch)
-        # batch = self._to_device(batch)
+        batch = InputType.from_dict(batch)
+        batch = self._to_device(batch)
         
-        # estimate, pred_mask, gt_mask = self(batch.mixture.audio, batch.query.audio)
-        # test_loss = self.criterion(pred_mask, gt_mask, estimate, batch.mixture.audio)
+        batch = self(batch)
+        test_loss = self.criterion(batch)
         
-        # self.test_metric_handler.calculate_snr(
-        #     estimate, batch.sources["target"].audio, batch.metadata.stem
-        # )
-        # self.log("test_loss", test_loss.item(), sync_dist=True)
-        # return test_loss
+        self.test_metric_handler.calculate_snr(
+            batch.estimates.target.audioc, 
+            batch.sources.target.audio, 
+            batch.metadata.stem
+        )
+        self.log("test_loss", test_loss.item(), sync_dist=True, batch_size=self.batch_size)
+        return test_loss
 
     def on_test_epoch_end(self):
-        pass
-        # test_snr = self.test_metric_handler.get_mean_median()
-        # self.log_dict(test_snr, prog_bar=True, sync_dist=True)
+        test_snr = self.test_metric_handler.get_mean_median()
+        self.log_dict(test_snr, prog_bar=True, sync_dist=True, batch_size=self.batch_size)
         
     def _to_device(self, batch):
         batch.mixture.audio = batch.mixture.audio.to(self.device)
@@ -140,9 +134,9 @@ if __name__ == "__main__":
     stems = config.data.train_kwargs.allowed_stems
     print("Training with stems: ", stems)
     
-    devices_id = [0, 1, 2, 3]
-    wandb_use = False # False
-    batch_size = 2
+    devices_id = [0, 1, 2, 3] #[0, 1, 2, 3]
+    wandb_use = True # False
+    batch_size = 4
     lr = 1e-3
     num_epochs = 500
 
@@ -176,7 +170,8 @@ if __name__ == "__main__":
         config=config,
         datamodule=datamodule,
         stems=stems,
-        criterion=L1SNR_Recons_Loss_New, #F.l1_loss,
+        criterion=L1SNR_Recons_Loss(), #F.l1_loss,
+        batch_size=batch_size,
         lr=1e-3,
     )
 
