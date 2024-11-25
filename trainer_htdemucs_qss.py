@@ -134,7 +134,7 @@ if __name__ == "__main__":
     stems = config.data.train_kwargs.allowed_stems
     print("Training with stems: ", stems)
     
-    devices_id = [0, 1, 2, 3] #[0, 1, 2, 3]
+    devices_id = [0] #[0, 1, 2, 3]
     wandb_use = True # False
     batch_size = 4
     lr = 1e-3
