@@ -62,7 +62,6 @@ query_size = 512 # 512
 mix_query_mode = "Hyper_FiLM" # "Transformer"
 q_enc = "Passt"
 config_path = "config/train.yml"
-mask_type = None #"L1"
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 print("Training on device:", device)
 
@@ -151,7 +150,7 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
             tqdm.write(f"Batch {batch_idx+1}, Loss: {train_loss.item():.4f}")
         
         # Backward pass and optimization
-        train_loss.backward()
+        loss.backward()
         optimizer.step()
     
     scheduler.step()

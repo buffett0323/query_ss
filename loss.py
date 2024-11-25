@@ -211,9 +211,9 @@ class Banquet_L1SNRLoss(torch.nn.Module):
         Returns:
             torch.Tensor: Loss value.
         """
-        
-        y_hat_vec = y_hat.view(y_hat.size(0), -1)  # Flatten (B, T) -> (B, T_flat)
-        y_vec = y.view(y.size(0), -1)  # Flatten (B, T) -> (B, T_flat)
+        batch_size = y_hat.shape[0]
+        y_hat_vec = y_hat.reshape(batch_size, -1)  # Flatten (B, T) -> (B, T_flat)
+        y_vec = y.reshape(batch_size, -1)  # Flatten (B, T) -> (B, T_flat)
         
         numerator = torch.norm(y_hat_vec - y_vec, p=1, dim=-1) + self.epsilon
         denominator = torch.norm(y_vec, p=1, dim=-1) + self.epsilon
