@@ -1,5 +1,8 @@
+import os
+import json
 import wandb
 import torch
+import torchaudio
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
@@ -52,19 +55,18 @@ Dataset Structure:
 """
 
 # Init settings
-wandb_use = True # False
+wandb_use = False # False
 lr = 1e-3 # 1e-4
 num_epochs = 500
-batch_size = 8 # 8
+batch_size = 4 # 8
 n_srcs = 1
 emb_dim = 768 # For BEATs
 query_size = 512 # 512
 mix_query_mode = "Hyper_FiLM" # "Transformer"
 q_enc = "Passt"
 config_path = "config/train.yml"
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-print("Training on device:", device)
-
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device_ids = [0] #[0, 1, 2, 3] # [0]
 
 def to_device(batch, device=device):
     batch.mixture.audio = batch.mixture.audio.to(device) # torch.Size([BS, 2, 294400])
@@ -103,10 +105,11 @@ datamodule = MoisesDataModule(
 
 
 # Instantiate the enrollment model
-model = Query_HTDemucs(
-    num_sources=1
-).to(device)
+model = Query_HTDemucs(num_sources=1).to(device)
 
+if len(device_ids) > 1:
+    print(f"Using {torch.cuda.device_count()} GPUs for training.")
+    model = nn.DataParallel(model)
 
 # Optimizer & Scheduler setup
 criterion = Banquet_L1SNRLoss() #L1SNR_Recons_Loss(mask_type=mask_type)
@@ -115,6 +118,11 @@ scheduler = StepLR(optimizer, step_size=1, gamma=0.98)
 
 early_stop_counter, early_stop_thres = 0, 4
 min_val_loss = 1e10
+
+val_folder = f"{os.getenv('DATA_ROOT')}/qss_output/val"
+test_folder = f"{os.getenv('DATA_ROOT')}/qss_output/test"
+os.makedirs(val_folder, exist_ok=True)
+os.makedirs(test_folder, exist_ok=True)
 
 # Training loop
 for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
@@ -147,7 +155,7 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
         
         # Update tqdm description with loss
         if not wandb_use:
-            tqdm.write(f"Batch {batch_idx+1}, Loss: {train_loss.item():.4f}")
+            tqdm.write(f"Batch {batch_idx+1}, Loss: {train_loss:.4f}")
         
         # Backward pass and optimization
         loss.backward()
@@ -182,6 +190,24 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
                     batch.sources.target.audio, 
                     batch.metadata.stem
                 )
+                os.makedirs(f"{val_folder}/Epoch_{epoch}", exist_ok=True)
+                json_metrics = {
+                    key: [tensor.cpu().tolist() for tensor in value] if isinstance(value, list) else value
+                    for key, value in val_metric_handler.metrics.items()
+                }
+
+                with open(f"{val_folder}/Epoch_{epoch}/metrics.json", "w") as json_file:
+                    json.dump(json_metrics, json_file, indent=4)
+                                
+                for pred, gt, stem in zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem):
+                    snr = safe_signal_noise_ratio(pred.cpu(), gt.cpu())
+                    snr_mean = (snr[0] + snr[1]) / 2
+                    snr = round(snr_mean.item(), 1)
+
+                    pred_path = os.path.join(f"{val_folder}/Epoch_{epoch}", f"{stem}_pred_{snr}.wav")
+                    gt_path = os.path.join(f"{val_folder}/Epoch_{epoch}", f"{stem}_gt_{snr}.wav")
+                    torchaudio.save(pred_path, pred.cpu(), sample_rate=44100)
+                    torchaudio.save(gt_path, gt.cpu(), sample_rate=44100)
 
             # Record the validation SNR
             val_snr = val_metric_handler.get_mean_median()
@@ -202,9 +228,8 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
             if early_stop_counter >= early_stop_thres:
                 break
             
-    else:
-        if wandb_use:
-            wandb.log({"train_loss": train_loss})
+    if wandb_use:
+        wandb.log({"train_loss": train_loss})
 
     
     
@@ -228,10 +253,29 @@ with torch.no_grad():
 
         # Calculate metrics
         test_metric_handler.calculate_snr(
-            batch.estimates.target.audioc, 
+            batch.estimates.target.audio, 
             batch.sources.target.audio, 
             batch.metadata.stem
         )
+
+        json_metrics = {
+            key: [tensor.cpu().tolist() for tensor in value] if isinstance(value, list) else value
+            for key, value in test_metric_handler.metrics.items()
+        }
+
+        with open(f"{test_folder}/metrics.json", "w") as json_file:
+            json.dump(json_metrics, json_file, indent=4)
+                                
+                    
+        for pred, gt, stem in zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem):
+            snr = safe_signal_noise_ratio(pred.cpu(), gt.cpu())
+            snr_mean = (snr[0] + snr[1]) / 2
+            snr = round(snr_mean.item(), 1)
+
+            pred_path = os.path.join(test_folder, f"{stem}_pred_{snr}.wav")
+            gt_path = os.path.join(test_folder, f"{stem}_gt_{snr}.wav")
+            torchaudio.save(pred_path, pred.cpu(), sample_rate=44100)
+            torchaudio.save(gt_path, gt.cpu(), sample_rate=44100)
 
     # Get the final result of test SNR
     test_snr = test_metric_handler.get_mean_median()
