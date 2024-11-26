@@ -131,7 +131,7 @@ class PitchEncoder(nn.Module):
         self,
     ):
         super().__init__()
-        self.E_phai_tau = Decoder(
+        self.E_phai_nu = Decoder(
             ch=64,  # Base number of channels; can be adjusted based on model capacity
             out_ch=129,  # Desired number of output channels (pitch values)
             ch_mult=(1, 2, 4),  # Channel multipliers for each resolution level
@@ -150,7 +150,7 @@ class PitchEncoder(nn.Module):
         )
 
         self.sb_layer = StochasticBinarizationLayer()
-        self.f_phai_tau = Encoder(
+        self.f_phai_nu = Encoder(
             ch=64,
             out_ch=8,  # Not directly used in the current implementation but kept for consistency
             ch_mult=(1, 2, 4),
@@ -170,11 +170,65 @@ class PitchEncoder(nn.Module):
 
         
     def forward(self, x):
-        y_hat = self.E_phai_tau(x) # BS, 8, 100, 16 --> BS, 129, 400
+        y_hat = self.E_phai_nu(x) # BS, 8, 100, 16 --> BS, 129, 400
         y_hat_sb = self.sb_layer(y_hat)
-        tau = self.f_phai_tau(y_hat_sb.unsqueeze(1)) # BS, 129, 400 --> BS, 8, 100, 16
+        tau = self.f_phai_nu(y_hat_sb.unsqueeze(1)) # BS, 129, 400 --> BS, 8, 100, 16
         return tau
 
+
+class TimbreEncoder(nn.Module):
+    def __init__(self):
+        super(TimbreEncoder, self).__init__()
+        self.conv_layers = nn.Sequential(
+            nn.Conv1d(in_channels=128, out_channels=128, kernel_size=5, stride=2, padding=0),
+            nn.GroupNorm(num_groups=1, num_channels=128),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=128, out_channels=128, kernel_size=5, stride=2, padding=0),
+            nn.GroupNorm(num_groups=1, num_channels=128),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=128, out_channels=128, kernel_size=5, stride=2, padding=0),
+            nn.GroupNorm(num_groups=1, num_channels=128),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=128, out_channels=256, kernel_size=1, stride=1, padding=0),
+        )
+
+        # Temporal pooling layer to reduce time dimension from 100 to 1
+        self.temporal_pool = nn.AdaptiveAvgPool1d(output_size=1) # nn.AdaptiveAvgPool2d((1, 16))  # Output size: (time=1, feature=16)
+
+
+    def reparameterize(self, mean, logvar):
+        """
+            Reparameterization trick to sample from N(mean, var)
+            Sampling by μφτ (·) + ε σφτ (·)
+        """
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mean + (eps * std)
+
+    def forward(self, x):
+        BS, C, T, F = x.shape
+        x = x.permute(0, 1, 3, 2).reshape(BS, C*F, T)
+        x = self.conv_layers(x)
+        x = self.temporal_pool(x)
+        
+        split_x = torch.split(x, 128, dim=1)
+        reshaped_x = [t.view(t.size(0), 8, 1, 16) for t in split_x]
+        mean, logvar = reshaped_x[0], reshaped_x[1]
+        timbre_latent = self.reparameterize(mean, logvar)
+        return timbre_latent
+    
+
+class FiLM(nn.Module):
+    def __init__(self, pitch_dim, timbre_dim):
+        super(FiLM, self).__init__()
+        self.scale = nn.Linear(timbre_dim, pitch_dim)
+        self.shift = nn.Linear(timbre_dim, pitch_dim)
+    
+    def forward(self, pitch_latent, timbre_latent):
+        scale = self.scale(timbre_latent)
+        shift = self.shift(timbre_latent)
+        return scale * pitch_latent + shift
+    
     
 class DisMix_LDM(nn.Module):
     def __init__(
@@ -224,11 +278,15 @@ class DisMix_LDM(nn.Module):
         )
         
         self.pitch_encoder = PitchEncoder()
-        # self.timbre_encoder = TimbreEncoder(input_dim, latent_dim)
+        self.timbre_encoder = TimbreEncoder()
+        
+        self.f_theta_s = FiLM(16, 16)
         # self.decoder = Decoder(latent_dim, output_dim)
         # self.diffusion_transformer = DiffusionTransformer(latent_dim, num_heads, num_layers)
 
     def forward(self, x_m, x_q):
+        BS = x_m.shape[0]
+        
         # Encoder for Mixture and Query
         e_m = self.M_Encoder(x_m)
         e_q = self.Q_Encoder(x_q)
@@ -240,10 +298,16 @@ class DisMix_LDM(nn.Module):
         combined = combined.permute(0, 3, 2, 1) # BS, 8, 100, 16
         
         # Pitch Encoder
-        tau = self.pitch_encoder(combined)
+        pitch_latent = self.pitch_encoder(combined).permute(0, 1, 3, 2)
         
+        # Timbre Encoder
+        timbre_latent = self.timbre_encoder(combined)
+        timbre_latent = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
         
-        return combined
+        # FiLM
+        source_latents = self.f_theta_s(pitch_latent, timbre_latent)
+        
+        return source_latents
     
     
     

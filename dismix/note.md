@@ -30,3 +30,9 @@ There are 28,179 samples of mixtures split into the train, validation, and test 
 - ELBO Loss implementation: 
 1. reconstruction loss for each individual source -- V
 2. KL Loss check
+
+
+## LDM
+Question:
+1. How does Timbre read 8x100x16? turn it into 128x100?
+2. concatenate? FiLM?
