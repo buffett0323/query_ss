@@ -199,13 +199,13 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
                 with open(f"{val_folder}/Epoch_{epoch}/metrics.json", "w") as json_file:
                     json.dump(json_metrics, json_file, indent=4)
                                 
-                for pred, gt, stem in zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem):
+                for i, (pred, gt, stem) in enumerate(zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem)):
                     snr = safe_signal_noise_ratio(pred.cpu(), gt.cpu())
                     snr_mean = (snr[0] + snr[1]) / 2
                     snr = round(snr_mean.item(), 1)
 
-                    pred_path = os.path.join(f"{val_folder}/Epoch_{epoch}", f"{stem}_pred_{snr}.wav")
-                    gt_path = os.path.join(f"{val_folder}/Epoch_{epoch}", f"{stem}_gt_{snr}.wav")
+                    pred_path = os.path.join(f"{val_folder}/Epoch_{epoch}", f"{stem}_{i}_pred_{snr}.wav")
+                    gt_path = os.path.join(f"{val_folder}/Epoch_{epoch}", f"{stem}_{i}_gt_{snr}.wav")
                     torchaudio.save(pred_path, pred.cpu(), sample_rate=44100)
                     torchaudio.save(gt_path, gt.cpu(), sample_rate=44100)
 
@@ -267,13 +267,13 @@ with torch.no_grad():
             json.dump(json_metrics, json_file, indent=4)
                                 
                     
-        for pred, gt, stem in zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem):
+        for i, (pred, gt, stem) in enumerate(zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem)):
             snr = safe_signal_noise_ratio(pred.cpu(), gt.cpu())
             snr_mean = (snr[0] + snr[1]) / 2
             snr = round(snr_mean.item(), 1)
 
-            pred_path = os.path.join(test_folder, f"{stem}_pred_{snr}.wav")
-            gt_path = os.path.join(test_folder, f"{stem}_gt_{snr}.wav")
+            pred_path = os.path.join(test_folder, f"{stem}_{i}_pred_{snr}.wav")
+            gt_path = os.path.join(test_folder, f"{stem}_{i}_gt_{snr}.wav")
             torchaudio.save(pred_path, pred.cpu(), sample_rate=44100)
             torchaudio.save(gt_path, gt.cpu(), sample_rate=44100)
 
