@@ -226,16 +226,32 @@ class MusicalObjectDataset(Dataset):
 
         chord = self.examples[index % len(self.examples)]
         note_spec_list = []
+        note_audio_list = []
 
         for note, inst in zip(chord[chord.nonzero(as_tuple=True)], instrument_list):
             instrument_name = self.all_instrument_names[inst].replace(" ", "")
             note_spec = torch.load(os.path.join(
                 self.root, 'notes/{}'.format(instrument_name), str(note.item()),
                 '{}_spec.pt'.format(self.spec)), weights_only=True)
+            note_audio_tmp = torch.load(os.path.join(
+                self.root, 'notes/{}'.format(instrument_name), str(note.item()),
+                'audio.pt'))
             note_spec_list.append(note_spec)
+            note_audio_list.append(note_audio_tmp)
 
         note_tensors = torch.cat(note_spec_list, dim=0)
+        example_audio_tensor = torch.cat(
+                note_audio_list, dim=0).sum(dim=0).unsqueeze(dim=0)
 
+        spec_transform = T.MelSpectrogram(
+            sample_rate=16000,
+            n_fft=1024,
+            win_length=None,
+            hop_length=512,
+            n_mels = 128
+        )
+        example_spec = spec_transform(example_audio_tensor)
+        
         if self.transform is not None:
             spec = self.transform(spec)
             note_tensors = self.transform(note_tensors)
@@ -245,7 +261,7 @@ class MusicalObjectDataset(Dataset):
 
         # Mixture, note, midi label, instrument_label: 
         # torch.Size([1, 128, 35]) torch.Size([4, 128, 35]) tensor([18, 20, 25, 34]) tensor([0, 1, 1, 2])
-        return spec.squeeze(0), note_tensors, midi_label, instrument_label
+        return spec.squeeze(0), note_tensors, midi_label, instrument_label, example_spec
 
     def __len__(self):
         return len(self.spec_list)
@@ -379,10 +395,8 @@ if __name__ == '__main__':
         dm.num_samples, dm.num_notes, dm.num_instruments
     ))
     
-    spec, note_tensors, midi_label, instrument_label = dm.train_ds[0]
-    for i in range(3):
-        spec, note_tensors, midi_label, instrument_label = dm.train_ds[i]
-        example_audio_tensor = note_tensors.sum(dim=0)
-        print(spec, example_audio_tensor)
-        compare_spectrograms(spec, example_audio_tensor, figsize=(9,6))
+    spec, note_tensors, midi_label, instrument_label, example_spec = dm.train_ds[0]
+
+    print(example_spec.shape, spec.shape)
+    print(example_spec, spec)
 
