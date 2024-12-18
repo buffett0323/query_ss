@@ -17,6 +17,8 @@ from dismix_loss import ELBOLoss, BarlowTwinsLoss
     # StochasticBinarizationLayer, TimbreEncoder#, PitchEncoder
 
 from diffusers import AudioLDM2Pipeline
+from diffusers.models import AutoencoderKL
+
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
 from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
 import warnings
@@ -70,12 +72,10 @@ class QueryEncoder(nn.Module):
 class MixtureEncoder(nn.Module):
     def __init__(
         self,
-        repo_id="cvssp/audioldm2",
+        vae,
     ):
         super().__init__()
-        pipe = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float16)
-        self.encoder = pipe.vae.encoder
-
+        self.encoder = vae.encoder
         self.freeze_encoder()
         self.conv = nn.Conv2d(
             in_channels=16,  # Input channels
@@ -91,9 +91,10 @@ class MixtureEncoder(nn.Module):
             param.requires_grad = False
 
     def forward(self, x):
-        x = x.to(torch.float16)
-        h = self.encoder(x).permute(0, 1, 3, 2)
-        h = h.to(torch.float32)
+        with torch.no_grad():
+            x = x.to(torch.float16)
+            h = self.encoder(x).permute(0, 1, 3, 2)
+            h = h.to(torch.float32)
         return self.conv(h)
     
     
@@ -205,66 +206,6 @@ class TimbreEncoder(nn.Module):
         mean, logvar = reshaped_x[0], reshaped_x[1]
         timbre_latent = self.reparameterize(mean, logvar)
         return timbre_latent
-    
-
-
-# class D_theta_m(nn.Module):
-#     def __init__(self, input_dim, hidden_dim, num_heads, num_layers, dropout=0.1):
-#         super(D_theta_m, self).__init__()
-#         # Transformer configuration
-#         encoder_layer = nn.TransformerEncoderLayer(
-#             d_model=input_dim,
-#             nhead=num_heads,
-#             dim_feedforward=hidden_dim,
-#             dropout=dropout,
-#             activation='relu'
-#         )
-#         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-#         self.layer_norm = nn.LayerNorm(input_dim)
-#         self.output_layer = nn.Linear(input_dim, input_dim)  # Predict clean latent
-
-#     def forward(self, zm_t, sc):
-#         """
-#         Args:
-#             zm_t: Noised latent input (batch_size, sequence_length, input_dim)
-#             sc: Condition embeddings (batch_size, sequence_length, input_dim)
-
-#         Returns:
-#             zm_t_minus_1: Denoised latent (batch_size, sequence_length, input_dim)
-#         """
-#         # Combine inputs and normalize
-#         combined_input = zm_t + sc
-#         combined_input = self.layer_norm(combined_input)
-
-#         # Transformer processing
-#         processed = self.transformer(combined_input)
-
-#         # Predict next denoised latent
-#         zm_t_minus_1 = self.output_layer(processed)
-#         return zm_t_minus_1
-
-
-# class D_vae(nn.Module):
-#     def __init__(self, input_dim, output_dim):
-#         super(D_vae, self).__init__()
-#         # A simple linear decoder for reconstruction
-#         self.decoder = nn.Sequential(
-#             nn.Linear(input_dim, 512),
-#             nn.ReLU(),
-#             nn.Linear(512, 1024),
-#             nn.ReLU(),
-#             nn.Linear(1024, output_dim)
-#         )
-
-#     def forward(self, z_s):
-#         """
-#         Args:
-#             z_s: Latent representation for a single source (batch_size, latent_dim)
-
-#         Returns:
-#             x_s: Reconstructed source (batch_size, output_dim)
-#         """
-#         return self.decoder(z_s)
 
 
 # Sinusoidal Positional Encoding
@@ -322,14 +263,16 @@ class Partition(nn.Module):
 
 # DiTPatchPartitioner Class
 class DiTPatchPartitioner(nn.Module):
-    def __init__(self, 
-                 z_patch_size=4, 
-                 z_num_patches=25, 
-                 z_dim=512,
-                 s_patch_size=4, 
-                 s_num_patches=25, 
-                 s_dim=1024,
-                 max_len=5000):
+    def __init__(
+        self, 
+        z_patch_size=4, 
+        z_num_patches=25, 
+        z_dim=512,
+        s_patch_size=4, 
+        s_num_patches=25, 
+        s_dim=1024,
+        max_len=5000
+    ):
         super(DiTPatchPartitioner, self).__init__()
         self.z_partition = Partition(
             patch_size=z_patch_size, 
@@ -351,7 +294,11 @@ class DiTPatchPartitioner(nn.Module):
 
 
 class AdaLayerNorm(nn.Module):
-    def __init__(self, normalized_shape, conditioning_dim):
+    def __init__(
+        self, 
+        normalized_shape, 
+        conditioning_dim
+    ):
         """
         Args:
             normalized_shape (int): Input shape from an expected input of size
@@ -360,6 +307,7 @@ class AdaLayerNorm(nn.Module):
         """
         super(AdaLayerNorm, self).__init__()
         self.layer_norm = nn.LayerNorm(normalized_shape)
+        
         # Projection layers for scaling (gamma) and shifting (beta)
         self.gamma_proj = nn.Linear(conditioning_dim, normalized_shape)
         self.beta_proj = nn.Linear(conditioning_dim, normalized_shape)
@@ -373,8 +321,8 @@ class AdaLayerNorm(nn.Module):
             Tensor: Normalized and conditioned tensor.
         """
         normalized = self.layer_norm(x)
-        gamma = self.gamma_proj(condition).unsqueeze(1)  # [batch, 1, normalized_shape]
-        beta = self.beta_proj(condition).unsqueeze(1)    # [batch, 1, normalized_shape]
+        gamma = self.gamma_proj(condition)
+        beta = self.beta_proj(condition)
         return gamma * normalized + beta
 
 
@@ -391,7 +339,7 @@ class TransformerBlock(nn.Module):
         """
         super(TransformerBlock, self).__init__()
         self.self_attn = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads, dropout=dropout)
-        self.ada_ln1 = AdaLayerNorm(dim, conditioning_dim)
+        self.ada_ln1 = AdaLayerNorm(dim, conditioning_dim) # adaLN
         self.ff = nn.Sequential(
             nn.Linear(dim, ff_dim),
             nn.GELU(),
@@ -399,7 +347,7 @@ class TransformerBlock(nn.Module):
             nn.Linear(ff_dim, dim),
             nn.Dropout(dropout)
         )
-        self.ada_ln2 = AdaLayerNorm(dim, conditioning_dim)
+        self.ada_ln2 = AdaLayerNorm(dim, conditioning_dim) # adaLN
 
     def forward(self, x, condition):
         """
@@ -414,14 +362,14 @@ class TransformerBlock(nn.Module):
         x = x + attn_output  # Residual connection
 
         # Adaptive Layer Norm after Residual
-        x = self.ada_ln1(x.transpose(0, 1), condition).transpose(0, 1)  # [seq_len, batch, dim]
-
+        x = self.ada_ln1(x, condition)#.transpose(0, 1)  # [seq_len, batch, dim]
+        
         # Feedforward Network
         ff_output = self.ff(x)  # [seq_len, batch, dim]
         x = x + ff_output  # Residual connection
 
         # Adaptive Layer Norm after Residual
-        x = self.ada_ln2(x.transpose(0, 1), condition).transpose(0, 1)  # [seq_len, batch, dim]
+        x = self.ada_ln2(x, condition)#.transpose(0, 1)  # [seq_len, batch, dim]
 
         return x
 
@@ -430,15 +378,16 @@ class TransformerBlock(nn.Module):
 class DiT(nn.Module):
     def __init__(
         self, 
+        vae,
         dim=512, 
+        num_blocks=3,
         num_heads=4, 
-        num_layers=3, 
-        conditioning_dim=1024 + 512,  # s_c_patched + timestep_embedding
+        condition_dim=1024, 
         ff_dim=2048, 
-        max_patch_seq_len=25*4,  # Assuming N_s=4 and L=25
         dropout=0.1,
     ):
         """
+        Ref: https://github.com/facebookresearch/DiT/blob/main/models.py
         Args:
             dim (int): Embedding dimension.
             num_heads (int): Number of attention heads.
@@ -449,14 +398,22 @@ class DiT(nn.Module):
             dropout (float): Dropout rate.
         """
         super(DiT, self).__init__()
-        self.positional_encoding = SinusoidalPositionalEncoding(dim, max_len=max_patch_seq_len)
+        self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
+        self.pt_D_VAE = vae.decoder
+        self.partitioner = DiTPatchPartitioner()
+        
         self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(dim, num_heads, conditioning_dim, ff_dim, dropout) 
-            for _ in range(num_layers)
+            TransformerBlock(dim, num_heads, condition_dim, ff_dim, dropout) 
+            for _ in range(num_blocks)
         ])
         self.layer_norm = nn.LayerNorm(dim)
+        self.time_embed = nn.Sequential(
+            nn.Linear(1, condition_dim),
+            nn.ReLU(),
+            nn.Linear(condition_dim, condition_dim)
+        )
 
-    def forward(self, x, condition):
+    def forward(self, x_s, s_i, t):
         """
         Args:
             x (Tensor): Input tensor of shape [seq_len, batch_size, dim].
@@ -464,25 +421,37 @@ class DiT(nn.Module):
         Returns:
             Tensor: Output tensor of shape [seq_len, batch_size, dim].
         """
-        x = self.positional_encoding(x.transpose(0,1)).transpose(0,1)  # Apply positional encoding
+        x_s = x_s.to(torch.float16)
+        z_s = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
+        z_s = z_s.permute(0, 1, 3, 2)
+        
+        # Partition
+        z_m_t, s_c = self.partitioner(z_s, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
+
+        # Embed the diffusion step t and combine with sc
+        t_embed = self.time_embed(t)  # Shape: [batch_size, condition_dim]
+        condition = s_c + t_embed
+        
+        # Pass through transformer blocks
         for block in self.transformer_blocks:
-            x = block(x, condition)
-        x = self.layer_norm(x.transpose(0,1)).transpose(0,1)
-        return x
+            z_m_t = block(z_m_t, condition)
+        
+        return z_m_t
 
 
 class DisMix_LDM(nn.Module):
     def __init__(
         self,
-        partitioner=DiTPatchPartitioner(), 
-        dit=DiT(), 
+        vae,
+        D_z=16,
+        D_s=32,
+        L=25,
         diffusion_steps=1000, 
         beta_start=1e-4, 
         beta_end=0.02, 
         N_s=4,
         batch_size=1,
         device='cuda',
-        repo_id="cvssp/audioldm2",
     ):
         """
         Args:
@@ -513,7 +482,7 @@ class DisMix_LDM(nn.Module):
             downsample_time_stride4_levels=[],  # No special downsampling for time
         )
         
-        self.M_Encoder = MixtureEncoder() # Pre-trained model
+        self.M_Encoder = MixtureEncoder(vae=vae) # Pre-trained model
         
         self.combine_conv = nn.Conv2d(
             in_channels=32,  # 16 from em and 16 from eq after concatenation
@@ -525,9 +494,13 @@ class DisMix_LDM(nn.Module):
         
         self.pitch_encoder = PitchEncoder()
         self.timbre_encoder = TimbreEncoder()
+        self.vae = vae
+        self.D_z = D_z
+        self.D_s = D_s
+        self.L = L
         self.device = device
-        self.partitioner = partitioner
-        self.dit = dit
+        self.partitioner = DiTPatchPartitioner()
+        self.dit = DiT(vae=vae)
         self.N_s = N_s # 4
         self.batch_size = batch_size
 
@@ -538,9 +511,6 @@ class DisMix_LDM(nn.Module):
         self.alpha_cumprod = torch.cumprod(self.alpha, dim=0)  # (T,)
         self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]).to(device), self.alpha_cumprod[:-1]], dim=0)  # (T,)
 
-        pipe = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float16)
-        self.pt_E_VAE = MixtureEncoder() # pipe.vae.encoder
-        self.pt_D_VAE = pipe.vae.decoder
         
         # # Load HiFi-GAN via torch.hub
         # try:
@@ -702,33 +672,38 @@ class DisMix_LDM(nn.Module):
         s_i = torch.cat((pitch_latent, timbre_latent), dim=3) # s_c: batch*N_s, 8, 100, 32
         s_i = s_i.view(self.batch_size * self.N_s, 32, 8, 100)    # [batch*N_s, C=32, H=8, W=100]
         
-        # Get Zs_i from E_vae(x_si)
-        x_s = x_s.to(torch.float16)
-        z_s0 = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-        z_s0 = z_s0.permute(0, 1, 3, 2)
+        """ Latent Diffusion Model """
+        t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
+        dit = self.dit(x_s, s_i, t)
         
-        # Partition
-        z_m0, s_c = self.partitioner(z_s0, s_i)  # z_m0: [batch*N_s*L, 512], s_c_patched: [batch*N_s*L, 1024]
-        print(z_m0.shape, s_c.shape)
+        # # Get Zs_i from E_vae(x_si)
+        # x_s = x_s.to(torch.float16)
+        # z_s0 = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
+        # z_s0 = z_s0.permute(0, 1, 3, 2)
+        
+        # # Partition
+        # z_m0, s_c = self.partitioner(z_s0, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
+        
         # # Sample timesteps
         # t = self.sample_timesteps(z_m0.size(0))  # [batch*N_s*L]
+        
         # # Get noise
         # z_t, noise = self.forward_diffusion_sample(z_m0, t)
         
         # # Prepare conditioning vector (concatenate s_c_patched and timestep embedding)
         # timestep_embedding = self.get_timestep_embedding(t, self.dit.transformer_blocks[0].self_attn.self_attn.embed_dim)
-        # condition = torch.cat([s_c_patched, timestep_embedding], dim=-1)  # [batch*N_s*L, 1024 + embed_dim]
+        # condition = torch.cat([s_c, timestep_embedding], dim=-1)  # [batch*N_s*L, 1024 + embed_dim]
+        
         # # Predict z0 using DiT
         # z_t = z_t.unsqueeze(-1)  # [batch*N_s*L, 512, 1]
         # z_t = z_t.permute(2, 0, 1)  # [1, batch*N_s*L, 512]
         # pred_z0 = self.dit(z_t, condition)  # [1, batch*N_s*L, 512]
         # pred_z0 = pred_z0.squeeze(0).permute(1, 0)  # [batch*N_s*L, 512]
         # # Compute loss
-        # z_s0_flat = z_s0.view(batch_size * N_s, -1)  # [batch*N_s, 8*16*100]
-        # z_s0_flat = z_s0_flat.view(batch_size * N_s * 512)  # Adjust as per actual dimensions
+        # z_s0_flat = z_s0.view(self.batch_size * N_s, -1)  # [batch*N_s, 8*16*100]
+        # z_s0_flat = z_s0_flat.view(self.batch_size * N_s * 512)  # Adjust as per actual dimensions
         # loss = nn.MSELoss()(pred_z0, z_s0_flat)  # Ensure shapes align
-        
-        return s_c
+        return dit
     
     
     
@@ -737,9 +712,16 @@ if __name__ == "__main__":
     BS, N_s = 1, 4
     x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
     x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
+    
+    choice = ["ema", "mse"]
+    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[0]}").to(device)
+    pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16).to(device)
+    vae = pipe.vae 
+    
     model = DisMix_LDM(
         batch_size=BS,
         N_s=N_s,
+        vae=vae,
     ).to(device)
     
     res = model(x_m, x_q)
