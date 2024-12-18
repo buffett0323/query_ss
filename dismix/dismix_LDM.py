@@ -244,14 +244,14 @@ class Partition(nn.Module):
                - D: Feature dimensions (16)
                - T: Time frames (100)
         """
-        B, C, D, T = x.shape  # B=batch_size, C=8, D=16, T=100
+        B, C, T, D = x.shape  # B=batch_size, C=8, T=100, D=16: torch.Size([4, 8, 100, 16]) torch.Size([4, 8, 100, 32])
         assert T % self.num_patches == 0, "Time frames must be divisible by the number of patches."
 
         # Step 1: Permute and reshape the input
-        x = x.permute(0, 3, 1, 2).contiguous()  # Shape: [B, T, C, D]
-        x = x.view(B, self.num_patches, self.patch_size, C, D)  # Split into patches: [B, L=25, 4, C, D]
+        x = x.permute(0, 2, 3, 1).contiguous()  # Shape: [B, T, D, C]
+        x = x.view(B, self.num_patches, self.patch_size, D, C)  # Split into patches: [B, L=25, 4, D, C]
 
-        # Step 2: Flatten the patch dimensions (4, C, D) -> (4 * 16 * 8)
+        # Step 2: Flatten the patch dimensions (4, D, C) -> (4 * 16 * 8)
         x = x.reshape(B, self.num_patches, -1)  # Shape: [B, L=25, 4*16*8]
 
         # Step 3: Add positional encoding
@@ -379,6 +379,8 @@ class DiT(nn.Module):
     def __init__(
         self, 
         vae,
+        batch_size,
+        N_s,
         dim=512, 
         num_blocks=3,
         num_heads=4, 
@@ -401,6 +403,8 @@ class DiT(nn.Module):
         self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
         self.pt_D_VAE = vae.decoder
         self.partitioner = DiTPatchPartitioner()
+        self.N_s = N_s # 4
+        self.batch_size = batch_size
         
         self.transformer_blocks = nn.ModuleList([
             TransformerBlock(dim, num_heads, condition_dim, ff_dim, dropout) 
@@ -412,7 +416,48 @@ class DiT(nn.Module):
             nn.ReLU(),
             nn.Linear(condition_dim, condition_dim)
         )
+        
+        
+    def unpatchify(self, x):
+        """
+        Unpatchifies a tensor from patch representation to the original input format.
 
+        Args:
+            x (Tensor): Input tensor of shape [N*L, Dz'], where
+                        - N: Batch size
+                        - L: Number of patches
+                        - Dz': Flattened patch dimension (Tz/L x Dz x C).
+
+        Returns:
+            Tensor: Output tensor of shape [N, C, Tz, Dz], where
+                    - C: Number of channels
+                    - Tz: Original temporal dimension
+                    - Dz: Original feature dimension.
+        """
+        B = self.batch_size * self.N_s      # Batch size
+        L = 25                              # Number of patches
+        Tz = 100                            # Original temporal dimension
+        Dz = 16                             # Feature dimension
+        C = 8                               # Number of channels
+
+        # Flattened patch dimension must match
+        D_prime = (Tz // L) * Dz * C
+        assert x.shape[1] == D_prime, f"Flattened dimension mismatch: expected {D_prime}, got {x.shape[1]}"
+
+        # Reshape from [N*L, D_prime] to [N, L, Tz/L, Dz, C]
+        x = x.view(B, L, Tz // L, Dz, C)  # Shape: [B, L, Tz/L, Dz, C]
+
+        # Rearrange to [B, Tz, Dz, C]
+        x = x.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, Tz, Dz, C]
+        x = x.view(B, Tz, Dz, C)
+
+        # Final rearrangement to [B, C, Tz, Dz]
+        x = x.permute(0, 3, 1, 2).contiguous()  # Shape: [B, C, Tz, Dz]
+
+        return x
+
+
+        
     def forward(self, x_s, s_i, t):
         """
         Args:
@@ -436,6 +481,13 @@ class DiT(nn.Module):
         for block in self.transformer_blocks:
             z_m_t = block(z_m_t, condition)
         
+        z_m_t = self.unpatchify(z_m_t)  
+        
+        # Decoder
+        z_m_t = z_m_t.to(torch.float16)
+        z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32)
+        print("zmt:", z_m_t.shape)
+        print(z_m_t.shape)
         return z_m_t
 
 
@@ -500,9 +552,13 @@ class DisMix_LDM(nn.Module):
         self.L = L
         self.device = device
         self.partitioner = DiTPatchPartitioner()
-        self.dit = DiT(vae=vae)
         self.N_s = N_s # 4
         self.batch_size = batch_size
+        self.dit = DiT(
+            vae=vae,
+            batch_size=batch_size,
+            N_s=N_s,
+        )
 
         # Define the noise schedule
         self.diffusion_steps = diffusion_steps
@@ -670,7 +726,7 @@ class DisMix_LDM(nn.Module):
         
         # Concat: f_phi_s
         s_i = torch.cat((pitch_latent, timbre_latent), dim=3) # s_c: batch*N_s, 8, 100, 32
-        s_i = s_i.view(self.batch_size * self.N_s, 32, 8, 100)    # [batch*N_s, C=32, H=8, W=100]
+        x_s = x_s.permute(0, 1, 3, 2)
         
         """ Latent Diffusion Model """
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
