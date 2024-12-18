@@ -15,7 +15,8 @@ from matplotlib.colors import ListedColormap
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 # from dismix_model import Conv1DEncoder, MixtureQueryEncoder, \
     # StochasticBinarizationLayer, TimbreEncoder#, PitchEncoder
-    
+
+from diffusers import AudioLDM2Pipeline
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
 from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
 import warnings
@@ -57,7 +58,7 @@ class QueryEncoder(nn.Module):
             use_linear_attn=use_linear_attn,
             attn_type=attn_type,
             downsample_time_stride4_levels=downsample_time_stride4_levels,
-        )
+        ) #.half() # convert to torch float16
         self.temporal_pool = nn.AdaptiveAvgPool2d((1, 16))
 
     def forward(self, x):
@@ -65,49 +66,35 @@ class QueryEncoder(nn.Module):
         h = self.temporal_pool(h)
         return h
     
-    
+# Use the pre-trained encoder and freeze
 class MixtureEncoder(nn.Module):
     def __init__(
         self,
-        *,
-        ch,
-        out_ch,
-        ch_mult=(1, 2, 4, 8),
-        num_res_blocks,
-        attn_resolutions,
-        dropout=0.0,
-        resamp_with_conv=True,
-        in_channels,
-        resolution,
-        z_channels,
-        double_z=False,
-        use_linear_attn=False,
-        attn_type="vanilla",
-        downsample_time_stride4_levels=[],
+        repo_id="cvssp/audioldm2",
     ):
         super().__init__()
-        
-        self.encoder = Encoder(
-            ch=ch,
-            out_ch=out_ch,
-            ch_mult=ch_mult,
-            num_res_blocks=num_res_blocks,
-            attn_resolutions=attn_resolutions,
-            dropout=dropout,
-            resamp_with_conv=resamp_with_conv,
-            in_channels=in_channels,
-            resolution=resolution,
-            z_channels=z_channels,
-            double_z=double_z,
-            use_linear_attn=use_linear_attn,
-            attn_type=attn_type,
-            downsample_time_stride4_levels=downsample_time_stride4_levels,
+        pipe = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float16)
+        self.encoder = pipe.vae.encoder
+
+        self.freeze_encoder()
+        self.conv = nn.Conv2d(
+            in_channels=16,  # Input channels
+            out_channels=8,  # Output channels
+            kernel_size=(1, 1),  # Kernel size to maintain spatial dimensions
+            stride=(1, 1),  # Stride to maintain spatial dimensions
+            padding=(0, 0)  # No padding needed for (1, 1) kernel
         )
 
+    def freeze_encoder(self):
+        """Freeze the parameters of the encoder to prevent training."""
+        for param in self.encoder.parameters():
+            param.requires_grad = False
 
     def forward(self, x):
-        h = self.encoder(x)
-        return h.permute(0, 1, 3, 2)
+        x = x.to(torch.float16)
+        h = self.encoder(x).permute(0, 1, 3, 2)
+        h = h.to(torch.float32)
+        return self.conv(h)
     
     
     
@@ -203,7 +190,7 @@ class TimbreEncoder(nn.Module):
             Reparameterization trick to sample from N(mean, var)
             Sampling by μφτ (·) + ε σφτ (·)
         """
-        std = torch.exp(0.5 * logvar)
+        std = torch.exp(0.5 * logvar) # std = torch.exp(0.5 * torch.clamp(logvar, min=-10, max=10))
         eps = torch.randn_like(std)
         return mean + (eps * std)
 
@@ -309,16 +296,27 @@ class Partition(nn.Module):
         self.positional_encoding = SinusoidalPositionalEncoding(dim, max_len)
 
     def forward(self, x):
-        N_s, C, H, W = x.shape
-        assert W % self.num_patches == 0, "Width must be divisible by the number of patches."
-        x = x.permute(0, 3, 2, 1).contiguous()  # (N_s, W, H, C)
-        x = x.view(N_s, W, H * C)  # (N_s, W, H * C)
-        x = self.positional_encoding(x)  # (N_s, W, D_z)
-        L = self.num_patches
-        patch_size = W // L
-        x = x.view(N_s, L, patch_size, -1)  # (N_s, L, patch_size, D_z)
-        x = x.view(N_s, L, -1)  # (N_s, L, D'_z)
-        x = x.view(N_s * L, -1)  # (N_s * L, D'_z)
+        """
+        Args:
+            x: Input tensor of shape [batch_size, C, D, T], where:
+               - C: Channels (8)
+               - D: Feature dimensions (16)
+               - T: Time frames (100)
+        """
+        B, C, D, T = x.shape  # B=batch_size, C=8, D=16, T=100
+        assert T % self.num_patches == 0, "Time frames must be divisible by the number of patches."
+
+        # Step 1: Permute and reshape the input
+        x = x.permute(0, 3, 1, 2).contiguous()  # Shape: [B, T, C, D]
+        x = x.view(B, self.num_patches, self.patch_size, C, D)  # Split into patches: [B, L=25, 4, C, D]
+
+        # Step 2: Flatten the patch dimensions (4, C, D) -> (4 * 16 * 8)
+        x = x.reshape(B, self.num_patches, -1)  # Shape: [B, L=25, 4*16*8]
+
+        # Step 3: Add positional encoding
+        x = self.positional_encoding(x)  # Shape: [B, L=25, D_z']
+        x = x.view(B * self.num_patches, -1) # Shape: [B*L, D_z']
+
         return x
 
 
@@ -346,22 +344,10 @@ class DiTPatchPartitioner(nn.Module):
             max_len=max_len
         )
 
-    def forward(self, z_s0, s_c):
-        z_m0 = self.z_partition(z_s0)  # (N_s * L, 512)
-        s_c_patched = self.s_partition(s_c)  # (N_s * L, 1024)
-        return z_m0, s_c_patched
-
-# # Dummy Encoder for Demonstration
-# class DummyEncoder(nn.Module):
-#     def __init__(self):
-#         super(DummyEncoder, self).__init__()
-
-#     def forward(self, x):
-#         N_s = x.size(0)
-#         z_s0 = torch.randn(N_s, 8, 16, 100).to(x.device)  # Pitch latent
-#         s_c = torch.randn(N_s, 32, 8, 100).to(x.device)  # Timbre latent
-#         return z_s0, s_c
-    
+    def forward(self, z_s, s):
+        z_m = self.z_partition(z_s)  # (N_s * L, 512)
+        s_c = self.s_partition(s)  # (N_s * L, 1024)
+        return z_m, s_c
 
 
 class AdaLayerNorm(nn.Module):
@@ -494,8 +480,9 @@ class DisMix_LDM(nn.Module):
         beta_start=1e-4, 
         beta_end=0.02, 
         N_s=4,
-        batch_size=2,
+        batch_size=1,
         device='cuda',
+        repo_id="cvssp/audioldm2",
     ):
         """
         Args:
@@ -526,22 +513,7 @@ class DisMix_LDM(nn.Module):
             downsample_time_stride4_levels=[],  # No special downsampling for time
         )
         
-        self.M_Encoder = MixtureEncoder(
-            ch=64,  # Initial number of channels, can be adjusted as needed
-            out_ch=8,  # Desired number of output channels
-            ch_mult=(1, 2, 4),  # Two resolution levels for two downsampling steps
-            num_res_blocks=2,  # Number of residual blocks per resolution level
-            attn_resolutions=[],  # Adjust based on whether you want attention
-            dropout=0.0,
-            resamp_with_conv=True,
-            in_channels=1,  # Set according to your input data (e.g., 1 for mono audio)
-            resolution=64,  # Frequency dimension of input
-            z_channels=8,  # Latent space channels
-            double_z=False,  # To keep z_channels as 8
-            use_linear_attn=False,
-            attn_type="vanilla",
-            downsample_time_stride4_levels=[],  # No special downsampling for time
-        )
+        self.M_Encoder = MixtureEncoder() # Pre-trained model
         
         self.combine_conv = nn.Conv2d(
             in_channels=32,  # 16 from em and 16 from eq after concatenation
@@ -556,7 +528,7 @@ class DisMix_LDM(nn.Module):
         self.device = device
         self.partitioner = partitioner
         self.dit = dit
-        self.N_s = N_s
+        self.N_s = N_s # 4
         self.batch_size = batch_size
 
         # Define the noise schedule
@@ -566,26 +538,27 @@ class DisMix_LDM(nn.Module):
         self.alpha_cumprod = torch.cumprod(self.alpha, dim=0)  # (T,)
         self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]).to(device), self.alpha_cumprod[:-1]], dim=0)  # (T,)
 
+        pipe = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float16)
+        self.pt_E_VAE = MixtureEncoder() # pipe.vae.encoder
+        self.pt_D_VAE = pipe.vae.decoder
         
-        # self.pt_E_VAE = None
-        
-        # Load HiFi-GAN via torch.hub
-        try:
-            self.hifigan, self.vocoder_train_setup, self.denoiser = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
-            CHECKPOINT_SPECIFIC_ARGS = [
-                'sampling_rate', 'hop_length', 'win_length', 'p_arpabet', 'text_cleaners',
-                'symbol_set', 'max_wav_value', 'prepend_space_to_text',
-                'append_space_to_text']
+        # # Load HiFi-GAN via torch.hub
+        # try:
+        #     self.hifigan, self.vocoder_train_setup, self.denoiser = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
+        #     CHECKPOINT_SPECIFIC_ARGS = [
+        #         'sampling_rate', 'hop_length', 'win_length', 'p_arpabet', 'text_cleaners',
+        #         'symbol_set', 'max_wav_value', 'prepend_space_to_text',
+        #         'append_space_to_text']
 
-            for k in CHECKPOINT_SPECIFIC_ARGS:
-                self.vocoder_train_setup.get(k, None)
+        #     for k in CHECKPOINT_SPECIFIC_ARGS:
+        #         self.vocoder_train_setup.get(k, None)
                 
-            print("HiFi-GAN loaded successfully.")
+        #     print("HiFi-GAN loaded successfully.")
             
-        except Exception as e:
-            print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.")
-            print(e)
-            self.hifigan = None
+        # except Exception as e:
+        #     print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.")
+        #     print(e)
+        #     self.hifigan = None
 
     def forward_diffusion_sample(self, z0, t):
         """
@@ -708,10 +681,9 @@ class DisMix_LDM(nn.Module):
         return x_m  # [batch, audio_length]
     
     
-    def forward(self, x_m, x_q):
-        # Encoder for Mixture and Query
+    def forward(self, x_m, x_s): # x_q exactly is x_s in inference
         e_m = self.M_Encoder(x_m)
-        e_q = self.Q_Encoder(x_q)
+        e_q = self.Q_Encoder(x_s)
         
         # Concat
         eq_broadcast = e_q.expand(-1, -1, e_m.size(2), -1)
@@ -726,16 +698,18 @@ class DisMix_LDM(nn.Module):
         timbre_latent = self.timbre_encoder(combined)
         timbre_latent = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
         
-        # Concat
-        s_c = torch.cat((pitch_latent, timbre_latent), dim=3) # s_c: 2, 8, 100, 32
+        # Concat: f_phi_s
+        s_i = torch.cat((pitch_latent, timbre_latent), dim=3) # s_c: batch*N_s, 8, 100, 32
+        s_i = s_i.view(self.batch_size * self.N_s, 32, 8, 100)    # [batch*N_s, C=32, H=8, W=100]
+        
+        # Get Zs_i from E_vae(x_si)
+        x_s = x_s.to(torch.float16)
+        z_s0 = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
+        z_s0 = z_s0.permute(0, 1, 3, 2)
         
         # Partition
-        # z_s0 = self.pt_E_VAE(x_q) # [batch*N_s, C=8, H=16, W=100]
-        s_c = s_c.view(self.batch_size * self.N_s, 32, 8, 100)    # [batch*N_s, C=32, H=8, W=100]
-        
-        # # Partition
-        # # z_m0, s_c_patched = self.partitioner(z_s0, s_c)  # z_m0: [batch*N_s*L, 512], s_c_patched: [batch*N_s*L, 1024]
-        
+        z_m0, s_c = self.partitioner(z_s0, s_i)  # z_m0: [batch*N_s*L, 512], s_c_patched: [batch*N_s*L, 1024]
+        print(z_m0.shape, s_c.shape)
         # # Sample timesteps
         # t = self.sample_timesteps(z_m0.size(0))  # [batch*N_s*L]
         # # Get noise
@@ -761,8 +735,8 @@ class DisMix_LDM(nn.Module):
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     BS, N_s = 1, 4
-    x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)
-    x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)
+    x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
+    x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
     model = DisMix_LDM(
         batch_size=BS,
         N_s=N_s,

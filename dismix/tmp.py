@@ -1,14 +1,38 @@
+from diffusers import AudioLDM2Pipeline
 import torch
-import torch.nn.functional as F
 
-# Step 1: Generate a tensor of 32 random labels from 0 to 51
-labels = torch.randint(0, 52, (32,))
-print(labels.shape)
+# Load the pre-trained pipeline
+repo_id = "cvssp/audioldm2"
+pipe = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float16)
+pipe = pipe.to("cuda")
 
-# Step 2: Apply one-hot encoding to convert each label to a 52-length vector
-one_hot_encoded = F.one_hot(labels, num_classes=52)
+# Extract the VAE from the pipeline
+vae = pipe.vae
 
-print("Labels:", labels)
-print("One-Hot Encoded Tensor Shape:", one_hot_encoded.shape)  # Should output (32, 52)
-print(one_hot_encoded)  # Display the one-hot encoded result
+# Get the pre-trained encoder
+encoder = vae.encoder
+# torch.save(encoder.state_dict(), "audio_ldm2_vae_encoder_checkpoint.pth")
 
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+xm = torch.randn(1, 1, 64, 400).to(device)
+xm = xm.to(torch.float16)
+res = encoder(xm)
+print("RESRES:", res.shape)
+
+# Example input
+import torch 
+from dismix_LDM import Partition
+batch_size = 2
+Z_s = torch.randn(batch_size, 8, 16, 100)  # Shape: [B, C=8, D=16, T=100]
+
+# Partition configuration
+patch_size = 4  # 4 consecutive time steps per patch
+num_patches = 25  # Total patches along the time axis
+dim = 512  # Feature dimension after flattening
+
+# Initialize and forward
+partition = Partition(patch_size=patch_size, dim=dim, num_patches=num_patches)
+output = partition(Z_s)
+
+print(output.shape)  # Output: torch.Size([2, 25, 512])
