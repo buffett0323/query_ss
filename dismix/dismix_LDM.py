@@ -13,16 +13,18 @@ from sklearn.manifold import TSNE
 from matplotlib.colors import ListedColormap
 
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
-# from dismix_model import Conv1DEncoder, MixtureQueryEncoder, \
-    # StochasticBinarizationLayer, TimbreEncoder#, PitchEncoder
-
 from diffusers import AudioLDM2Pipeline
 from diffusers.models import AutoencoderKL
+
+from hifi_gan import inference
 
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
 from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
 import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", message="Could not initialize NNPACK")
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 class QueryEncoder(nn.Module):
     def __init__(
@@ -486,9 +488,7 @@ class DiT(nn.Module):
         # Decoder
         z_m_t = z_m_t.to(torch.float16)
         z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32)
-        print("zmt:", z_m_t.shape)
-        print(z_m_t.shape)
-        return z_m_t
+        return z_m_t.permute(0, 1, 3, 2)  
 
 
 class DisMix_LDM(nn.Module):
@@ -570,21 +570,16 @@ class DisMix_LDM(nn.Module):
         
         # # Load HiFi-GAN via torch.hub
         # try:
-        #     self.hifigan, self.vocoder_train_setup, self.denoiser = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
-        #     CHECKPOINT_SPECIFIC_ARGS = [
-        #         'sampling_rate', 'hop_length', 'win_length', 'p_arpabet', 'text_cleaners',
-        #         'symbol_set', 'max_wav_value', 'prepend_space_to_text',
-        #         'append_space_to_text']
-
-        #     for k in CHECKPOINT_SPECIFIC_ARGS:
-        #         self.vocoder_train_setup.get(k, None)
-                
+        #     hifigan, _, _ = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
+        #     self.hifigan = hifigan.to(device)
         #     print("HiFi-GAN loaded successfully.")
             
         # except Exception as e:
-        #     print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.")
-        #     print(e)
+        #     print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.", e)
         #     self.hifigan = None
+        
+        ### Todo 
+        self.hifigan = inference()
 
     def forward_diffusion_sample(self, z0, t):
         """
@@ -732,6 +727,13 @@ class DisMix_LDM(nn.Module):
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
         dit = self.dit(x_s, s_i, t)
         
+        # Transform back to audio
+        dit = dit.squeeze(1)
+        print(dit.shape)
+        audioa = self.hifigan(dit)
+        print(audioa.shape)
+        
+        
         # # Get Zs_i from E_vae(x_si)
         # x_s = x_s.to(torch.float16)
         # z_s0 = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
@@ -769,7 +771,7 @@ if __name__ == "__main__":
     x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
     x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
     
-    choice = ["ema", "mse"]
+    # choice = ["ema", "mse"]
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[0]}").to(device)
     pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16).to(device)
     vae = pipe.vae 
