@@ -17,6 +17,7 @@ from diffusers import AudioLDM2Pipeline
 from diffusers.models import AutoencoderKL
 
 from hifi_gan import inference
+import argparse
 
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
 from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
@@ -578,8 +579,16 @@ class DisMix_LDM(nn.Module):
         #     print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.", e)
         #     self.hifigan = None
         
-        ### Todo 
-        self.hifigan = inference()
+        ### Todo
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--input_wavs_dir', default='test_files')
+        parser.add_argument('--output_dir', default='generated_files')
+        parser.add_argument('--checkpoint_file', required=True)
+        a = parser.parse_args()
+        print(a)
+        
+        self.hifigan = inference(a)
+        
 
     def forward_diffusion_sample(self, z0, t):
         """
