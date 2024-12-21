@@ -16,8 +16,9 @@ from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
 from diffusers.models import AutoencoderKL
 
-from hifi_gan import inference
-import argparse
+from hifi_gan.inference import mel_to_wav, inference
+from hifi_gan.env import AttrDict
+import argparse, json
 
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
 from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
@@ -579,15 +580,23 @@ class DisMix_LDM(nn.Module):
         #     print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.", e)
         #     self.hifigan = None
         
-        ### Todo
+
+        
+    def hifigan(self, mel):
         parser = argparse.ArgumentParser()
         parser.add_argument('--input_wavs_dir', default='test_files')
         parser.add_argument('--output_dir', default='generated_files')
-        parser.add_argument('--checkpoint_file', required=True)
+        parser.add_argument('--checkpoint_file', default='LJ_V3/generator_v3')
         a = parser.parse_args()
-        print(a)
+
+        config_file = os.path.join(os.path.split(a.checkpoint_file)[0], 'config.json')
+        with open(config_file) as f:
+            data = f.read()
+            
+        json_config = json.loads(data)
+        h = AttrDict(json_config)
+        return mel_to_wav(mel, a, h)
         
-        self.hifigan = inference(a)
         
 
     def forward_diffusion_sample(self, z0, t):
@@ -734,43 +743,17 @@ class DisMix_LDM(nn.Module):
         
         """ Latent Diffusion Model """
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
-        dit = self.dit(x_s, s_i, t)
+        dit_mel = self.dit(x_s, s_i, t)
         
         # Transform back to audio
-        dit = dit.squeeze(1)
-        print(dit.shape)
-        audioa = self.hifigan(dit)
+        dit_mel = dit_mel.squeeze(1)
+        print(dit_mel.shape)
+        
+        audioa = self.hifigan(dit_mel)
         print(audioa.shape)
         
-        
-        # # Get Zs_i from E_vae(x_si)
-        # x_s = x_s.to(torch.float16)
-        # z_s0 = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-        # z_s0 = z_s0.permute(0, 1, 3, 2)
-        
-        # # Partition
-        # z_m0, s_c = self.partitioner(z_s0, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
-        
-        # # Sample timesteps
-        # t = self.sample_timesteps(z_m0.size(0))  # [batch*N_s*L]
-        
-        # # Get noise
-        # z_t, noise = self.forward_diffusion_sample(z_m0, t)
-        
-        # # Prepare conditioning vector (concatenate s_c_patched and timestep embedding)
-        # timestep_embedding = self.get_timestep_embedding(t, self.dit.transformer_blocks[0].self_attn.self_attn.embed_dim)
-        # condition = torch.cat([s_c, timestep_embedding], dim=-1)  # [batch*N_s*L, 1024 + embed_dim]
-        
-        # # Predict z0 using DiT
-        # z_t = z_t.unsqueeze(-1)  # [batch*N_s*L, 512, 1]
-        # z_t = z_t.permute(2, 0, 1)  # [1, batch*N_s*L, 512]
-        # pred_z0 = self.dit(z_t, condition)  # [1, batch*N_s*L, 512]
-        # pred_z0 = pred_z0.squeeze(0).permute(1, 0)  # [batch*N_s*L, 512]
-        # # Compute loss
-        # z_s0_flat = z_s0.view(self.batch_size * N_s, -1)  # [batch*N_s, 8*16*100]
-        # z_s0_flat = z_s0_flat.view(self.batch_size * N_s * 512)  # Adjust as per actual dimensions
-        # loss = nn.MSELoss()(pred_z0, z_s0_flat)  # Ensure shapes align
-        return dit
+
+        return dit_mel
     
     
     
