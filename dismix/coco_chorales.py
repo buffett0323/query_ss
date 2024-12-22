@@ -1,16 +1,11 @@
 import os
 import yaml
-import pickle
-import wave
-import contextlib
-import torch
 import torchaudio
 import numpy as np
 import pandas as pd
 
-from torch.utils.data import Dataset, DataLoader
-from torchaudio.transforms import MelSpectrogram, Resample
-from tqdm import tqdm
+from torch.utils.data import Dataset
+from torchaudio.transforms import MelSpectrogram
 
 class CocoChoraleDataset(Dataset):
     def __init__(
@@ -110,7 +105,3 @@ if __name__ == "__main__":
     for split in ["train", "valid", "test"]:
         dataset = CocoChoraleDataset(file_dir, split=split)
         print(len(dataset))
-    # for batch in dataloader:
-    #     mel_spectrograms, pitch_annotations = batch
-    #     print("Mel Spectrograms Shape:", mel_spectrograms.shape)
-    #     print("Pitch Annotations Shape:", pitch_annotations.shape)
