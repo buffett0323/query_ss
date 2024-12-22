@@ -12,8 +12,7 @@ from torchvision import transforms
 from functools import partial
 
 from dismix_LDM import DisMix_LDM
-from coco_chorales import CocoChoraleDataset
-from dataset import MusicalObjectDataModule, spec_crop
+from dataset import MusicalObjectDataModule, CocoChoraleDataset
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
 
