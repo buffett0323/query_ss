@@ -570,18 +570,6 @@ class DisMix_LDM(nn.Module):
         self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]).to(device), self.alpha_cumprod[:-1]], dim=0)  # (T,)
 
         
-        # # Load HiFi-GAN via torch.hub
-        # try:
-        #     hifigan, _, _ = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
-        #     self.hifigan = hifigan.to(device)
-        #     print("HiFi-GAN loaded successfully.")
-            
-        # except Exception as e:
-        #     print("Error loading HiFi-GAN via torch.hub. Ensure the repository and model name are correct.", e)
-        #     self.hifigan = None
-        
-
-        
     def hifigan(self, mel):
         parser = argparse.ArgumentParser()
         parser.add_argument('--input_wavs_dir', default='test_files')
