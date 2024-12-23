@@ -584,128 +584,6 @@ class DisMix_LDM(nn.Module):
         json_config = json.loads(data)
         h = AttrDict(json_config)
         return mel_to_wav(mel, a, h)
-        
-        
-
-    def forward_diffusion_sample(self, z0, t):
-        """
-        Adds noise to the latent z0 at step t.
-        Args:
-            z0 (Tensor): Original latent tensor.
-            t (Tensor): Diffusion step indices.
-        Returns:
-            Tensor: Noised latent tensor z_t.
-        """
-        sqrt_alpha_cumprod = torch.sqrt(self.alpha_cumprod[t]).view(-1, 1, 1)
-        sqrt_one_minus_alpha_cumprod = torch.sqrt(1 - self.alpha_cumprod[t]).view(-1, 1, 1)
-        noise = torch.randn_like(z0)
-        z_t = sqrt_alpha_cumprod * z0 + sqrt_one_minus_alpha_cumprod * noise
-        return z_t, noise
-    
-    
-    def sample_timesteps(self, batch_size):
-        """
-        Randomly samples diffusion steps for each instance in the batch.
-        Args:
-            batch_size (int): Number of samples.
-        Returns:
-            Tensor: Random diffusion steps.
-        """
-        return torch.randint(0, self.diffusion_steps, (batch_size,), device=self.device).long()
-
-
-    def get_timestep_embedding(self, t, dim):
-        """
-        Creates sinusoidal timestep embeddings.
-        Args:
-            t (Tensor): Timestep indices.
-            dim (int): Embedding dimension.
-        Returns:
-            Tensor: Timestep embeddings of shape [batch, dim].
-        """
-        half_dim = dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, device=self.device) * -emb)
-        emb = t[:, None].float() * emb[None, :]
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
-        if dim % 2 == 1:
-            emb = torch.cat([emb, torch.zeros(t.size(0), 1, device=self.device)], dim=1)
-        return emb  # [batch, dim]
-
-
-    def sample(self, x_cond, N_s=4):
-        """
-        Sampling from the model using the reverse diffusion process.
-        Args:
-            x_cond (Tensor): Conditioning input tensor [batch_size, N_s, in_channels, height, width]
-            N_s (int): Number of sources.
-        Returns:
-            Tensor: [batch_size, audio_length] - Mixture audio x_m
-        """
-        batch_size = x_cond.size(0)
-        # Encode conditioning input
-        _, s_c = self.encoder(x_cond)  # s_c: [batch, N_s, 32, 8, 100]
-        # Reshape
-        s_c = s_c.view(batch_size * N_s, 32, 8, 100)  # [batch*N_s, 32, 8, 100]
-        # Partition
-        _, s_c_patched = self.partitioner(None, s_c)  # [batch*N_s*L, 1024]
-
-        # Initialize z_T as standard normal
-        L = self.partitioner.z_partition.num_patches  # Number of patches
-        z = torch.randn(batch_size * N_s * L, 512).to(self.device)  # [batch*N_s*L, 512]
-
-        for t in reversed(range(self.diffusion_steps)):
-            # Predict z0
-            timestep = torch.full((z.size(0),), t, device=self.device, dtype=torch.long)  # [batch*N_s*L]
-            timestep_embedding = self.get_timestep_embedding(timestep, self.dit.transformer_blocks[0].self_attn.self_attn.embed_dim)  # [batch*N_s*L, dim]
-            condition = torch.cat([s_c_patched, timestep_embedding], dim=-1)  # [batch*N_s*L, 1024 + dim]
-
-            z_input = z.unsqueeze(0)  # [1, batch*N_s*L, 512]
-            pred_z0 = self.dit(z_input, condition)  # [1, batch*N_s*L, 512]
-            pred_z0 = pred_z0.squeeze(0)  # [batch*N_s*L, 512]
-
-            # Update z for the next step
-            alpha = self.alpha[t]
-            alpha_cumprod = self.alpha_cumprod[t]
-            z = (z * torch.sqrt(alpha)) + (pred_z0 * (1 - alpha_cumprod))  # [batch*N_s*L, 512]
-
-        # Decode z to get x_s
-        x_s = self.decoder(z)  # [batch*N_s*L, out_channels=80, H', W']
-
-        # Reverse partition to reconstruct full mel spectrograms per source
-        # Assuming L=25 patches, W'=4 (patch_size=4)
-        batch_Ns_L, C, H_prime, W_prime = x_s.shape  # [batch*N_s*L, C=80, H', W'=4]
-        batch = batch_size
-        N_s = N_s
-        L = self.partitioner.z_partition.num_patches  # 25
-        mel_bins = C
-        patch_size = W_prime  # 4
-
-        # Reshape x_s to [batch, N_s, L, mel_bins, patch_size]
-        x_s = x_s.view(batch, N_s, L, mel_bins, patch_size)
-        # Permute to [batch, N_s, mel_bins, L, patch_size]
-        x_s = x_s.permute(0, 1, 3, 2, 4).contiguous()
-        # Merge patches to reconstruct full mel spectrogram: [batch, N_s, mel_bins, L * patch_size]
-        x_s = x_s.view(batch, N_s, mel_bins, L * patch_size)
-
-        # Move to HiFi-GAN's expected input format
-        # HiFi-GAN expects [batch*N_s, mel_bins, T]
-        x_s = x_s.view(batch * N_s, mel_bins, L * patch_size)  # [batch*N_s, 80, 100]
-
-        # Convert mel spectrograms to audio using HiFi-GAN
-        if self.hifigan is not None:
-            with torch.no_grad():
-                x_s_audio = self.hifigan(x_s)  # [batch*N_s, audio_length]
-        else:
-            raise ValueError("HiFi-GAN model is not loaded.")
-
-        # Reshape to [batch, N_s, audio_length]
-        x_s_audio = x_s_audio.view(batch, N_s, -1)  # [batch, N_s, audio_length]
-
-        # Sum across sources to get mixture audio x_m
-        x_m = torch.sum(x_s_audio, dim=1)  # [batch, audio_length]
-
-        return x_m  # [batch, audio_length]
     
     
     def forward(self, x_m, x_s): # x_q exactly is x_s in inference
@@ -735,14 +613,82 @@ class DisMix_LDM(nn.Module):
         
         # Transform back to audio
         dit_mel = dit_mel.squeeze(1)
-        print(dit_mel.shape)
-        
-        audioa = self.hifigan(dit_mel)
-        print(audioa.shape)
-        
+        # audioa = self.hifigan(dit_mel)
 
         return dit_mel
     
+    
+class DisMix_LDM_Model(pl.LightningModule):
+    def __init__(
+        self,
+        vae,
+        D_z=16,
+        D_s=32,
+        L=25,
+        diffusion_steps=1000, 
+        beta_start=1e-4, 
+        beta_end=0.02, 
+        N_s=4,
+        batch_size=1,
+        device='cuda',
+    ):
+        super(DisMix_LDM_Model, self).__init__()
+        self.model = DisMix_LDM(
+            vae=vae,
+            D_z=D_z,
+            D_s=D_s,
+            L=L,
+            diffusion_steps=diffusion_steps, 
+            beta_start=beta_start, 
+            beta_end=beta_end, 
+            N_s=N_s,
+            batch_size=batch_size,
+            device=device,
+        )
+        self.save_hyperparameters()
+        
+    def forward(self, x_m, x_s):
+        return self.model(x_m, x_s)
+    
+    def training_step(self, batch, batch_idx):
+        self()
+        
+    def evaluate(self, batch, stage='val'):
+        pass
+    
+    def validation_step(self, batch, batch_idx):
+        return self.evaluate(batch, stage='val')
+
+    def test_step(self, batch, batch_idx):
+        return self.evaluate(batch, stage='test')
+
+
+    def configure_optimizers(self):
+        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+    
+        # Gradient Clipping
+        for param in self.parameters():
+            if param.grad is not None:
+                param.grad.data.clamp_(-0.5, 0.5)
+        
+        # Learning Rate Scheduler
+        warmup_steps = 308000  # 308k steps
+        total_steps = 4092000  # 4,092k steps
+        def lr_lambda(current_step):
+            if current_step < warmup_steps:
+                return current_step / warmup_steps  # Linear warmup
+            return 0.5 * (1 + math.cos(math.pi * (current_step - warmup_steps) / (total_steps - warmup_steps)))
+
+        scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        
+        return [optimizer], [scheduler]
+
+        
+    def on_validation_epoch_end(self):
+        return self.plotting(stage='val')
+    
+    def on_test_epoch_end(self):
+        return self.plotting(stage='test')
     
     
 if __name__ == "__main__":

@@ -11,8 +11,8 @@ from tqdm import tqdm
 from torchvision import transforms
 from functools import partial
 
-from dismix_LDM import DisMix_LDM
-from dataset import MusicalObjectDataModule, CocoChoraleDataset
+from dismix_LDM import DisMix_LDM, DisMix_LDM_Model
+from dataset import CocoChoraleDataModule
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
 
@@ -44,22 +44,17 @@ root = f"{comp_path}/cocochorales_full_v1_output/main_dataset"
 os.environ["WANDB_MODE"] = "online"
 
 # Initialize data module
-dm = MusicalObjectDataModule(
+dm = CocoChoraleDataModule(
     root=root,
     batch_size=batch_size,
     num_workers=8,
 )
 
-train_dataset = CocoChoraleDataset(root, split='train')
-valid_dataset = CocoChoraleDataset(root, split='valid')
-test_dataset = CocoChoraleDataset(root, split='test')
-
-
 # Models and other settings
 pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16)#.to(device)
 vae = pipe.vae 
 
-model = DisMix_LDM(
+model = DisMix_LDM_Model(
     batch_size=batch_size,
     N_s=N_s,
     vae=vae,

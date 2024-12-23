@@ -473,6 +473,87 @@ class CocoChoraleDataset(Dataset):
         return mix_melspec, stems_melspec, pitch_annotation
 
 
+
+class CocoChoraleDataModule(LightningDataModule):
+    def __init__(
+        self,
+        root: str,
+        batch_size: int,
+        num_workers: int = 0,
+        seed: int = 42,
+        shuffle: bool = True,
+        pin_memory: bool = True,
+        drop_last: bool = False,
+        *args,
+        **kwargs
+    ):
+        
+        super(MusicalObjectDataModule, self).__init__(*args, **kwargs)
+
+        self.root = root
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.seed = seed
+        self.shuffle = shuffle
+        self.pin_memory = pin_memory
+        self.drop_last = drop_last
+
+    def setup(self, stage: Optional[str] = None):
+        # Assign train/val datasets for use in dataloaders
+        if stage == "fit" or stage is None:
+            self.train_ds = CocoChoraleDataset(root, split='train')
+            self.val_ds = CocoChoraleDataset(root, split='valid')
+        
+        # Assign test dataset for use in dataloader(s)
+        if stage == "test" or stage is None:
+            self.test_ds = CocoChoraleDataset(root, split='test')
+            
+    def train_dataloader(self):
+        """The train dataloader."""
+        return self._data_loader(
+            self.train_ds,
+            shuffle=self.shuffle)
+
+    def val_dataloader(self):
+        """The val dataloader."""
+        return self._data_loader(
+            self.val_ds,
+            shuffle=False)
+
+    def test_dataloader(self):
+        """The test dataloader."""
+        return self._data_loader(
+            self.test_ds,
+            shuffle=False)
+            
+    def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=shuffle,
+            num_workers=self.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory,
+            collate_fn=custom_collate_fn
+        )
+    
+    @property
+    def num_samples(self) -> int:
+        self.setup(stage = 'fit')
+        return len(self.train_ds)
+
+    @property
+    def num_notes(self) -> int:
+        self.setup(stage = 'fit')
+        return len(self.train_ds.notes)
+    
+    @property
+    def num_instruments(self) -> int:
+        self.setup(stage = 'fit')
+        return len(self.train_ds.instrument_tokens)
+
+
+
 if __name__ == '__main__':
     
     # check that all datasets load correctly
