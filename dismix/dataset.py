@@ -488,7 +488,7 @@ class CocoChoraleDataModule(LightningDataModule):
         **kwargs
     ):
         
-        super(MusicalObjectDataModule, self).__init__(*args, **kwargs)
+        super(CocoChoraleDataModule, self).__init__(*args, **kwargs)
 
         self.root = root
         self.batch_size = batch_size
@@ -542,36 +542,32 @@ class CocoChoraleDataModule(LightningDataModule):
         self.setup(stage = 'fit')
         return len(self.train_ds)
 
-    @property
-    def num_notes(self) -> int:
-        self.setup(stage = 'fit')
-        return len(self.train_ds.notes)
+    # @property
+    # def num_notes(self) -> int:
+    #     self.setup(stage = 'fit')
+    #     return len(self.train_ds.notes)
     
-    @property
-    def num_instruments(self) -> int:
-        self.setup(stage = 'fit')
-        return len(self.train_ds.instrument_tokens)
+    # @property
+    # def num_instruments(self) -> int:
+    #     self.setup(stage = 'fit')
+    #     return len(self.train_ds.instrument_tokens)
 
 
 
 if __name__ == '__main__':
     
     # check that all datasets load correctly
-    root = f"{os.getenv('DATA_ROOT')}/MusicSlots/data/jsb_multi"
+    comp_path = "/home/buffett/NAS_189"
+    root = f"{comp_path}/cocochorales_full_v1_output/main_dataset"
     
-    
-
-    dm = MusicalObjectDataModule(root=root,
-                                    batch_size=32)
+    dm = CocoChoraleDataModule(root=root, batch_size=2)
     
     dm.setup(stage='fit')
 
-    print('Dataset sample count: {}, instrument count: {}, note count: {}'.format(
-        dm.num_samples, dm.num_notes, dm.num_instruments
-    ))
+    print('Dataset sample count: {}'.format(dm.num_samples))
     
-    spec, note_tensors, midi_label, instrument_label, example_spec = dm.train_ds[0]
+    mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
 
-    print(example_spec.shape, spec.shape)
-    print(example_spec, spec)
+    print(mix_melspec.shape, stems_melspec[0].shape)
+
 
