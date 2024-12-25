@@ -13,7 +13,7 @@ class ELBOLoss(nn.Module):
         self.reduction = reduction
 
 
-    def forward(self, x_m, x_m_recon, x_s, x_s_recon, timbre_latent, tau_means, tau_logvars, pitch_latent=None, pitch_priors=None):
+    def forward(self, x_m, x_m_recon, x_s, x_s_recon, tau_means, tau_logvars, pitch_latent=None, pitch_priors=None):
         """
         Computes the ELBO loss.
 
@@ -31,7 +31,8 @@ class ELBOLoss(nn.Module):
 
 
         # 1. Reconstruction loss (MSE)
-        recon_loss = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
+        recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
+        recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction=self.reduction)
         # recon_loss = self.gaussian_likelihood(x_m_recon, self.log_scale, x_m)
 
         # Added source reconstruction loss
@@ -46,8 +47,8 @@ class ELBOLoss(nn.Module):
         # kl_loss = self.kl_divergence(timbre_latent, tau_means, tau_logvars)
         
         # Total ELBO loss
-        loss = recon_loss + kl_loss #+ source_recon_loss # + pitch_loss
-        print(recon_loss.item(), kl_loss.item()) #, source_recon_loss.item())
+        loss = recon_loss_m + recon_loss_x + kl_loss #+ source_recon_loss # + pitch_loss
+        print(recon_loss_m.item(), recon_loss_x.item(), kl_loss.item()) #, source_recon_loss.item())
         return loss
     
     

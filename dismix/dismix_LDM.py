@@ -16,8 +16,8 @@ from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
 from diffusers.models import AutoencoderKL
 
-from hifi_gan.inference import mel_to_wav
-from hifi_gan.env import AttrDict
+# from hifi_gan.inference import mel_to_wav
+# from hifi_gan.env import AttrDict
 import argparse, json
 
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
@@ -572,20 +572,20 @@ class DisMix_LDM(nn.Module):
         self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]).to(device), self.alpha_cumprod[:-1]], dim=0)  # (T,)
 
         
-    def hifigan(self, mel):
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--input_wavs_dir', default='test_files')
-        parser.add_argument('--output_dir', default='generated_files')
-        parser.add_argument('--checkpoint_file', default='LJ_V3/generator_v3')
-        a = parser.parse_args()
+    # def hifigan(self, mel):
+    #     parser = argparse.ArgumentParser()
+    #     parser.add_argument('--input_wavs_dir', default='test_files')
+    #     parser.add_argument('--output_dir', default='generated_files')
+    #     parser.add_argument('--checkpoint_file', default='LJ_V3/generator_v3')
+    #     a = parser.parse_args()
 
-        config_file = os.path.join(os.path.split(a.checkpoint_file)[0], 'config.json')
-        with open(config_file) as f:
-            data = f.read()
+    #     config_file = os.path.join(os.path.split(a.checkpoint_file)[0], 'config.json')
+    #     with open(config_file) as f:
+    #         data = f.read()
             
-        json_config = json.loads(data)
-        h = AttrDict(json_config)
-        return mel_to_wav(mel, a, h, mel.device)
+    #     json_config = json.loads(data)
+    #     h = AttrDict(json_config)
+    #     return mel_to_wav(mel, a, h, mel.device)
     
     
     def forward(self, x_m, x_s): # x_q exactly is x_s in inference
@@ -612,15 +612,15 @@ class DisMix_LDM(nn.Module):
         
         """ Latent Diffusion Model """
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
-        dit_mel = self.dit(x_s, s_i, t)
+        x_s_recon = self.dit(x_s, s_i, t)
         
         # Transform back to audio
-        dit_mel = dit_mel.squeeze(1)
-        dit_mel_80 = F.interpolate(dit_mel.unsqueeze(1), size=(80, dit_mel.shape[2]), mode='bilinear', align_corners=False).squeeze(1)
-        res_audio = self.hifigan(dit_mel_80)
-        print("res_audio", res_audio.shape)
+        x_s_recon = x_s_recon.squeeze(1)
+        # dit_mel_80 = F.interpolate(dit_mel.unsqueeze(1), size=(80, dit_mel.shape[2]), mode='bilinear', align_corners=False).squeeze(1)
+        # res_audio = self.hifigan(dit_mel_80)
+        # print("res_audio", res_audio.shape)
 
-        return y_hat, timbre_mean, timbre_logvar, res_audio
+        return e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon #res_audio
     
     
 class DisMix_LDM_Model(pl.LightningModule):
@@ -651,12 +651,41 @@ class DisMix_LDM_Model(pl.LightningModule):
             device=device,
         )
         self.save_hyperparameters()
+        self.batch_size = batch_size
+        
+        # Loss functions
+        self.elbo_loss_fn = ELBOLoss() # For ELBO
+        self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
+        self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
+        
         
     def forward(self, x_m, x_s):
         return self.model(x_m, x_s)
     
     def training_step(self, batch, batch_idx):
-        self()
+        x_m, x_s_i, pitch_annotation = batch
+        e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon = self(x_m, x_s_i)
+        
+        # Compute losses
+        elbo_loss = self.elbo_loss_fn(
+            x_m, x_s_recon.sum(dim=0),
+            x_s_i, x_s_recon,
+            timbre_mean, timbre_logvar,
+        )
+        
+        ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)
+        bt_loss = self.bt_loss_fn(e_q, timbre_latent)
+        
+        # Total loss
+        total_loss = elbo_loss + ce_loss + bt_loss
+        
+        # Log losses with batch size
+        self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_elbo_loss', elbo_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        
+        return total_loss
         
     def evaluate(self, batch, stage='val'):
         pass
@@ -696,8 +725,10 @@ class DisMix_LDM_Model(pl.LightningModule):
         return self.plotting(stage='test')
     
     
+
+    
 if __name__ == "__main__":
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     BS, N_s = 1, 4
     x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
     x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
@@ -713,4 +744,5 @@ if __name__ == "__main__":
         vae=vae,
     ).to(device)
     
-    res = model(x_m, x_q)
+    y_hat, timbre_mean, timbre_logvar, dit_mel = model(x_m, x_q)
+    print(y_hat.shape, timbre_mean.shape, timbre_logvar.shape, dit_mel.shape)

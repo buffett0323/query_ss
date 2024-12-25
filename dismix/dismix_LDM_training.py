@@ -1,14 +1,12 @@
 import os
 import wandb
 import torch
-import torchvision
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torchvision import transforms
 from functools import partial
 
 from dismix_LDM import DisMix_LDM, DisMix_LDM_Model
@@ -24,23 +22,20 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
-torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
 log_wandb = False # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [0, 1] #[0, 1, 2, 3]
-batch_size = 1
+device_id = [1] #[0, 1, 2, 3]
+batch_size = 2
 N_s = 4
-num_frames = 10 #32
 lr = 1e-4
 early_stop_patience = 100 #260000
-best_val_loss = float('inf')
 max_steps = 10000000
-comp_path = "/home/buffett/NAS_189"
-root = f"{comp_path}/cocochorales_full_v1_output/main_dataset"
+comp_path = "/mnt/gestalt/home/ddmanddman"
+root = f"{comp_path}/cocochorales_output/main_dataset"
 os.environ["WANDB_MODE"] = "online"
 
 # Initialize data module
