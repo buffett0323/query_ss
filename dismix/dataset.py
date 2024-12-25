@@ -389,7 +389,6 @@ class CocoChoraleDataset(Dataset):
         N_s = 4,
         file_dir='/home/buffett/NAS_189/cocochorales_full_v1_output/main_dataset',
         split='train',
-        transform=None, 
         segment_duration=4.0,
         ensemble="random",
         sample_rate=16000, 
@@ -501,12 +500,12 @@ class CocoChoraleDataModule(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
-            self.train_ds = CocoChoraleDataset(root, split='train')
-            self.val_ds = CocoChoraleDataset(root, split='valid')
+            self.train_ds = CocoChoraleDataset(file_dir=self.root, split='train')
+            self.val_ds = CocoChoraleDataset(file_dir=self.root, split='valid')
         
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
-            self.test_ds = CocoChoraleDataset(root, split='test')
+            self.test_ds = CocoChoraleDataset(file_dir=self.root, split='test')
             
     def train_dataloader(self):
         """The train dataloader."""
@@ -557,8 +556,8 @@ class CocoChoraleDataModule(LightningDataModule):
 if __name__ == '__main__':
     
     # check that all datasets load correctly
-    comp_path = "/home/buffett/NAS_189"
-    root = f"{comp_path}/cocochorales_full_v1_output/main_dataset"
+    comp_path = "/mnt/gestalt/home/ddmanddman"
+    root = f"{comp_path}/cocochorales_output/main_dataset"
     
     dm = CocoChoraleDataModule(root=root, batch_size=2)
     
