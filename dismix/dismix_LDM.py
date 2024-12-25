@@ -16,7 +16,7 @@ from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
 from diffusers.models import AutoencoderKL
 
-from hifi_gan.inference import mel_to_wav, inference
+from hifi_gan.inference import mel_to_wav
 from hifi_gan.env import AttrDict
 import argparse, json
 
@@ -585,7 +585,7 @@ class DisMix_LDM(nn.Module):
             
         json_config = json.loads(data)
         h = AttrDict(json_config)
-        return mel_to_wav(mel, a, h)
+        return mel_to_wav(mel, a, h, mel.device)
     
     
     def forward(self, x_m, x_s): # x_q exactly is x_s in inference
@@ -616,9 +616,11 @@ class DisMix_LDM(nn.Module):
         
         # Transform back to audio
         dit_mel = dit_mel.squeeze(1)
-        # audioa = self.hifigan(dit_mel)
+        dit_mel_80 = F.interpolate(dit_mel.unsqueeze(1), size=(80, dit_mel.shape[2]), mode='bilinear', align_corners=False).squeeze(1)
+        res_audio = self.hifigan(dit_mel_80)
+        print("res_audio", res_audio.shape)
 
-        return y_hat, timbre_mean, timbre_logvar, dit_mel
+        return y_hat, timbre_mean, timbre_logvar, res_audio
     
     
 class DisMix_LDM_Model(pl.LightningModule):
@@ -712,4 +714,3 @@ if __name__ == "__main__":
     ).to(device)
     
     res = model(x_m, x_q)
-    print(res.shape)
