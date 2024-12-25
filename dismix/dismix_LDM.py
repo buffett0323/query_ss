@@ -167,7 +167,7 @@ class PitchEncoder(nn.Module):
         y_hat = self.E_phai_nu(x) # BS, 8, 100, 16 --> BS, 129, 400
         y_hat_sb = self.sb_layer(y_hat)
         tau = self.f_phai_nu(y_hat_sb.unsqueeze(1)) # BS, 129, 400 --> BS, 8, 100, 16
-        return tau
+        return y_hat, tau
 
 
 class TimbreEncoder(nn.Module):
@@ -195,8 +195,8 @@ class TimbreEncoder(nn.Module):
             Reparameterization trick to sample from N(mean, var)
             Sampling by μφτ (·) + ε σφτ (·)
         """
-        std = torch.exp(0.5 * logvar) # std = torch.exp(0.5 * torch.clamp(logvar, min=-10, max=10))
-        eps = torch.randn_like(std)
+        std = torch.exp(logvar) # std = torch.exp(0.5 * torch.clamp(logvar, min=-10, max=10))
+        eps = torch.randn_like(std) # Random noise ~ N(0, 1)
         return mean + (eps * std)
 
     def forward(self, x):
@@ -209,7 +209,7 @@ class TimbreEncoder(nn.Module):
         reshaped_x = [t.view(t.size(0), 8, 1, 16) for t in split_x]
         mean, logvar = reshaped_x[0], reshaped_x[1]
         timbre_latent = self.reparameterize(mean, logvar)
-        return timbre_latent
+        return mean, logvar, timbre_latent
 
 
 # Sinusoidal Positional Encoding
@@ -464,6 +464,8 @@ class DiT(nn.Module):
         
     def forward(self, x_s, s_i, t):
         """
+        x_s.shape: torch.Size([4, 1, 400, 64]) 
+        s_i.shape: torch.Size([4, 8, 100, 32])
         Args:
             x (Tensor): Input tensor of shape [seq_len, batch_size, dim].
             condition (Tensor): Conditioning tensor of shape [batch_size, conditioning_dim].
@@ -484,7 +486,7 @@ class DiT(nn.Module):
         # Pass through transformer blocks
         for block in self.transformer_blocks:
             z_m_t = block(z_m_t, condition)
-        
+
         z_m_t = self.unpatchify(z_m_t)  
         
         # Decoder
@@ -597,10 +599,11 @@ class DisMix_LDM(nn.Module):
         combined = combined.permute(0, 3, 2, 1) # BS, 8, 100, 16
         
         # Pitch Encoder
-        pitch_latent = self.pitch_encoder(combined).permute(0, 1, 3, 2)
+        y_hat, pitch_latent = self.pitch_encoder(combined)
+        pitch_latent = pitch_latent.permute(0, 1, 3, 2)
         
         # Timbre Encoder
-        timbre_latent = self.timbre_encoder(combined)
+        timbre_mean, timbre_logvar, timbre_latent = self.timbre_encoder(combined)
         timbre_latent = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
         
         # Concat: f_phi_s
@@ -615,7 +618,7 @@ class DisMix_LDM(nn.Module):
         dit_mel = dit_mel.squeeze(1)
         # audioa = self.hifigan(dit_mel)
 
-        return dit_mel
+        return y_hat, timbre_mean, timbre_logvar, dit_mel
     
     
 class DisMix_LDM_Model(pl.LightningModule):
