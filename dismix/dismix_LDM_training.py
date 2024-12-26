@@ -47,8 +47,7 @@ dm = CocoChoraleDataModule(
 
 # Models and other settings
 pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16)#.to(device)
-vae = pipe.vae 
-
+vae = pipe.vae
 model = DisMix_LDM_Model(
     batch_size=batch_size,
     N_s=N_s,

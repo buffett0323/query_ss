@@ -478,7 +478,7 @@ class CocoChoraleDataModule(LightningDataModule):
         self,
         root: str,
         batch_size: int,
-        num_workers: int = 0,
+        num_workers: int = 8,
         seed: int = 42,
         shuffle: bool = True,
         pin_memory: bool = True,

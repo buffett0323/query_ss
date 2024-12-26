@@ -8,8 +8,8 @@ import torch.optim as optim
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+# from sklearn.decomposition import PCA
+# from sklearn.manifold import TSNE
 from matplotlib.colors import ListedColormap
 
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
@@ -493,6 +493,43 @@ class DiT(nn.Module):
         z_m_t = z_m_t.to(torch.float16)
         z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32)
         return z_m_t.permute(0, 1, 3, 2)  
+    
+    
+    
+    def evaluate(self, noise, s_i, num_steps=1000):
+        """
+        Evaluation/inference method.
+
+        Args:
+            noise (Tensor): Starting random noise, shape [batch_size, C, Tz, Dz].
+            s_i (Tensor): Source conditioning tensor.
+            num_steps (int): Number of diffusion steps.
+
+        Returns:
+            Tensor: Generated sample.
+        """
+        self.eval()  # Set model to evaluation mode
+        with torch.no_grad():
+            z_m_t = noise  # Start with random noise
+            
+            for t in reversed(range(1, num_steps + 1)):
+                # Compute t_embed for the current step
+                t_tensor = torch.tensor([t / num_steps], device=z_m_t.device).float().view(1, -1)
+                t_embed = self.time_embed(t_tensor).expand(z_m_t.shape[0], -1)
+                
+                # Partition
+                z_m_t_patched, s_c = self.partitioner(z_m_t, s_i)
+                condition = s_c + t_embed
+
+                # Apply transformer blocks
+                for block in self.transformer_blocks:
+                    z_m_t_patched = block(z_m_t_patched, condition)
+
+                # Unpatchify and decode
+                z_m_t = self.unpatchify(z_m_t_patched)
+                z_m_t = self.pt_D_VAE(z_m_t)
+
+        return z_m_t
 
 
 class DisMix_LDM(nn.Module):
@@ -588,7 +625,7 @@ class DisMix_LDM(nn.Module):
     #     return mel_to_wav(mel, a, h, mel.device)
     
     
-    def forward(self, x_m, x_s): # x_q exactly is x_s in inference
+    def forward(self, x_m, x_s, evaluate=False): # x_q exactly is x_s in inference
         e_m = self.M_Encoder(x_m)
         e_q = self.Q_Encoder(x_s)
         
@@ -612,13 +649,10 @@ class DisMix_LDM(nn.Module):
         
         """ Latent Diffusion Model """
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
-        x_s_recon = self.dit(x_s, s_i, t)
-        
-        # Transform back to audio
-        x_s_recon = x_s_recon.squeeze(1)
-        # dit_mel_80 = F.interpolate(dit_mel.unsqueeze(1), size=(80, dit_mel.shape[2]), mode='bilinear', align_corners=False).squeeze(1)
-        # res_audio = self.hifigan(dit_mel_80)
-        # print("res_audio", res_audio.shape)
+        if evaluate:
+            x_s_recon = self.dit.evaluate(x_s, s_i).squeeze(1)
+        else:
+            x_s_recon = self.dit(x_s, s_i, t).squeeze(1)
 
         return e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon #res_audio
     
@@ -686,16 +720,46 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         
         return total_loss
+    
+    
         
     def evaluate(self, batch, stage='val'):
-        pass
+        x_m, x_s_i, pitch_annotation = batch
+        e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon = self(x_m, x_s_i, evaluate=True)
+        
+        # Compute losses
+        elbo_loss = self.elbo_loss_fn(
+            x_m, x_s_recon.sum(dim=0),
+            x_s_i, x_s_recon,
+            timbre_mean, timbre_logvar,
+        )
+        
+        ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)
+        bt_loss = self.bt_loss_fn(e_q, timbre_latent)
+        
+        # Total loss
+        total_loss = elbo_loss + ce_loss + bt_loss
+        
+        # Get accuracy
+        predicted_classes = torch.argmax(y_hat, dim=1)
+        correct_predictions = (predicted_classes == pitch_annotation).float().sum()
+        accuracy = correct_predictions / len(predicted_classes)
+
+        
+        # Log losses and metrics
+        self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_loss', elbo_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        return total_loss
+        
     
     def validation_step(self, batch, batch_idx):
         return self.evaluate(batch, stage='val')
 
     def test_step(self, batch, batch_idx):
         return self.evaluate(batch, stage='test')
-
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -718,11 +782,11 @@ class DisMix_LDM_Model(pl.LightningModule):
         return [optimizer], [scheduler]
 
         
-    def on_validation_epoch_end(self):
-        return self.plotting(stage='val')
+    # def on_validation_epoch_end(self):
+    #     return self.plotting(stage='val')
     
-    def on_test_epoch_end(self):
-        return self.plotting(stage='test')
+    # def on_test_epoch_end(self):
+    #     return self.plotting(stage='test')
     
     
 
@@ -744,5 +808,5 @@ if __name__ == "__main__":
         vae=vae,
     ).to(device)
     
-    y_hat, timbre_mean, timbre_logvar, dit_mel = model(x_m, x_q)
-    print(y_hat.shape, timbre_mean.shape, timbre_logvar.shape, dit_mel.shape)
+    res = model(x_m, x_q)
+    print(res)
