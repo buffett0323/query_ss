@@ -1,4 +1,5 @@
 import os
+import allin1.analyze
 import torch
 import torchaudio
 import numpy as np
@@ -17,65 +18,76 @@ warnings.filterwarnings(
     # message="You're calling NATTEN op `natten.functional.natten2dqkrpb`, which is deprecated",
 )
 
+device = torch.device('cuda:2')
+sep_model_name = 'htdemucs'
+sources = ['bass', 'drums', 'other', 'vocals']
 
-device = torch.device('cuda:1')
 
-def load_data_and_process(input_path, output_path):
+def segment_audio(song_name, segments, sep_path, output_path, target='chorus'):
 
+    chorus_counter = 1
+    for segment in segments:
+        if segment.label == target:
+            start_ms = int(segment.start * 1000)  # Convert seconds to milliseconds
+            end_ms = int(segment.end * 1000)     # Convert seconds to milliseconds
+            
+            # Extract the segment for the sources
+            os.makedirs(os.path.join(output_path, target, f"{song_name}_{chorus_counter}"), exist_ok=True)
+            for source in sources:
+                audio = AudioSegment.from_file(os.path.join(sep_path, f"{source}.wav"))
+                seg_audio = audio[start_ms:end_ms]
+                
+                # Export the segment
+                output_file = os.path.join(output_path, target, f"{song_name}_{chorus_counter}", f"{source}_{target}_{chorus_counter}.mp3")
+                seg_audio.export(output_file, format="mp3")                
+            
+            chorus_counter += 1
+            
+            
+            
+
+def load_data_and_process(input_path, output_path, target='chorus', sep_model_name='htdemucs'):
+    # Open folders
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(os.path.join(output_path, target), exist_ok=True)
+    os.makedirs(os.path.join(output_path, sep_model_name), exist_ok=True)
+    os.makedirs(os.path.join(output_path, "json"), exist_ok=True)
+    
     # Iterate through each folder in the given path
     for folder_name in tqdm(os.listdir(input_path)):
         folder_path = os.path.join(input_path, folder_name)
-        os.makedirs(os.path.join(output_path, folder_name), exist_ok=True)
         
         if os.path.isdir(folder_path):
-            # TODO: Pre-process
+            # TODO: Pre-process and also store in metadata
             audio_files = [
                 os.path.join(folder_path, file_name)
                 for file_name in os.listdir(folder_path)
                 if file_name.endswith(('.wav', '.mp3'))
             ]
             
-            # Load audio files
-            for file_path in tqdm(audio_files):
-                song_name = file_path.split('/')[-1].split('.mp3')[0]
-                
-                # Load the audio file
-                audio = AudioSegment.from_file(file_path)
-                
-                # All in one 
-                result = allin1.analyze(file_path, device=device)
-                segments = result.segments
-
-                
-                chorus_counter = 1
-                for segment in segments:
-                    # Check if the segment is labeled as 'chorus'
-                    if segment.label == 'chorus':
-                        start_ms = int(segment.start * 1000)  # Convert seconds to milliseconds
-                        end_ms = int(segment.end * 1000)     # Convert seconds to milliseconds
-                        
-                        # Extract the segment
-                        chorus_audio = audio[start_ms:end_ms]
-                        os.makedirs(os.path.join(output_path, folder_name, song_name), exist_ok=True)
-                        
-                        
-                        # Source Separation Model
-                        
-                        
-                        
-                        # Construct output file name
-                        output_file = os.path.join(output_path, f"{song_name}_chorus_{chorus_counter}.mp3")
-                        
-                        # Export the segment
-                        chorus_audio.export(output_file, format="mp3")
-                        print(f"Exported: {output_file}")
-                        
-                        chorus_counter += 1
-                    
-                    break
-                break
+            # Analyze by allin1
+            results = allin1.analyze(
+                audio_files[:5],
+                out_dir=os.path.join(output_path, "json"),
+                demix_dir=output_path, 
+                spec_dir=output_path,
+                device=device, 
+                keep_byproducts=True
+            )
             
-            break
+            
+            # Load audio files
+            for audio_path, result in zip(audio_files[:5], results[:5]):
+                song_name = audio_path.split('/')[-1].split('.mp3')[0]
+
+                # Segment audio to get chorus
+                segment_audio(
+                    song_name=song_name, 
+                    segments=result.segments, 
+                    sep_path=os.path.join(output_path, sep_model_name, song_name), 
+                    output_path=output_path, 
+                    target=target
+                )
             
     
 
@@ -83,4 +95,5 @@ def load_data_and_process(input_path, output_path):
 if __name__ == "__main__":
     input_path = "/mnt/gestalt/database/beatport/audio/audio"
     output_path = "/mnt/gestalt/home/ddmanddman/beatport_preprocess"
-    load_data_and_process(input_path, output_path)
+    target='chorus'
+    load_data_and_process(input_path, output_path, target)
