@@ -4,27 +4,22 @@ import torch
 import torchaudio
 import numpy as np
 from tqdm import tqdm
+from multiprocessing import Process
+from pydub import AudioSegment
+import warnings
+
 np.int = int
 np.float = float
-import allin1
-import warnings
-from pydub import AudioSegment
 
-
+torch.multiprocessing.set_start_method('spawn', force=True)
 warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    # message="You're calling NATTEN op `natten.functional.natten2dqkrpb`, which is deprecated",
-)
+warnings.filterwarnings("ignore", category=UserWarning)
 
-device = torch.device('cuda:2')
+# Global Vars
 sep_model_name = 'htdemucs'
 sources = ['bass', 'drums', 'other', 'vocals']
 
-
 def segment_audio(song_name, segments, sep_path, output_path, target='chorus'):
-
     chorus_counter = 1
     for segment in segments:
         if segment.label == target:
@@ -42,23 +37,14 @@ def segment_audio(song_name, segments, sep_path, output_path, target='chorus'):
                 seg_audio.export(output_file, format="mp3")                
             
             chorus_counter += 1
-            
-            
-            
 
-def load_data_and_process(input_path, output_path, target='chorus', sep_model_name='htdemucs'):
-    # Open folders
-    os.makedirs(output_path, exist_ok=True)
-    os.makedirs(os.path.join(output_path, target), exist_ok=True)
-    os.makedirs(os.path.join(output_path, sep_model_name), exist_ok=True)
-    os.makedirs(os.path.join(output_path, "json"), exist_ok=True)
+def process_folders(folder_names, input_path, output_path, target, device_id):
+    device = torch.device(f'cuda:{device_id}')
     
-    # Iterate through each folder in the given path
-    for folder_name in tqdm(os.listdir(input_path)):
+    for folder_name in tqdm(folder_names, desc=f"Device {device_id}"):
         folder_path = os.path.join(input_path, folder_name)
-        
         if os.path.isdir(folder_path):
-            # TODO: Pre-process and also store in metadata
+            # Pre-process and store metadata
             audio_files = [
                 os.path.join(folder_path, file_name)
                 for file_name in os.listdir(folder_path)
@@ -67,7 +53,7 @@ def load_data_and_process(input_path, output_path, target='chorus', sep_model_na
             
             # Analyze by allin1
             results = allin1.analyze(
-                audio_files[:5],
+                audio_files,
                 out_dir=os.path.join(output_path, "json"),
                 demix_dir=output_path, 
                 spec_dir=output_path,
@@ -75,9 +61,8 @@ def load_data_and_process(input_path, output_path, target='chorus', sep_model_na
                 keep_byproducts=True
             )
             
-            
             # Load audio files
-            for audio_path, result in zip(audio_files[:5], results[:5]):
+            for audio_path, result in zip(audio_files, results):
                 song_name = audio_path.split('/')[-1].split('.mp3')[0]
 
                 # Segment audio to get chorus
@@ -88,12 +73,37 @@ def load_data_and_process(input_path, output_path, target='chorus', sep_model_na
                     output_path=output_path, 
                     target=target
                 )
-            
+
+def load_data_and_process(input_path, output_path, target='chorus', devices=[1, 2, 3]):
+    # Split folder names for each GPU
+    folder_names = os.listdir(input_path)
+    num_folders = len(folder_names)
+    num_devices = len(devices)
+    folders_per_device = (num_folders + num_devices - 1) // num_devices  # Divide evenly
+
+    processes = []
+    for i, device_id in enumerate(devices):
+        folder_subset = folder_names[i * folders_per_device : (i + 1) * folders_per_device]
+        process = Process(target=process_folders, args=(folder_subset, input_path, output_path, target, device_id))
+        processes.append(process)
+        process.start()
+
+    # Wait for all processes to complete
+    for process in processes:
+        process.join()
     
 
 
 if __name__ == "__main__":
     input_path = "/mnt/gestalt/database/beatport/audio/audio"
     output_path = "/mnt/gestalt/home/ddmanddman/beatport_preprocess"
-    target='chorus'
-    load_data_and_process(input_path, output_path, target)
+    target = 'chorus'
+    devices = [1, 2, 3]
+    
+    # Open folders
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(os.path.join(output_path, target), exist_ok=True)
+    os.makedirs(os.path.join(output_path, sep_model_name), exist_ok=True)
+    os.makedirs(os.path.join(output_path, "json"), exist_ok=True)
+    
+    load_data_and_process(input_path, output_path, target, devices)
