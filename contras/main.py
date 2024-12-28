@@ -1,9 +1,12 @@
 import argparse
 import torch
 import torchvision
+import torchaudio
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from pytorch_lightning import Trainer, LightningModule
+from torch.utils.data import Dataset
+from torchaudio.transforms import MelSpectrogram
 
 from utils import yaml_config_hook
 from simclr import ContrastiveLearning
@@ -47,21 +50,22 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Get dataset
-    if args.dataset == "STL10":
-        train_dataset = torchvision.datasets.STL10(
-            args.dataset_dir,
-            split="unlabeled",
-            download=True,
-            transform=TransformsSimCLR(size=args.image_size),
-        )
-    elif args.dataset == "CIFAR10":
-        train_dataset = torchvision.datasets.CIFAR10(
-            args.dataset_dir,
-            download=True,
-            transform=TransformsSimCLR(size=args.image_size),
-        )
-    else:
-        raise NotImplementedError
+    # if args.dataset == "STL10":
+    #     train_dataset = torchvision.datasets.STL10(
+    #         args.dataset_dir,
+    #         split="unlabeled",
+    #         download=True,
+    #         transform=TransformsSimCLR(size=args.image_size),
+    #     )
+    # elif args.dataset == "CIFAR10":
+    #     train_dataset = torchvision.datasets.CIFAR10(
+    #         args.dataset_dir,
+    #         download=True,
+    #         transform=TransformsSimCLR(size=args.image_size),
+    #     )
+    # else:
+    #     raise NotImplementedError
+    train_dataset = None
     
     if args.gpus == 1:
         workers = args.workers

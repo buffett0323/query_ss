@@ -1,5 +1,6 @@
+# Use conda env: allin1
 import os
-import allin1.analyze
+import allin1
 import torch
 import torchaudio
 import numpy as np
@@ -18,6 +19,18 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Global Vars
 sep_model_name = 'htdemucs'
 sources = ['bass', 'drums', 'other', 'vocals']
+
+given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_preprocess/json")]
+path = "/mnt/gestalt/database/beatport/audio/audio"
+sel_list = []
+for i in os.listdir(path):
+    cnt = 0
+    for j in os.listdir(os.path.join(path, i)):
+        if j.split('.mp3')[0] not in given_list:
+            cnt += 1
+    if cnt != 0 :
+        sel_list.append(i)
+
 
 def segment_audio(song_name, segments, sep_path, output_path, target='chorus'):
     chorus_counter = 1
@@ -76,7 +89,7 @@ def process_folders(folder_names, input_path, output_path, target, device_id):
 
 def load_data_and_process(input_path, output_path, target='chorus', devices=[1, 2, 3]):
     # Split folder names for each GPU
-    folder_names = os.listdir(input_path)
+    folder_names = sel_list # os.listdir(input_path)
     num_folders = len(folder_names)
     num_devices = len(devices)
     folders_per_device = (num_folders + num_devices - 1) // num_devices  # Divide evenly

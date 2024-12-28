@@ -4,7 +4,7 @@ gpus: 1 # I recommend always assigning 1 GPU to 1 node
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 workers: 24
-dataset_dir: "./datasets"
+dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datasets"
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
@@ -12,7 +12,7 @@ batch_size: 128
 image_size: 224
 start_epoch: 0
 epochs: 100
-dataset: "CIFAR10" # STL10
+# dataset: "CIFAR10" # STL10
 pretrain: True 
 
 # model options
