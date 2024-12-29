@@ -23,23 +23,29 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
 
     train_dataset = BeatportDataset(
         dataset_dir=args.dataset_dir,
+        args=args,
+        device=device,
         split="train",
-        transform=SimCLRTransform(),
+        n_fft=args.n_fft, 
+        hop_length=args.hop_length,
     )
     
-    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
 
     cl = ContrastiveLearning(args, device)
     
     trainer = Trainer(
         max_epochs=args.epoch_num,
-        devices=[2],
+        devices=args.gpu_ids,
         accelerator="gpu",
         sync_batchnorm=True,
     )
 
+    print("Starting training...")
     trainer.fit(cl, train_loader)

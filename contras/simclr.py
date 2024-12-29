@@ -1,17 +1,16 @@
+import os
 import argparse
 import torch
 import torchvision
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from pytorch_lightning import Trainer, LightningModule
-from torch_geometric.nn import GCNConv, global_mean_pool
 import torch.nn.functional as F
-# from simclr.modules.resnet_hacks import modify_resnet_model
-# from simclr.modules.identity import Identity
+from pytorch_lightning import Trainer, LightningModule
+from torchlars import LARS
 
-# SimCLR
 from loss import NT_Xent
+from dataset import SimCLRTransform
 
 class GatedConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
@@ -47,16 +46,16 @@ class GatedCNN(nn.Module):
         super(GatedCNN, self).__init__()
         self.block1 = GatedConvBlock(in_channels, 64, kernel_size=3, stride=1, padding=1)
         self.block2 = GatedConvBlock(64, 128, kernel_size=3, stride=2, padding=1)
-        # self.block3 = GatedConvBlock(128, 256, kernel_size=3, stride=2, padding=1)
-        # self.block4 = GatedConvBlock(256, 512, kernel_size=3, stride=2, padding=1)
+        self.block3 = GatedConvBlock(128, 256, kernel_size=3, stride=2, padding=1)
+        self.block4 = GatedConvBlock(256, 512, kernel_size=3, stride=2, padding=1)
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling
-        self.fc = nn.Linear(128, num_classes) # self.fc = nn.Linear(512, num_classes)
+        self.fc = nn.Linear(512, num_classes) # self.fc = nn.Linear(512, num_classes)
 
     def forward(self, x):
         x = F.relu(self.block1(x))
         x = F.relu(self.block2(x))
-        # x = F.relu(self.block3(x))
-        # x = F.relu(self.block4(x))
+        x = F.relu(self.block3(x))
+        x = F.relu(self.block4(x))
         x = self.global_pool(x)
         x = torch.flatten(x, start_dim=1)
         x = self.fc(x)
@@ -65,21 +64,16 @@ class GatedCNN(nn.Module):
 
 
 class SimCLR(nn.Module):
-    """
-    We opt for simplicity and adopt the commonly used ResNet (He et al., 2016) to obtain hi = f(x ̃i) = ResNet(x ̃i) where hi ∈ Rd is the output after the average pooling layer.
-    """
-
     def __init__(self, encoder, n_features, projection_dim):
         super(SimCLR, self).__init__()
 
         self.encoder = encoder
-        self.n_features = n_features
 
         # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
         self.projector = nn.Sequential(
-            nn.Linear(self.n_features, self.n_features, bias=False),
+            nn.Linear(n_features, n_features, bias=False),
             nn.ReLU(),
-            nn.Linear(self.n_features, projection_dim, bias=False),
+            nn.Linear(n_features, projection_dim, bias=False),
         )
 
     def forward(self, x_i, x_j):
@@ -98,52 +92,101 @@ class ContrastiveLearning(LightningModule):
         super().__init__()
 
         self.args = args
+        self.save_dir = self.args.model_dict_save_dir
+        self.my_device = torch.device(device)
+        os.makedirs(self.save_dir, exist_ok=True)
+        
         
         self.encoder = GatedCNN(
             in_channels=self.args.channels, 
-            num_classes=self.args.n_features,
+            num_classes=self.args.encoder_output_dim,
         ).to(device)
         
         self.model = SimCLR(
-            self.encoder, 
-            self.args.n_features,
-            self.args.projection_dim, 
+            encoder=self.encoder, 
+            n_features=self.args.encoder_output_dim,
+            projection_dim=self.args.projection_dim, 
         ).to(device)
         
         self.criterion = NT_Xent(
-            self.args.batch_size, self.args.temperature, world_size=1
+            self.args.batch_size, 
+            self.args.temperature, 
+            world_size=1,
         ).to(device)
+        
+        
+    
 
-
-    def forward(self, x_i, x_j):
-        h_i, h_j, z_i, z_j = self.model(x_i, x_j)
+    def forward(self, waveform):
+        waveform = waveform.to(self.my_device)
+        x_i, x_j = self.transform(waveform)
+        x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
+        
+        h_i, h_j, z_i, z_j = self.model(x_i, x_j) # SimCLR Model
         loss = self.criterion(z_i, z_j)
         return loss
 
-    def evaluate(self):
-        pass
-
 
     def training_step(self, batch, batch_idx):
-        # training_step defined the train loop. It is independent of forward
-        x_i, x_j = batch
-        loss = self(x_i, x_j)
+        loss = self(batch)
         return loss
+    
     
     def validation_step(self, batch, batch_idx):
-        x_i, x_j = batch
-        loss = self(x_i, x_j)
-        return loss
+        pass
+    
     
     def testing_step(self, batch, batch_idx):
-        x_i, x_j = batch
-        loss = self(x_i, x_j)
-        return loss
-
+        pass
+    
+    def evaluate(self):
+        pass
+    
+    
     def configure_criterion(self):
         criterion = NT_Xent(self.args.batch_size, self.args.temperature)
         return criterion
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
-        return {"optimizer": optimizer}
+        scheduler = None
+        if self.args.optimizer == "Adam":
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+        
+        elif self.args.optimizer == "LARS": # TODO
+            # optimized using LARS with linear learning rate scaling
+            # (i.e. LearningRate = 0.3 × BatchSize/256) and weight decay of 10−6.
+            learning_rate = 0.3 * self.args.batch_size / 256
+            optimizer = LARS(
+                self.model.parameters(),
+                lr=learning_rate,
+                weight_decay=self.args.weight_decay,
+                exclude_from_weight_decay=["batch_normalization", "bias"],
+            )
+
+            # "decay the learning rate with the cosine decay schedule without restarts"
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, self.args.epochs, eta_min=0, last_epoch=-1
+            )
+        else:
+            raise NotImplementedError
+
+        if scheduler:
+            return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        else:
+            return {"optimizer": optimizer}
+        
+    def save_model(self, checkpoint_name="contrastive_checkpoint.pth"):
+        """Save model state dictionary."""
+        save_path = os.path.join(self.save_dir, checkpoint_name)
+        torch.save(self.model.state_dict(), save_path)
+        print(f"Model state saved to {save_path}")
+
+
+    def load_model(self, checkpoint_name="contrastive_checkpoint.pth"):
+        """Load model state dictionary to continue training."""
+        load_path = os.path.join(self.save_dir, checkpoint_name)
+        if os.path.exists(load_path):
+            self.model.load_state_dict(torch.load(load_path))
+            print(f"Model state loaded from {load_path}")
+        else:
+            print(f"Checkpoint file not found at {load_path}")

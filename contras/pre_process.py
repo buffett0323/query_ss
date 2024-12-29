@@ -30,6 +30,7 @@ for i in os.listdir(path):
             cnt += 1
     if cnt != 0 :
         sel_list.append(i)
+print("Selected list is:", sel_list)
 
 
 def segment_audio(song_name, segments, sep_path, output_path, target='chorus'):
