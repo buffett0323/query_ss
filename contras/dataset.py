@@ -43,9 +43,6 @@ class BeatportDataset(Dataset):
         self.max_length = args.max_length
         
         if filter_short: self.filter_short()
-        if pre_process: self.preprocess()
-
-
         self.audio_files = [
             os.path.join(dataset_dir, folder_name, file_name)
             for folder_name in os.listdir(dataset_dir)
@@ -53,6 +50,7 @@ class BeatportDataset(Dataset):
                     if file_name.endswith(".mp3")
         ]
         
+        if pre_process: self.preprocess()
         self.pt_files = [
             os.path.join(preprocessed_dir, folder_name, file_name)
             for folder_name in os.listdir(preprocessed_dir)
@@ -214,7 +212,7 @@ if __name__ == "__main__":
         split="train",
         n_fft=args.n_fft, 
         hop_length=args.hop_length,
-        filter_short=True,
+        filter_short=False,
         pre_process=True,
     )
     print("After filter and pre_process LEN", len(train_dataset))

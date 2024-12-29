@@ -37,7 +37,6 @@ if __name__ == "__main__":
     
     
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
-
     cl = ContrastiveLearning(args, device)
     
     trainer = Trainer(
