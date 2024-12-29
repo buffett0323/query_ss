@@ -1,6 +1,5 @@
 import argparse
 import torch
-import torchvision
 import torchaudio
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
@@ -38,7 +37,7 @@ if __name__ == "__main__":
     
     trainer = Trainer(
         max_epochs=args.epoch_num,
-        devices=1,
+        devices=[2],
         accelerator="gpu",
         sync_batchnorm=True,
     )

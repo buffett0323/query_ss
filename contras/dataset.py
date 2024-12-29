@@ -83,19 +83,6 @@ class BeatportDataset(Dataset):
         else:
             return mel_spectrogram[:, :, :self.max_length]
         
-    def replicate_waveform(self, waveform):
-
-        current_length = waveform.size(-1)
-        repeat_count = self.target_length // current_length
-        remainder = self.target_length % current_length
-
-        # Replicate and concatenate the waveform
-        repeated_waveform = waveform.repeat(1, repeat_count)  # Repeat full waveform
-        if remainder > 0:
-            repeated_waveform = torch.cat([repeated_waveform, waveform[:, :remainder]], dim=-1)
-
-        return repeated_waveform
-        
 
 
 class SimCLRTransform:
@@ -127,9 +114,11 @@ class SimCLRTransform:
         time_mask = T.TimeMasking(time_mask_param=mask_param)
         return time_mask(spectrogram)
 
+
     def frequency_mask(self, spectrogram, mask_param=15):
         freq_mask = T.FrequencyMasking(freq_mask_param=mask_param)
         return freq_mask(spectrogram)
+
 
     def random_crop(self, spectrogram, crop_size):
         max_start = spectrogram.size(-1) - crop_size
@@ -138,9 +127,11 @@ class SimCLRTransform:
             return spectrogram[:, :, start:start + crop_size]
         return spectrogram
 
+
     def add_noise(self, spectrogram, noise_level=0.005):
         noise = noise_level * torch.randn_like(spectrogram)
         return spectrogram + noise
+
 
     def __call__(self, waveform):
         # Convert waveform to mel-spectrogram
@@ -162,5 +153,3 @@ if __name__ == "__main__":
         transform=SimCLRTransform(),
         filter=True,
     )
-    # for i in range(100):
-    #     print(train_dataset[i][0].shape, train_dataset[i][1].shape)

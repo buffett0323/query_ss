@@ -9,8 +9,7 @@ dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datas
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #128
-image_size: 224
+batch_size: 512 #128
 start_epoch: 0
 epochs: 100
 # dataset: "CIFAR10" # STL10

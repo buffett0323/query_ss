@@ -13,10 +13,6 @@ import torch.nn.functional as F
 # SimCLR
 from loss import NT_Xent
 
-# from simclr.modules import NT_Xent, get_resnet
-# from simclr.modules.transformations import TransformsSimCLR
-# from simclr.modules.sync_batchnorm import convert_model
-
 class GatedConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         """
@@ -118,16 +114,29 @@ class ContrastiveLearning(LightningModule):
             self.args.batch_size, self.args.temperature, world_size=1
         ).to(device)
 
+
     def forward(self, x_i, x_j):
         h_i, h_j, z_i, z_j = self.model(x_i, x_j)
         loss = self.criterion(z_i, z_j)
-        print("Loss:", loss.item())
         return loss
+
+    def evaluate(self):
+        pass
+
 
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop. It is independent of forward
         x_i, x_j = batch
-        print(x_i.shape, x_j.shape)
+        loss = self(x_i, x_j)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x_i, x_j = batch
+        loss = self(x_i, x_j)
+        return loss
+    
+    def testing_step(self, batch, batch_idx):
+        x_i, x_j = batch
         loss = self(x_i, x_j)
         return loss
 
