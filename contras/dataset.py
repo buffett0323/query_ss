@@ -40,50 +40,70 @@ class BeatportDataset(Dataset):
         waveform, sample_rate = torchaudio.load(audio_path)
 
         # TODO: transform random
-        if self.transform:
-            waveform1 = self.transform(waveform)
-            waveform2 = self.transform(waveform)
-            return (waveform1, waveform2)
-
-        return waveform
+        mel1 = self.transform(waveform)
+        mel2 = self.transform(waveform)
+        return (mel1, mel2)
     
 
 
-class TransformsSimCLR:
-    def __init__(self, n_mels=128, sample_rate=44100):
+class SimCLRTransform:
+    def __init__(self, sample_rate=44100, n_mels=128, n_fft=2048, hop_length=1024):
+        """
+        A transform class for mel-spectrograms with various audio augmentations.
+        
+        Args:
+            sample_rate (int): Sample rate of the audio.
+            n_mels (int): Number of mel bands.
+            n_fft (int): Size of FFT window.
+            hop_length (int): Hop length between frames.
+        """
         self.mel_spectrogram = T.MelSpectrogram(
             sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
             n_mels=n_mels,
-            hop_length=512,
-            n_fft=2048,
         )
         self.amplitude_to_db = T.AmplitudeToDB()
-        self.add_noise = lambda x: x + 0.005 * torch.randn_like(x)
-        
-
-    def __call__(self, waveform):
-        # Apply mel spectrogram and amplitude to db
-        mel = self.mel_spectrogram(waveform)
-        mel_db = self.amplitude_to_db(mel)
-
-        # Apply data augmentation (e.g., adding noise)
-        mel_db = self.add_noise(mel_db)
-        return mel_db
-
-class AudioTransformsSimCLR:
-    def __init__(self):
         self.transforms = [
-            T.TimeStretch(),
-            T.PitchShift(sample_rate=44100, n_steps=random.choice([-2, 2])),
-            T.TimeMasking(time_mask_param=30),
-            T.FrequencyMasking(freq_mask_param=15),
+            self.time_mask(),
+            self.frequency_mask(),
+            self.add_noise(),
+            self.random_crop(),
         ]
+    
+    def time_mask(self, spectrogram, mask_param=30):
+        """Apply time masking."""
+        time_mask = T.TimeMasking(time_mask_param=mask_param)
+        return time_mask(spectrogram)
+
+    def frequency_mask(self, spectrogram, mask_param=15):
+        """Apply frequency masking."""
+        freq_mask = T.FrequencyMasking(freq_mask_param=mask_param)
+        return freq_mask(spectrogram)
+
+    def random_crop(self, spectrogram, crop_size):
+        """Crop a random segment of the spectrogram."""
+        max_start = spectrogram.size(-1) - crop_size
+        if max_start > 0:
+            start = random.randint(0, max_start)
+            return spectrogram[:, :, start:start + crop_size]
+        return spectrogram
+
+    def add_noise(self, spectrogram, noise_level=0.005):
+        """Additive Gaussian Noise to the spectrogram."""
+        noise = noise_level * torch.randn_like(spectrogram)
+        return spectrogram + noise
 
     def __call__(self, waveform):
+        # Convert waveform to mel-spectrogram
+        mel_spectrogram = self.mel_spectrogram(waveform)
+        mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
+
+        # Apply random augmentations
         transform = random.choice(self.transforms)
-        return transform(waveform)
-
-
+        return transform(mel_spectrogram)
+    
+    
 
 if __name__ == "__main__":
 
@@ -91,7 +111,7 @@ if __name__ == "__main__":
     train_dataset = BeatportDataset(
         dataset_dir=dataset_dir,
         split="train",
-        transform=TransformsSimCLR(n_mels=128, sample_rate=44100),
+        transform=SimCLRTransform(),
     )
     print(len(train_dataset))
 

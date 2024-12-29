@@ -1,10 +1,12 @@
 import argparse
 import torch
 import torchvision
+import torch.nn as nn
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, LightningModule
-
+from torch_geometric.nn import GCNConv, global_mean_pool
+import torch.nn.functional as F
 # from simclr.modules.resnet_hacks import modify_resnet_model
 # from simclr.modules.identity import Identity
 
@@ -14,6 +16,29 @@ from loss import NT_Xent
 # from simclr.modules import NT_Xent, get_resnet
 # from simclr.modules.transformations import TransformsSimCLR
 # from simclr.modules.sync_batchnorm import convert_model
+
+class GCNEncoder(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(GCNEncoder, self).__init__()
+        self.conv1 = GCNConv(input_dim, hidden_dim)
+        self.conv2 = GCNConv(hidden_dim, output_dim)
+        self.global_pool = global_mean_pool  # Pooling layer to get a single graph embedding
+
+    def forward(self, x, edge_index, batch):
+        """
+        Args:
+            x (Tensor): Node features [num_nodes, input_dim].
+            edge_index (Tensor): Edge indices [2, num_edges].
+            batch (Tensor): Batch indices for global pooling [num_nodes].
+        Returns:
+            Tensor: Graph embeddings [batch_size, output_dim].
+        """
+        x = F.relu(self.conv1(x, edge_index))
+        x = self.conv2(x, edge_index)
+        x = self.global_pool(x, batch)  # Aggregate node embeddings into a graph embedding
+        return x
+
+
 
 class SimCLR(nn.Module):
     """
@@ -54,8 +79,12 @@ class ContrastiveLearning(LightningModule):
         self.hparams = args
 
         # initialize ResNet
-        self.encoder = get_resnet(self.hparams.resnet, pretrained=False)
-        self.n_features = self.encoder.fc.in_features  # get dimensions of fc layer
+        self.encoder = GCNEncoder(
+            input_dim=self.hparams.input_dim,
+            hidden_dim=self.hparams.hidden_dim,
+            output_dim=self.hparams.output_dim
+        )  #get_resnet(self.hparams.resnet, pretrained=False)
+        self.n_features = self.hparams.output_dim  # get dimensions of fc layer
         self.model = SimCLR(
             self.encoder, 
             self.hparams.projection_dim, 
