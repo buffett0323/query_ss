@@ -10,33 +10,9 @@ from torchaudio.transforms import MelSpectrogram
 
 from utils import yaml_config_hook
 from simclr import ContrastiveLearning
+from dataset import BeatportDataset, SimCLRTransform
 
-
-
-def train(args, train_loader, model, criterion, optimizer, writer):
-    loss_epoch = 0
-    for step, ((x_i, x_j), _) in enumerate(train_loader):
-        optimizer.zero_grad()
-        x_i = x_i.cuda(non_blocking=True)
-        x_j = x_j.cuda(non_blocking=True)
-
-        # positive pair, with encoding
-        h_i, h_j, z_i, z_j = model(x_i, x_j)
-
-        loss = criterion(z_i, z_j)
-        loss.backward()
-
-        optimizer.step()
-
-        if step % 50 == 0:
-            print(f"Step [{step}/{len(train_loader)}]\t Loss: {loss.item()}")
-
-        writer.add_scalar("Loss/train_epoch", loss.item(), args.global_step)
-        loss_epoch += loss.item()
-        args.global_step += 1
-    return loss_epoch
-
-
+torch.set_float32_matmul_precision('high')
 
 
 
@@ -49,33 +25,22 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Get dataset
-    # if args.dataset == "STL10":
-    #     train_dataset = torchvision.datasets.STL10(
-    #         args.dataset_dir,
-    #         split="unlabeled",
-    #         download=True,
-    #         transform=TransformsSimCLR(size=args.image_size),
-    #     )
-    # elif args.dataset == "CIFAR10":
-    #     train_dataset = torchvision.datasets.CIFAR10(
-    #         args.dataset_dir,
-    #         download=True,
-    #         transform=TransformsSimCLR(size=args.image_size),
-    #     )
-    # else:
-    #     raise NotImplementedError
-    train_dataset = None
+    train_dataset = BeatportDataset(
+        dataset_dir=args.dataset_dir,
+        split="train",
+        transform=SimCLRTransform(),
+    )
     
-    if args.gpus == 1:
-        workers = args.workers
-    else:
-        workers = 0
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=workers)
-
-    cl = ContrastiveLearning(args)
+    cl = ContrastiveLearning(args, device)
     
-    trainer = Trainer.from_argparse_args(args)
-    trainer.sync_batchnorm=True
+    trainer = Trainer(
+        max_epochs=args.epoch_num,
+        devices=1,
+        accelerator="gpu",
+        sync_batchnorm=True,
+    )
+
     trainer.fit(cl, train_loader)

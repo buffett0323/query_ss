@@ -1,5 +1,6 @@
 # distributed training
 nodes: 1
+device: "cuda:2"
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
@@ -8,7 +9,7 @@ dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datas
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 32 #128
+batch_size: 128 #128
 image_size: 224
 start_epoch: 0
 epochs: 100
@@ -17,7 +18,12 @@ epochs: 100
 
 # model options
 # resnet: "resnet18"
+channels: 2
 projection_dim: 64 # "[...] to project the representation to a 128-dimensional latent space"
+input_dim: 128
+hidden_dim: 256
+output_dim: 512
+n_features: 64
 
 # loss options
 optimizer: "Adam" # or LARS (experimental)
@@ -29,6 +35,6 @@ model_path: "save" # set to the directory containing `checkpoint_##.tar`
 epoch_num: 100 # set to checkpoint number
 reload: False
 
-# logistic regression options
-logistic_batch_size: 256
-logistic_epochs: 500
+# # logistic regression options
+# logistic_batch_size: 256
+# logistic_epochs: 500
