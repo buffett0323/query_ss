@@ -14,6 +14,7 @@ timbre_store.pkl
 dismix/Dismix_jsb_multi/
 dismix/lightning_logs/
 
+contras/lightning_logs/
 lightning_logs/
 checkpoints/
 __pycache__/
