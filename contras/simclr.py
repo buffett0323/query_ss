@@ -124,7 +124,7 @@ class ContrastiveLearning(LightningModule):
         os.makedirs(self.save_dir, exist_ok=True)
         
         # Load Models
-        self.transform = SimCLRTransform().to(device)
+        self.transform = SimCLRTransform(args).to(device)
         if args.encoder_name == "DilatedCNN":
             self.encoder = DilatedCNN(
                 in_channels=self.args.channels,

@@ -128,14 +128,14 @@ class BeatportDataModule(LightningDataModule):
 
 # TODO: transform random
 class SimCLRTransform(nn.Module):
-    def __init__(self):
+    def __init__(self, args):
         super(SimCLRTransform, self).__init__()
         self.amplitude_to_db = T.AmplitudeToDB()#.to(self.my_device)
         self.transforms = [
-            lambda spectrogram: self.time_mask(spectrogram, mask_param=30),
-            lambda spectrogram: self.frequency_mask(spectrogram, mask_param=15),
-            lambda spectrogram: self.random_crop(spectrogram, crop_size=128),
-            lambda spectrogram: self.add_noise(spectrogram, noise_level=0.005),
+            lambda spectrogram: self.time_mask(spectrogram, mask_param=args.tm_param),
+            lambda spectrogram: self.frequency_mask(spectrogram, mask_param=args.fm_param),
+            lambda spectrogram: self.random_crop(spectrogram, crop_size=args.crop_size),
+            lambda spectrogram: self.add_noise(spectrogram, noise_level=args.noise_level),
         ]
 
     def time_mask(self, spectrogram, mask_param=30):
