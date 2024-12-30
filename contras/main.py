@@ -1,23 +1,22 @@
 import os 
 import argparse
 import torch
-import torchaudio
-import numpy as np
-import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from pytorch_lightning import Trainer, LightningModule
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
+import warnings
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
-from torch.utils.data import Dataset
-from torchaudio.transforms import MelSpectrogram
 
 from utils import yaml_config_hook
 from simclr import ContrastiveLearning
-from dataset import BeatportDataset, SimCLRTransform, BeatportDataModule
+from dataset import BeatportDataModule
 
 torch.set_float32_matmul_precision('high')
-
+warnings.filterwarnings(
+    "ignore",
+    message="`training_step` returned `None`. If this was on purpose, ignore this warning...",
+    category=UserWarning,
+)
 
 
 if __name__ == "__main__":
