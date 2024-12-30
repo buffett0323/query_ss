@@ -165,23 +165,10 @@ class BeatportDataset(Dataset):
         
 
 # TODO: transform random
-class SimCLRTransform:
-    def __init__(
-        self, 
-        sample_rate=44100, 
-        n_mels=128, 
-        n_fft=2048, 
-        hop_length=1024,
-        device="cpu", 
-    ):
-        self.my_device = torch.device(device)
-        self.mel_spectrogram = T.MelSpectrogram(
-            sample_rate=sample_rate,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            n_mels=n_mels,
-        ).to(self.my_device)
-        self.amplitude_to_db = T.AmplitudeToDB().to(self.my_device)
+class SimCLRTransform(nn.Module):
+    def __init__(self):
+        super(SimCLRTransform, self).__init__()
+        self.amplitude_to_db = T.AmplitudeToDB()#.to(self.my_device)
         self.transforms = [
             lambda spectrogram: self.time_mask(spectrogram, mask_param=30),
             lambda spectrogram: self.frequency_mask(spectrogram, mask_param=15),
@@ -190,12 +177,12 @@ class SimCLRTransform:
         ]
 
     def time_mask(self, spectrogram, mask_param=30):
-        time_mask = T.TimeMasking(time_mask_param=mask_param).to(self.my_device)
+        time_mask = T.TimeMasking(time_mask_param=mask_param)#.to(self.my_device)
         return time_mask(spectrogram)
 
 
     def frequency_mask(self, spectrogram, mask_param=15):
-        freq_mask = T.FrequencyMasking(freq_mask_param=mask_param).to(self.my_device)
+        freq_mask = T.FrequencyMasking(freq_mask_param=mask_param)#.to(self.my_device)
         return freq_mask(spectrogram)
 
 
@@ -208,19 +195,45 @@ class SimCLRTransform:
 
 
     def add_noise(self, spectrogram, noise_level=0.005):
-        noise = noise_level * torch.randn_like(spectrogram).to(self.my_device)
+        noise = noise_level * torch.randn_like(spectrogram)#.to(self.my_device)
         return spectrogram + noise
 
 
-    def __call__(self, waveform):
-        # Convert waveform to mel-spectrogram
-        mel_spectrogram = self.mel_spectrogram(waveform)
-        mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
+    def __call__(self, mel_spec):
+        mel_spec = self.amplitude_to_db(mel_spec)
         
         # Apply random augmentations
         transform1, transform2 = random.sample(self.transforms, 2)
-        return transform1(mel_spectrogram), transform2(mel_spectrogram)
-    
+        mel_spec1 = transform1(mel_spec)
+        mel_spec2 = transform2(mel_spec)
+
+        # Ensure the output shapes match the input shape
+        mel_spec1 = self._preserve_shape(mel_spec1, mel_spec)
+        mel_spec2 = self._preserve_shape(mel_spec2, mel_spec)
+        
+        return mel_spec1, mel_spec2
+
+    def _preserve_shape(self, transformed, original):
+        """
+        Ensures the transformed spectrogram retains the original shape.
+        """
+        # Add batch and channel dimensions if missing
+        if len(transformed.shape) == 3:  # If shape is [C, H, W]
+            transformed = transformed.unsqueeze(0)  # Add batch dimension
+
+        # Perform interpolation
+        transformed = torch.nn.functional.interpolate(
+            transformed,
+            size=original.shape[-2:],  # Only match spatial dimensions (H, W)
+            mode='nearest'
+        )
+
+        # Remove batch dimension if it was added
+        if transformed.shape[0] == 1:  # If batch dimension was added
+            transformed = transformed.squeeze(0)
+
+        return transformed
+        
     
 
 if __name__ == "__main__":
@@ -234,26 +247,35 @@ if __name__ == "__main__":
     dataset_dir = args.dataset_dir
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
-    # train_dataset = BeatportDataset(
-    #     dataset_dir=args.dataset_dir,
-    #     args=args,
-    #     split="train",
-    #     n_fft=args.n_fft, 
-    #     hop_length=args.hop_length,
-    # )
-    # print("LEN", len(train_dataset))
+    npy_list = [
+        os.path.join(args.npy_dir, folder_name, file_name)
+        for folder_name in os.listdir(args.npy_dir)
+            for file_name in os.listdir(os.path.join(args.npy_dir, folder_name))
+                if file_name.endswith(".npy")
+    ]
+    random.shuffle(npy_list)
+    n = len(npy_list)
+    train_end = int(n * 0.8)  # 80%
+    test_end = train_end + int(n * 0.1)  # 80% + 10%
+
+    # Split the data
+    train_data = npy_list[:train_end]
+    test_data = npy_list[train_end:test_end]
+    valid_data = npy_list[test_end:]
+
+    print("Train dataset:", len(train_data))
+    print("Valid dataset:", len(valid_data))
+    print("Test dataset:", len(test_data))
     
-    # train_dataset = BeatportDataset(
-    #     dataset_dir=args.dataset_dir,
-    #     args=args,
-    #     split="train",
-    #     n_fft=args.n_fft, 
-    #     hop_length=args.hop_length,
-    #     filter_short=False,
-    #     pre_process=True,
-    # )
-    # print("After filter and pre_process LEN", len(train_dataset))
     
+    train_dataset = BeatportDataset(
+        args=args,
+        data_path_list=train_data,
+        split="train",
+    )
+    
+    for i in range(100):
+        print(train_dataset[i].shape)
     # train_loader = DataLoader(
     #     train_dataset, 
     #     batch_size=args.batch_size, 

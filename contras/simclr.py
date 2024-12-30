@@ -50,6 +50,7 @@ class GatedCNN(nn.Module):
         self.block4 = GatedConvBlock(256, 512, kernel_size=3, stride=2, padding=1)
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling
         self.fc = nn.Linear(512, num_classes) # self.fc = nn.Linear(512, num_classes)
+        # TODO: Reparameterize
 
     def forward(self, x):
         x = F.relu(self.block1(x))
@@ -78,7 +79,6 @@ class DilatedCNN(nn.Module):
         self.bn4 = nn.BatchNorm2d(encoder_output_dim)
         
         self.pool = nn.AdaptiveAvgPool2d((1, 1))  # Global pooling to get fixed-size embeddings
-        # TODO: Reparameterize
 
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)))
@@ -123,6 +123,8 @@ class ContrastiveLearning(LightningModule):
         self.my_device = torch.device(device)
         os.makedirs(self.save_dir, exist_ok=True)
         
+        # Load Models
+        self.transform = SimCLRTransform().to(device)
         if args.encoder_name == "DilatedCNN":
             self.encoder = DilatedCNN(
                 in_channels=self.args.channels,
@@ -151,30 +153,42 @@ class ContrastiveLearning(LightningModule):
         self.batch_size = args.batch_size
     
 
-    def forward(self, x_i, x_j):
-        x_i, x_j = x_i.to(self.my_device), x_j.to(self.my_device)
+    def forward(self, mel):
+        mel = mel.to(self.my_device)
+        x_i, x_j = self.transform(mel)
+        
         h_i, h_j, z_i, z_j = self.model(x_i, x_j) # SimCLR Model
+        return h_i, h_j, z_i, z_j
+
+
+    def training_step(self, batch):
+        if batch.shape[0] != self.batch_size:
+            return None
+        
+        h_i, h_j, z_i, z_j = self(batch)
+        
         loss = self.criterion(z_i, z_j)
-        return loss
-
-
-    def training_step(self, batch, batch_idx):
-        x_i, x_j = batch
-        loss = self(x_i, x_j)
         self.log('train_loss', loss, on_step=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
         return loss
     
     
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         return self.evaluate(batch, stage='val')
     
     
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch):
         return self.evaluate(batch, stage='test')
 
     
     def evaluate(self, batch, stage='val'):
-        pass
+        
+        if batch.shape[0] != self.batch_size:
+            return None
+        
+        h_i, h_j, z_i, z_j = self(batch)
+        loss = self.criterion(z_i, z_j)
+        self.log(f'{stage}_loss', loss, on_step=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        return loss
     
     
     def configure_criterion(self):

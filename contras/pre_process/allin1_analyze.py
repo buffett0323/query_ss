@@ -52,7 +52,7 @@ sources = ['bass', 'drums', 'other', 'vocals']
             
 #             chorus_counter += 1
 
-def process_folders(folder_names, input_path, output_path, target, device_id):
+def process_folders(folder_names, input_path, output_path, device_id):
     device = torch.device(f'cuda:{device_id}')
     
     for folder_name in tqdm(folder_names, desc=f"Device {device_id}"):
@@ -88,7 +88,7 @@ def process_folders(folder_names, input_path, output_path, target, device_id):
             #         target=target
             #     )
 
-def load_data_and_process(input_path, output_path, target='chorus', devices=[1, 2, 3]):
+def load_data_and_process(input_path, output_path, devices=[1, 2, 3]):
     # Split folder names for each GPU
     folder_names =  os.listdir(input_path) # sel_list
     num_folders = len(folder_names)
@@ -98,7 +98,7 @@ def load_data_and_process(input_path, output_path, target='chorus', devices=[1, 
     processes = []
     for i, device_id in enumerate(devices):
         folder_subset = folder_names[i * folders_per_device : (i + 1) * folders_per_device]
-        process = Process(target=process_folders, args=(folder_subset, input_path, output_path, target, device_id))
+        process = Process(target=process_folders, args=(folder_subset, input_path, output_path, device_id))
         processes.append(process)
         process.start()
 
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     
     # Open folders
     os.makedirs(output_path, exist_ok=True)
-    os.makedirs(os.path.join(output_path, target), exist_ok=True)
+    # os.makedirs(os.path.join(output_path, target), exist_ok=True)
     os.makedirs(os.path.join(output_path, sep_model_name), exist_ok=True)
     os.makedirs(os.path.join(output_path, "json"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "spec"), exist_ok=True)

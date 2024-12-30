@@ -40,6 +40,7 @@ if __name__ == "__main__":
     n = len(npy_list)
     train_end = int(n * 0.8)  # 80%
     test_end = train_end + int(n * 0.1)  # 80% + 10%
+    # TODO: make the valid size and test size // batch size
 
     # Split the data
     train_data = npy_list[:train_end]
@@ -63,8 +64,8 @@ if __name__ == "__main__":
         split="valid",
     )
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
-    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=args.workers)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=False)
     
     cl = ContrastiveLearning(args, device)
     
@@ -77,4 +78,4 @@ if __name__ == "__main__":
     )
 
     print("Starting training...")
-    # trainer.fit(cl, train_loader, valid_loader)
+    trainer.fit(cl, train_loader, valid_loader)
