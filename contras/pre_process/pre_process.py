@@ -1,4 +1,4 @@
-# Use conda env: allin1
+# TODO: Not Used
 import os
 import allin1
 import torch

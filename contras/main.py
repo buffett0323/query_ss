@@ -1,19 +1,20 @@
 import os 
 import argparse
-import random
 import torch
 import torchaudio
 import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from pytorch_lightning import Trainer, LightningModule
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks.progress import TQDMProgressBar
+from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import Dataset
 from torchaudio.transforms import MelSpectrogram
 
 from utils import yaml_config_hook
 from simclr import ContrastiveLearning
-from dataset import BeatportDataset, SimCLRTransform
+from dataset import BeatportDataset, SimCLRTransform, BeatportDataModule
 
 torch.set_float32_matmul_precision('high')
 
@@ -29,6 +30,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
+    
+    
+    if args.log_wandb: 
+        project = "SimCLR"
+        name = "SimCLR_Training"
+        save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
+        wandb_logger = WandbLogger(
+            project=project, 
+            name=name, 
+            save_dir=save_dir, 
+            log_model=False,  # Avoid logging full model files to WandB
+        )
+    else:
+        wandb_logger = None
 
     # Train-Test Split
     npy_list = [
@@ -37,42 +52,17 @@ if __name__ == "__main__":
             for file_name in os.listdir(os.path.join(args.npy_dir, folder_name))
                 if file_name.endswith(".npy")
     ]
-    random.shuffle(npy_list)
-    n = len(npy_list)
-    train_end = int(n * 0.8)  # 80%
-    test_end = train_end + int(n * 0.1)  # 80% + 10%
-    # TODO: make the valid size and test size // batch size
-
-    # Split the data
-    train_data = npy_list[:train_end]
-    test_data = npy_list[train_end:test_end]
-    valid_data = npy_list[test_end:]
-
-    print("Train dataset:", len(train_data))
-    print("Valid dataset:", len(valid_data))
-    print("Test dataset:", len(test_data))
     
-    
-    train_dataset = BeatportDataset(
+    dm = BeatportDataModule(
         args=args,
-        data_path_list=train_data,
-        split="train",
+        npy_list=npy_list,
     )
-    
-    valid_dataset = BeatportDataset(
-        args=args,
-        data_path_list=valid_data,
-        split="valid",
-    )
-    
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=args.workers, shuffle=False)
-    
-    cl = ContrastiveLearning(args, device)
+    model = ContrastiveLearning(args, device)
     
 
-    # Define the callback for saving the best model
-    checkpoint_callback = ModelCheckpoint(
+    # Callbacks
+    cb = [TQDMProgressBar(refresh_rate=10)]
+    model_ckpt = ModelCheckpoint(
         dirpath=args.model_dict_save_dir,  # Directory to save checkpoints
         filename="best_model",  # Filename for the best model
         save_top_k=1,  # Only keep the best model
@@ -80,15 +70,31 @@ if __name__ == "__main__":
         monitor="val_loss",  # Metric to monitor
         mode="min",  # Save model with the minimum validation loss
     )
+    cb.append(model_ckpt)
+    
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss",
+        min_delta=0.00,
+        patience=args.early_stop_patience,
+        verbose=True,
+        mode="min",
+    )
+    cb.append(early_stop_callback)
 
     trainer = Trainer(
         max_epochs=args.epoch_num,
         devices=args.gpu_ids,
         accelerator="gpu",
         sync_batchnorm=True,
-        val_check_interval=5.0,
-        callbacks=[checkpoint_callback],
+        check_val_every_n_epoch=5,  # Perform validation every 5 epochs
+        callbacks=cb,
+        logger=wandb_logger,
     )
 
-    print("Starting training...")
-    trainer.fit(cl, train_loader, valid_loader)
+    print("-------Start Training-------")
+    trainer.fit(model, dm)
+    print("-------Start Testing-------")
+    trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
+    
+    # # if load best model    
+    # cl.load_model(checkpoint_name="best_model.ckpt")

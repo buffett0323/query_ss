@@ -161,35 +161,38 @@ class ContrastiveLearning(LightningModule):
         return h_i, h_j, z_i, z_j
 
 
-    def training_step(self, batch):
+    def training_step(self, batch, batch_idx):
         if batch.shape[0] != self.batch_size:
             return None
         
         h_i, h_j, z_i, z_j = self(batch)
-        
         loss = self.criterion(z_i, z_j)
-        self.log('train_loss', loss, on_step=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        
+        self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
     
     
-    def validation_step(self, batch):
-        return self.evaluate(batch, stage='val')
-    
-    
-    def test_step(self, batch):
-        return self.evaluate(batch, stage='test')
+    def validation_step(self, batch, batch_idx):
+        if batch.shape[0] != self.batch_size:
+            return None
+        
+        h_i, h_j, z_i, z_j = self(batch)
+        loss = self.criterion(z_i, z_j)
 
+        self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
+        return loss
     
-    def evaluate(self, batch, stage='val'):
-        
+    
+    def test_step(self, batch, batch_idx):
         if batch.shape[0] != self.batch_size:
             return None
         
         h_i, h_j, z_i, z_j = self(batch)
         loss = self.criterion(z_i, z_j)
-        self.log(f'{stage}_loss', loss, on_step=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+
+        self.log('test_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
-    
+
     
     def configure_criterion(self):
         criterion = NT_Xent(self.args.batch_size, self.args.temperature)
