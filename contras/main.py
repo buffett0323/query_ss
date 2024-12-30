@@ -85,7 +85,7 @@ if __name__ == "__main__":
         devices=args.gpu_ids,
         accelerator="gpu",
         sync_batchnorm=True,
-        check_val_every_n_epoch=5,  # Perform validation every 5 epochs
+        check_val_every_n_epoch=args.check_val_every_n_epoch,  # Perform validation every 2 epochs
         callbacks=cb,
         logger=wandb_logger,
     )
