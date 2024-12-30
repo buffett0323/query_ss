@@ -1,3 +1,9 @@
+# Pre-process
+segment_thres: 3
+segment_second: 5
+sep_model_name: "htdemucs"
+target: "chorus"
+
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node

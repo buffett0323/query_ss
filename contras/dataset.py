@@ -67,11 +67,12 @@ class BeatportDataset(Dataset):
         # Load the audio file
         pt_path = self.pt_files[idx]
         waveform = torch.load(pt_path, weights_only=True)
-        return self.crop_waveform(waveform=waveform)
+        # return self.crop_waveform(waveform=waveform)
         # print(waveform.shape)
-        # x_i, x_j = self.transform(waveform)
-        # x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
-        # return x_i, x_j
+        waveform = torch.randn((2, 88888))
+        x_i, x_j = self.transform(waveform)
+        x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
+        return x_i, x_j
     
     
     def crop_waveform(self, waveform):
@@ -229,6 +230,13 @@ if __name__ == "__main__":
     # )
     # print("After filter and pre_process LEN", len(train_dataset))
     
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=args.batch_size, 
+        num_workers=args.workers,
+        pin_memory=True,        # Faster transfer to GPU
+        prefetch_factor=2,      # Prefetch 2 batches per worker
+        persistent_workers=True # Keep workers alive between epochs
+    )
     for t in tqdm(train_loader):
         pass
