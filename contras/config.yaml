@@ -14,7 +14,7 @@ dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 workers: 24
 dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datasets"
 pre_processed_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt"
-
+npy_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy"
 
 
 # train options

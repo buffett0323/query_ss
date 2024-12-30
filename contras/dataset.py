@@ -4,6 +4,7 @@ import shutil
 import torch
 import torchaudio
 import argparse
+import numpy as np
 import torch.nn as nn
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
@@ -18,124 +19,147 @@ class BeatportDataset(Dataset):
     def __init__(
         self, 
         args,
-        dataset_dir='/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus',
-        preprocessed_dir='/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt',
-        device='cpu',
-        split="train", 
+        data_path_list,
+        split="train",
         n_fft=2048, 
         hop_length=1024,
-        filter_short=False,
-        pre_process=False,
     ):
-        """
-        Args:
-            dataset_dir (str): Path to the dataset directory.
-            split (str): The split to load ('train', 'test', 'unlabeled').
-            transform (callable, optional): A function/transform to apply to the audio data.
-        """
-        self.dataset_dir = dataset_dir
-        self.preprocessed_dir = preprocessed_dir
-        self.my_device = device
         self.split = split
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.target_length = n_fft + hop_length
-        self.max_length = args.max_length
+        self.data_path_list = data_path_list
         
-        if filter_short: self.filter_short()
-        if pre_process: self.preprocess()
-        self.pt_files = [
-            os.path.join(preprocessed_dir, folder_name, file_name)
-            for folder_name in os.listdir(preprocessed_dir)
-                for file_name in os.listdir(os.path.join(preprocessed_dir, folder_name))
-                    if file_name.endswith(".pt")
-        ]
-        print("Get Length:", len(self.pt_files))
-        
-        self.transform = SimCLRTransform(
-            sample_rate=args.sample_rate, 
-            n_mels=args.n_mels, 
-            n_fft=args.n_fft, 
-            hop_length=args.hop_length,
-            device=self.my_device,
-        )#.to(device)
 
     def __len__(self):
-        return len(self.pt_files)
+        return len(self.data_path_list)
 
     def __getitem__(self, idx):
-        # Load the audio file
-        pt_path = self.pt_files[idx]
-        waveform = torch.load(pt_path, weights_only=True)
-        # return self.crop_waveform(waveform=waveform)
-        # print(waveform.shape)
-        waveform = torch.randn((2, 88888))
-        x_i, x_j = self.transform(waveform)
-        x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
-        return x_i, x_j
+        path = self.data_path_list[idx]
+        return np.load(path)
+
+
+# class BeatportDataset(Dataset):
+#     def __init__(
+#         self, 
+#         args,
+#         dataset_dir='/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus',
+#         preprocessed_dir='/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt',
+#         device='cpu',
+#         split="train", 
+#         n_fft=2048, 
+#         hop_length=1024,
+#         filter_short=False,
+#         pre_process=False,
+#     ):
+#         """
+#         Args:
+#             dataset_dir (str): Path to the dataset directory.
+#             split (str): The split to load ('train', 'test', 'unlabeled').
+#             transform (callable, optional): A function/transform to apply to the audio data.
+#         """
+#         self.dataset_dir = dataset_dir
+#         self.preprocessed_dir = preprocessed_dir
+#         self.my_device = device
+#         self.split = split
+#         self.n_fft = n_fft
+#         self.hop_length = hop_length
+#         self.target_length = n_fft + hop_length
+#         self.max_length = args.max_length
+        
+#         if filter_short: self.filter_short()
+#         if pre_process: self.preprocess()
+#         self.pt_files = [
+#             os.path.join(preprocessed_dir, folder_name, file_name)
+#             for folder_name in os.listdir(preprocessed_dir)
+#                 for file_name in os.listdir(os.path.join(preprocessed_dir, folder_name))
+#                     if file_name.endswith(".pt")
+#         ]
+#         print("Get Length:", len(self.pt_files))
+        
+#         self.transform = SimCLRTransform(
+#             sample_rate=args.sample_rate, 
+#             n_mels=args.n_mels, 
+#             n_fft=args.n_fft, 
+#             hop_length=args.hop_length,
+#             device=self.my_device,
+#         )#.to(device)
+
+#     def __len__(self):
+#         return len(self.pt_files)
+
+#     def __getitem__(self, idx):
+#         # Load the audio file
+#         pt_path = self.pt_files[idx]
+#         waveform = torch.load(pt_path, weights_only=True)
+#         # return self.crop_waveform(waveform=waveform)
+#         # print(waveform.shape)
+#         waveform = torch.randn((2, 88888))
+#         x_i, x_j = self.transform(waveform)
+#         x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
+#         return x_i, x_j
     
     
-    def crop_waveform(self, waveform):
-        if waveform.size(-1) < self.max_length:
-            repeat_count = (self.max_length // waveform.size(-1)) + 1
-            waveform = waveform.repeat(1, 1, repeat_count)
-            return waveform[:, :self.max_length]
-        else:
-            # Randomly select a starting point for the partition
-            start_idx = torch.randint(0, waveform.size(-1) - self.max_length + 1, (1,)).item()
-            return waveform[:, start_idx:start_idx + self.max_length]
+#     def crop_waveform(self, waveform):
+#         if waveform.size(-1) < self.max_length:
+#             repeat_count = (self.max_length // waveform.size(-1)) + 1
+#             waveform = waveform.repeat(1, 1, repeat_count)
+#             return waveform[:, :self.max_length]
+#         else:
+#             # Randomly select a starting point for the partition
+#             start_idx = torch.randint(0, waveform.size(-1) - self.max_length + 1, (1,)).item()
+#             return waveform[:, start_idx:start_idx + self.max_length]
         
     
-    def consist_size(self, mel_spectrogram):
-        if mel_spectrogram.size(-1) < self.max_length:
-            pad_size = self.max_length - mel_spectrogram.size(-1)
-            return torch.nn.functional.pad(mel_spectrogram, (0, pad_size))
-        else:
-            # Randomly select a starting point for the partition
-            start_idx = torch.randint(0, mel_spectrogram.size(-1) - self.max_length + 1, (1,)).item()
-            return mel_spectrogram[:, :, start_idx:start_idx + self.max_length]
+#     def consist_size(self, mel_spectrogram):
+#         if mel_spectrogram.size(-1) < self.max_length:
+#             pad_size = self.max_length - mel_spectrogram.size(-1)
+#             return torch.nn.functional.pad(mel_spectrogram, (0, pad_size))
+#         else:
+#             # Randomly select a starting point for the partition
+#             start_idx = torch.randint(0, mel_spectrogram.size(-1) - self.max_length + 1, (1,)).item()
+#             return mel_spectrogram[:, :, start_idx:start_idx + self.max_length]
         
     
-    def filter_short(self, min_duration=1):
-        self.folders = [
-            os.path.join(dataset_dir, folder_name)
-            for folder_name in os.listdir(dataset_dir)
-        ]
-        print("Before Filter, List Length:", len(self.folders))
-        for a in tqdm(self.folders):
-            num = str(a).split('_')[-1]
-            a_mp3 = os.path.join(a, f"bass_chorus_{str(num)}.mp3")                
-            audio = MP3(a_mp3)
-            if audio.info.length < min_duration:
-                shutil.rmtree(a)
+#     def filter_short(self, min_duration=1):
+#         self.folders = [
+#             os.path.join(dataset_dir, folder_name)
+#             for folder_name in os.listdir(dataset_dir)
+#         ]
+#         print("Before Filter, List Length:", len(self.folders))
+#         for a in tqdm(self.folders):
+#             num = str(a).split('_')[-1]
+#             a_mp3 = os.path.join(a, f"bass_chorus_{str(num)}.mp3")                
+#             audio = MP3(a_mp3)
+#             if audio.info.length < min_duration:
+#                 shutil.rmtree(a)
                 
-        self.folders = [
-            os.path.join(dataset_dir, folder_name)
-            for folder_name in os.listdir(dataset_dir)
-        ]
-        print("After Filter, List Length:", len(self.folders))
+#         self.folders = [
+#             os.path.join(dataset_dir, folder_name)
+#             for folder_name in os.listdir(dataset_dir)
+#         ]
+#         print("After Filter, List Length:", len(self.folders))
     
     
-    def preprocess(self):
-        """Preprocess audio files using multiprocessing."""
-        self.audio_files = [
-            os.path.join(dataset_dir, folder_name, file_name)
-            for folder_name in os.listdir(dataset_dir)
-                for file_name in os.listdir(os.path.join(dataset_dir, folder_name))
-                    if file_name.endswith(".mp3")
-        ]
-        for file_name in tqdm(self.audio_files):
-            if file_name.endswith(".mp3"):
-                song_name = file_name.split('/')[-2]
-                os.makedirs(os.path.join(self.preprocessed_dir, song_name), exist_ok=True)
-                save_path = os.path.join(
-                    self.preprocessed_dir, 
-                    song_name, 
-                    f"{file_name.split('/')[-1].split('.mp3')[0]}.pt"
-                )
-                if not os.path.exists(save_path):
-                    waveform, _ = torchaudio.load(file_name)                
-                    torch.save(waveform, save_path)
+#     def preprocess(self):
+#         """Preprocess audio files using multiprocessing."""
+#         self.audio_files = [
+#             os.path.join(dataset_dir, folder_name, file_name)
+#             for folder_name in os.listdir(dataset_dir)
+#                 for file_name in os.listdir(os.path.join(dataset_dir, folder_name))
+#                     if file_name.endswith(".mp3")
+#         ]
+#         for file_name in tqdm(self.audio_files):
+#             if file_name.endswith(".mp3"):
+#                 song_name = file_name.split('/')[-2]
+#                 os.makedirs(os.path.join(self.preprocessed_dir, song_name), exist_ok=True)
+#                 save_path = os.path.join(
+#                     self.preprocessed_dir, 
+#                     song_name, 
+#                     f"{file_name.split('/')[-1].split('.mp3')[0]}.pt"
+#                 )
+#                 if not os.path.exists(save_path):
+#                     waveform, _ = torchaudio.load(file_name)                
+#                     torch.save(waveform, save_path)
             
 
         
@@ -210,13 +234,13 @@ if __name__ == "__main__":
     dataset_dir = args.dataset_dir
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
-    train_dataset = BeatportDataset(
-        dataset_dir=args.dataset_dir,
-        args=args,
-        split="train",
-        n_fft=args.n_fft, 
-        hop_length=args.hop_length,
-    )
+    # train_dataset = BeatportDataset(
+    #     dataset_dir=args.dataset_dir,
+    #     args=args,
+    #     split="train",
+    #     n_fft=args.n_fft, 
+    #     hop_length=args.hop_length,
+    # )
     # print("LEN", len(train_dataset))
     
     # train_dataset = BeatportDataset(
@@ -230,13 +254,13 @@ if __name__ == "__main__":
     # )
     # print("After filter and pre_process LEN", len(train_dataset))
     
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=args.batch_size, 
-        num_workers=args.workers,
-        pin_memory=True,        # Faster transfer to GPU
-        prefetch_factor=2,      # Prefetch 2 batches per worker
-        persistent_workers=True # Keep workers alive between epochs
-    )
-    for t in tqdm(train_loader):
-        pass
+    # train_loader = DataLoader(
+    #     train_dataset, 
+    #     batch_size=args.batch_size, 
+    #     num_workers=args.workers,
+    #     pin_memory=True,        # Faster transfer to GPU
+    #     prefetch_factor=2,      # Prefetch 2 batches per worker
+    #     persistent_workers=True # Keep workers alive between epochs
+    # )
+    # for t in tqdm(train_loader):
+    #     pass
