@@ -63,6 +63,33 @@ class GatedCNN(nn.Module):
 
 
 
+class DilatedCNN(nn.Module):
+    def __init__(self, in_channels=2, encoder_output_dim=128):
+        super(DilatedCNN, self).__init__()
+        
+        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1, dilation=1)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=2, dilation=2)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=4, dilation=4)
+        self.conv4 = nn.Conv2d(256, encoder_output_dim, kernel_size=3, stride=1, padding=8, dilation=8)
+        
+        self.bn1 = nn.BatchNorm2d(64)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.bn4 = nn.BatchNorm2d(encoder_output_dim)
+        
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))  # Global pooling to get fixed-size embeddings
+        # TODO: Reparameterize
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = F.relu(self.bn4(self.conv4(x)))
+        x = self.pool(x)  # Reduce spatial dimensions to 1x1
+        return x.view(x.size(0), -1)  # Flatten to [batch_size, encoder_output_dim]
+    
+
+
 class SimCLR(nn.Module):
     def __init__(self, encoder, n_features, projection_dim):
         super(SimCLR, self).__init__()
@@ -96,11 +123,17 @@ class ContrastiveLearning(LightningModule):
         self.my_device = torch.device(device)
         os.makedirs(self.save_dir, exist_ok=True)
         
-        
-        self.encoder = GatedCNN(
-            in_channels=self.args.channels, 
-            num_classes=self.args.encoder_output_dim,
-        ).to(device)
+        if args.encoder_name == "DilatedCNN":
+            self.encoder = DilatedCNN(
+                in_channels=self.args.channels,
+                encoder_output_dim=self.args.encoder_output_dim,
+            ).to(device)
+            
+        else: 
+            self.encoder = GatedCNN(
+                in_channels=self.args.channels, 
+                num_classes=self.args.encoder_output_dim,
+            ).to(device)
         
         self.model = SimCLR(
             encoder=self.encoder, 
@@ -114,32 +147,33 @@ class ContrastiveLearning(LightningModule):
             world_size=1,
         ).to(device)
         
-        
+        self.save_hyperparameters()
+        self.batch_size = args.batch_size
     
 
-    def forward(self, waveform):
-        waveform = waveform.to(self.my_device)
-        x_i, x_j = self.transform(waveform)
-        x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
-        
+    def forward(self, x_i, x_j):
+        x_i, x_j = x_i.to(self.my_device), x_j.to(self.my_device)
         h_i, h_j, z_i, z_j = self.model(x_i, x_j) # SimCLR Model
         loss = self.criterion(z_i, z_j)
         return loss
 
 
     def training_step(self, batch, batch_idx):
-        loss = self(batch)
+        x_i, x_j = batch
+        loss = self(x_i, x_j)
+        self.log('train_loss', loss, on_step=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
-        pass
+        return self.evaluate(batch, stage='val')
     
     
-    def testing_step(self, batch, batch_idx):
-        pass
+    def test_step(self, batch, batch_idx):
+        return self.evaluate(batch, stage='test')
+
     
-    def evaluate(self):
+    def evaluate(self, batch, stage='val'):
         pass
     
     
@@ -175,14 +209,14 @@ class ContrastiveLearning(LightningModule):
         else:
             return {"optimizer": optimizer}
         
-    def save_model(self, checkpoint_name="contrastive_checkpoint.pth"):
+    def save_model(self, checkpoint_name="simclr.pth"):
         """Save model state dictionary."""
         save_path = os.path.join(self.save_dir, checkpoint_name)
         torch.save(self.model.state_dict(), save_path)
         print(f"Model state saved to {save_path}")
 
 
-    def load_model(self, checkpoint_name="contrastive_checkpoint.pth"):
+    def load_model(self, checkpoint_name="simclr.pth"):
         """Load model state dictionary to continue training."""
         load_path = os.path.join(self.save_dir, checkpoint_name)
         if os.path.exists(load_path):

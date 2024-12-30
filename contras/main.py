@@ -29,7 +29,6 @@ if __name__ == "__main__":
     train_dataset = BeatportDataset(
         dataset_dir=args.dataset_dir,
         args=args,
-        device=device,
         split="train",
         n_fft=args.n_fft, 
         hop_length=args.hop_length,
@@ -44,6 +43,7 @@ if __name__ == "__main__":
         devices=args.gpu_ids,
         accelerator="gpu",
         sync_batchnorm=True,
+        val_check_interval=5.0,
     )
 
     print("Starting training...")

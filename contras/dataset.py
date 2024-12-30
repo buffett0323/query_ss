@@ -43,13 +43,6 @@ class BeatportDataset(Dataset):
         self.max_length = args.max_length
         
         if filter_short: self.filter_short()
-        self.audio_files = [
-            os.path.join(dataset_dir, folder_name, file_name)
-            for folder_name in os.listdir(dataset_dir)
-                for file_name in os.listdir(os.path.join(dataset_dir, folder_name))
-                    if file_name.endswith(".mp3")
-        ]
-        
         if pre_process: self.preprocess()
         self.pt_files = [
             os.path.join(preprocessed_dir, folder_name, file_name)
@@ -57,6 +50,7 @@ class BeatportDataset(Dataset):
                 for file_name in os.listdir(os.path.join(preprocessed_dir, folder_name))
                     if file_name.endswith(".pt")
         ]
+        print("Get Length:", len(self.pt_files))
         
         self.transform = SimCLRTransform(
             sample_rate=args.sample_rate, 
@@ -73,11 +67,23 @@ class BeatportDataset(Dataset):
         # Load the audio file
         pt_path = self.pt_files[idx]
         waveform = torch.load(pt_path, weights_only=True)
-
-        x_i, x_j = self.transform(waveform)
-        x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
-        return x_i, x_j
+        return self.crop_waveform(waveform=waveform)
+        # print(waveform.shape)
+        # x_i, x_j = self.transform(waveform)
+        # x_i, x_j = self.consist_size(x_i), self.consist_size(x_j)
+        # return x_i, x_j
     
+    
+    def crop_waveform(self, waveform):
+        if waveform.size(-1) < self.max_length:
+            repeat_count = (self.max_length // waveform.size(-1)) + 1
+            waveform = waveform.repeat(1, 1, repeat_count)
+            return waveform[:, :self.max_length]
+        else:
+            # Randomly select a starting point for the partition
+            start_idx = torch.randint(0, waveform.size(-1) - self.max_length + 1, (1,)).item()
+            return waveform[:, start_idx:start_idx + self.max_length]
+        
     
     def consist_size(self, mel_spectrogram):
         if mel_spectrogram.size(-1) < self.max_length:
@@ -111,6 +117,12 @@ class BeatportDataset(Dataset):
     
     def preprocess(self):
         """Preprocess audio files using multiprocessing."""
+        self.audio_files = [
+            os.path.join(dataset_dir, folder_name, file_name)
+            for folder_name in os.listdir(dataset_dir)
+                for file_name in os.listdir(os.path.join(dataset_dir, folder_name))
+                    if file_name.endswith(".mp3")
+        ]
         for file_name in tqdm(self.audio_files):
             if file_name.endswith(".mp3"):
                 song_name = file_name.split('/')[-2]
@@ -204,17 +216,19 @@ if __name__ == "__main__":
         n_fft=args.n_fft, 
         hop_length=args.hop_length,
     )
-    print("LEN", len(train_dataset))
+    # print("LEN", len(train_dataset))
     
-    train_dataset = BeatportDataset(
-        dataset_dir=args.dataset_dir,
-        args=args,
-        split="train",
-        n_fft=args.n_fft, 
-        hop_length=args.hop_length,
-        filter_short=False,
-        pre_process=True,
-    )
-    print("After filter and pre_process LEN", len(train_dataset))
+    # train_dataset = BeatportDataset(
+    #     dataset_dir=args.dataset_dir,
+    #     args=args,
+    #     split="train",
+    #     n_fft=args.n_fft, 
+    #     hop_length=args.hop_length,
+    #     filter_short=False,
+    #     pre_process=True,
+    # )
+    # print("After filter and pre_process LEN", len(train_dataset))
     
-    # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.workers)
+    for t in tqdm(train_loader):
+        pass

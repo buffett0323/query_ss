@@ -1,8 +1,8 @@
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:1"
-gpu_ids: [1]
+device: "cuda:2"
+gpu_ids: [2]
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 workers: 24
@@ -13,7 +13,7 @@ pre_processed_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt"
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 512 # TODO
+batch_size: 64 #512 # TODO
 start_epoch: 0
 epochs: 100
 
@@ -28,6 +28,7 @@ n_fft: 2048
 
 # model options
 # resnet: "resnet18"
+encoder_name: "GatedCNN" # "GatedCNN"
 channels: 2
 encoder_output_dim: 512
 projection_dim: 128
