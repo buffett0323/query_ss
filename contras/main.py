@@ -7,6 +7,7 @@ import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from pytorch_lightning import Trainer, LightningModule
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import Dataset
 from torchaudio.transforms import MelSpectrogram
 
@@ -69,12 +70,24 @@ if __name__ == "__main__":
     
     cl = ContrastiveLearning(args, device)
     
+
+    # Define the callback for saving the best model
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=args.model_dict_save_dir,  # Directory to save checkpoints
+        filename="best_model",  # Filename for the best model
+        save_top_k=1,  # Only keep the best model
+        verbose=True,
+        monitor="val_loss",  # Metric to monitor
+        mode="min",  # Save model with the minimum validation loss
+    )
+
     trainer = Trainer(
         max_epochs=args.epoch_num,
         devices=args.gpu_ids,
         accelerator="gpu",
         sync_batchnorm=True,
         val_check_interval=5.0,
+        callbacks=[checkpoint_callback],
     )
 
     print("Starting training...")
