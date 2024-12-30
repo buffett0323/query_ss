@@ -32,26 +32,6 @@ sources = ['bass', 'drums', 'other', 'vocals']
 #         sel_list.append(i)
 # print("Selected list is:", sel_list)
 
-
-# def segment_audio(song_name, segments, sep_path, output_path, target='chorus'):
-#     chorus_counter = 1
-#     for segment in segments:
-#         if segment.label == target:
-#             start_ms = int(segment.start * 1000)  # Convert seconds to milliseconds
-#             end_ms = int(segment.end * 1000)     # Convert seconds to milliseconds
-            
-#             # Extract the segment for the sources
-#             os.makedirs(os.path.join(output_path, target, f"{song_name}_{chorus_counter}"), exist_ok=True)
-#             for source in sources:
-#                 audio = AudioSegment.from_file(os.path.join(sep_path, f"{source}.wav"))
-#                 seg_audio = audio[start_ms:end_ms]
-                
-#                 # Export the segment
-#                 output_file = os.path.join(output_path, target, f"{song_name}_{chorus_counter}", f"{source}_{target}_{chorus_counter}.mp3")
-#                 seg_audio.export(output_file, format="mp3")                
-            
-#             chorus_counter += 1
-
 def process_folders(folder_names, input_path, output_path, device_id):
     device = torch.device(f'cuda:{device_id}')
     
@@ -75,18 +55,6 @@ def process_folders(folder_names, input_path, output_path, device_id):
                 keep_byproducts=True
             )
             
-            # # Load audio files
-            # for audio_path, result in zip(audio_files, results):
-            #     song_name = audio_path.split('/')[-1].split('.mp3')[0]
-
-            #     # Segment audio to get chorus
-            #     segment_audio(
-            #         song_name=song_name, 
-            #         segments=result.segments, 
-            #         sep_path=os.path.join(output_path, sep_model_name, song_name), 
-            #         output_path=output_path, 
-            #         target=target
-            #     )
 
 def load_data_and_process(input_path, output_path, devices=[1, 2, 3]):
     # Split folder names for each GPU
