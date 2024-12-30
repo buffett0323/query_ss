@@ -1,6 +1,6 @@
 import os
 
-given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_preprocess/json")]
+given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_analyze/json")]
 path = "/mnt/gestalt/database/beatport/audio/audio"
 sel_list = []
 for i in os.listdir(path):
