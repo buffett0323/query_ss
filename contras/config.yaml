@@ -32,7 +32,6 @@ n_fft: 2048
 hop_length: 1024
 sample_rate: 44100 
 n_mels: 128 
-n_fft: 2048 
 
 
 # model options
