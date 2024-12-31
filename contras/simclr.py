@@ -201,22 +201,31 @@ class ContrastiveLearning(LightningModule):
     def configure_optimizers(self):
         scheduler = None
         if self.args.optimizer == "Adam":
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
         
         elif self.args.optimizer == "LARS": # TODO
             # optimized using LARS with linear learning rate scaling
             # (i.e. LearningRate = 0.3 × BatchSize/256) and weight decay of 10−6.
             learning_rate = 0.3 * self.args.batch_size / 256
-            optimizer = LARS(
+            # Base optimizer: SGD with momentum
+            base_optimizer = torch.optim.SGD(
                 self.model.parameters(),
                 lr=learning_rate,
+                momentum=0.9,
                 weight_decay=self.args.weight_decay,
-                exclude_from_weight_decay=["batch_normalization", "bias"],
             )
 
-            # "decay the learning rate with the cosine decay schedule without restarts"
+
+            # Wrap the base optimizer with LARS
+            optimizer = LARS(
+                optimizer=base_optimizer,
+                eps=1e-8,  # Epsilon for numerical stability
+                trust_coef=0.001,  # Trust coefficient
+            )
+
+            # Cosine annealing scheduler
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, self.args.epochs, eta_min=0, last_epoch=-1
+                base_optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1
             )
         else:
             raise NotImplementedError

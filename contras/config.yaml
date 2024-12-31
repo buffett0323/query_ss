@@ -20,11 +20,12 @@ npy_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy"
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #512 # TODO
+batch_size: 512 #512 # TODO
 start_epoch: 0
 epochs: 100
 check_val_every_n_epoch: 2
 early_stop_patience: 5
+lr: 3e-4
 
 # dataset options
 max_length: 64
