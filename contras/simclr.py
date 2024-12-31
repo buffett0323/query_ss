@@ -207,6 +207,7 @@ class ContrastiveLearning(LightningModule):
             # optimized using LARS with linear learning rate scaling
             # (i.e. LearningRate = 0.3 × BatchSize/256) and weight decay of 10−6.
             learning_rate = 0.3 * self.args.batch_size / 256
+            
             # Base optimizer: SGD with momentum
             base_optimizer = torch.optim.SGD(
                 self.model.parameters(),
