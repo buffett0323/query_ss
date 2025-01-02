@@ -20,17 +20,17 @@ warnings.filterwarnings("ignore", category=UserWarning)
 sep_model_name = 'htdemucs'
 sources = ['bass', 'drums', 'other', 'vocals']
 
-# given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_preprocess/json")]
-# path = "/mnt/gestalt/database/beatport/audio/audio"
-# sel_list = []
-# for i in os.listdir(path):
-#     cnt = 0
-#     for j in os.listdir(os.path.join(path, i)):
-#         if j.split('.mp3')[0] not in given_list:
-#             cnt += 1
-#     if cnt != 0 :
-#         sel_list.append(i)
-# print("Selected list is:", sel_list)
+given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_preprocess/json")]
+path = "/mnt/gestalt/database/beatport/audio/audio"
+sel_list = []
+for i in os.listdir(path):
+    cnt = 0
+    for j in os.listdir(os.path.join(path, i)):
+        if j.split('.mp3')[0] not in given_list:
+            cnt += 1
+    if cnt != 0 :
+        sel_list.append(i)
+print("Selected list is:", sel_list)
 
 def process_folders(folder_names, input_path, output_path, device_id):
     device = torch.device(f'cuda:{device_id}')
@@ -58,7 +58,7 @@ def process_folders(folder_names, input_path, output_path, device_id):
 
 def load_data_and_process(input_path, output_path, devices=[1, 2, 3]):
     # Split folder names for each GPU
-    folder_names =  os.listdir(input_path) # sel_list
+    folder_names =  sel_list #os.listdir(input_path) # sel_list
     num_folders = len(folder_names)
     num_devices = len(devices)
     folders_per_device = (num_folders + num_devices - 1) // num_devices  # Divide evenly
@@ -89,5 +89,5 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(output_path, "json"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "spec"), exist_ok=True)
     
-    load_data_and_process(input_path, output_path, target, devices)
+    load_data_and_process(input_path, output_path, devices)
     print("---All Well Done---")
