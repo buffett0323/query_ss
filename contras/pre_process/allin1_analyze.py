@@ -78,17 +78,19 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(output_path, "json"), exist_ok=True)
     os.makedirs(os.path.join(output_path, "spec"), exist_ok=True)
     
-    given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_preprocess/json")]
-    sel_list = []
-    for i in os.listdir(input_path):
-        cnt = 0
-        for j in os.listdir(os.path.join(input_path, i)):
-            if j.split('.mp3')[0] not in given_list:
-                cnt += 1
-                break
-        if cnt != 0 and i != "electro-big-room" and i != "leftfield-house-and-techno":
-            sel_list.append(i)
-    print("Selected List:", sel_list)
+    # given_list = [g.split('.json')[0] for g in os.listdir("/mnt/gestalt/home/ddmanddman/beatport_preprocess/json")]
+    # sel_list = []
+    # for i in os.listdir(input_path):
+    #     cnt = 0
+    #     for j in os.listdir(os.path.join(input_path, i)):
+    #         if j.split('.mp3')[0] not in given_list:
+    #             cnt += 1
+    #             break
+    #     if cnt != 0 : #and i != "electro-big-room" and i != "leftfield-house-and-techno":
+    #         sel_list.append(i)
+    # print("Selected List:", sel_list)
+    sel_list = ['future-house', 'garage-baseline-grime', 
+                'glitch-hop', 'hard-dance', 'hardcore-hard-techno', 'hip-hop-r-and-b']
     
     load_data_and_process(sel_list, input_path, output_path, devices)
     print("---All Well Done---")
