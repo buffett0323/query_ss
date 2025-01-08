@@ -89,8 +89,10 @@ if __name__ == "__main__":
     #     if cnt != 0 : #and i != "electro-big-room" and i != "leftfield-house-and-techno":
     #         sel_list.append(i)
     # print("Selected List:", sel_list)
-    sel_list = ['future-house', 'garage-baseline-grime', 
-                'glitch-hop', 'hard-dance', 'hardcore-hard-techno', 'hip-hop-r-and-b']
+    
+    ### TODO: 'progressive-house', 'electro-big-room', 'house', 'trap-future-bass'
+    sel_list = ['progressive-trance', 'psy-trance', 
+                'reggae-dancehall-dub', 'tech-house', 'tech-trance', 'uplifting-trance']
     
     load_data_and_process(sel_list, input_path, output_path, devices)
     print("---All Well Done---")
