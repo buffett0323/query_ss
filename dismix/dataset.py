@@ -476,9 +476,11 @@ class CocoChoraleDataset(Dataset):
             pitch_annotation.append(pitch_sequence)  
         
         pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
-        return mix_melspec, torch.cat(stems_melspec, dim=0), torch.cat(pitch_annotation, dim=0)
 
+        stems_melspec = torch.cat(stems_melspec, dim=0)
+        pitch_annotation = torch.cat(pitch_annotation, dim=0)
 
+        return mix_melspec, stems_melspec, pitch_annotation
 
 class CocoChoraleDataModule(LightningDataModule):
     def __init__(
@@ -572,6 +574,8 @@ if __name__ == '__main__':
     print('Dataset sample count: {}'.format(dm.num_samples))
     
     mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
+    print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
     print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
     
     for batch in dm.train_dataloader():

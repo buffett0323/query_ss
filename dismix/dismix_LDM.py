@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 
 # from sklearn.decomposition import PCA
 # from sklearn.manifold import TSNE
-from matplotlib.colors import ListedColormap
+# from matplotlib.colors import ListedColormap
+from tqdm import tqdm
 
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
@@ -233,11 +234,13 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 # Partition Class
 class Partition(nn.Module):
-    def __init__(self, patch_size, dim, num_patches, max_len=5000):
+    def __init__(self, patch_size, dim, num_patches, batch_size, N_s=4, max_len=5000):
         super(Partition, self).__init__()
         self.patch_size = patch_size
         self.dim = dim
         self.num_patches = num_patches
+        self.batch_size = batch_size
+        self.N_s = N_s
         self.positional_encoding = SinusoidalPositionalEncoding(dim, max_len)
 
     def forward(self, x):
@@ -260,7 +263,7 @@ class Partition(nn.Module):
 
         # Step 3: Add positional encoding
         x = self.positional_encoding(x)  # Shape: [B, L=25, D_z']
-        x = x.view(B * self.num_patches, -1) # Shape: [B*L, D_z']
+        x = x.view(self.batch_size, self.N_s * self.num_patches, -1) # Shape: [B*L, D_z']
 
         return x
 
@@ -269,6 +272,7 @@ class Partition(nn.Module):
 class DiTPatchPartitioner(nn.Module):
     def __init__(
         self, 
+        batch_size,
         z_patch_size=4, 
         z_num_patches=25, 
         z_dim=512,
@@ -282,12 +286,14 @@ class DiTPatchPartitioner(nn.Module):
             patch_size=z_patch_size, 
             dim=z_dim, 
             num_patches=z_num_patches,
+            batch_size=batch_size,
             max_len=max_len
         )
         self.s_partition = Partition(
             patch_size=s_patch_size, 
             dim=s_dim, 
             num_patches=s_num_patches,
+            batch_size=batch_size,
             max_len=max_len
         )
 
@@ -406,7 +412,7 @@ class DiT(nn.Module):
         super(DiT, self).__init__()
         self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
         self.pt_D_VAE = vae.decoder
-        self.partitioner = DiTPatchPartitioner()
+        self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.N_s = N_s # 4
         self.batch_size = batch_size
         
@@ -438,27 +444,27 @@ class DiT(nn.Module):
                     - Tz: Original temporal dimension
                     - Dz: Original feature dimension.
         """
-        B = self.batch_size * self.N_s      # Batch size
+        B = self.batch_size                 # Batch size
         L = 25                              # Number of patches
-        Tz = 100                            # Original temporal dimension
-        Dz = 16                             # Feature dimension
+        T_z = 100                           # Original temporal dimension
+        D_z = 16                            # Feature dimension
         C = 8                               # Number of channels
 
         # Flattened patch dimension must match
-        D_prime = (Tz // L) * Dz * C
-        assert x.shape[1] == D_prime, f"Flattened dimension mismatch: expected {D_prime}, got {x.shape[1]}"
+        patch_size = T_z // L  # Frames per patch
+        D_z_prime = patch_size * D_z * C  # Flattened patch dimension
+        
+        # Ensure patched_tensor shape matches the expected input
+        assert x.shape[1] == 4 * L and x.shape[2] == D_z_prime, \
+            "Patched tensor shape mismatch with expected dimensions."
 
-        # Reshape from [N*L, D_prime] to [N, L, Tz/L, Dz, C]
-        x = x.view(B, L, Tz // L, Dz, C)  # Shape: [B, L, Tz/L, Dz, C]
+        x = x.view(B, self.N_s, L, D_z_prime)
 
-        # Rearrange to [B, Tz, Dz, C]
-        x = x.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, Tz, Dz, C]
-        x = x.view(B, Tz, Dz, C)
+        # Step 3: Flatten patch dimensions back into [batch_size, T_z, D_z, C]
+        x = x.permute(0, 2, 1, 3).contiguous()  # [batch_size, L, 4, patch_size * D_z * C]
+        x = x.reshape(B*self.N_s, T_z, D_z, C)  # [batch_size, T_z, D_z, C]
 
-        # Final rearrangement to [B, C, Tz, Dz]
-        x = x.permute(0, 3, 1, 2).contiguous()  # Shape: [B, C, Tz, Dz]
-
-        return x
+        return x.permute(0, 3, 1, 2)
 
 
         
@@ -510,12 +516,14 @@ class DiT(nn.Module):
         """
         self.eval()  # Set model to evaluation mode
         with torch.no_grad():
-            z_m_t = noise  # Start with random noise
-            
+            noise = noise.to(torch.float16)
+            z_m_t = self.pt_E_VAE(noise).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
+            z_m_t = z_m_t.permute(0, 1, 3, 2)
+
             for t in reversed(range(1, num_steps + 1)):
                 # Compute t_embed for the current step
                 t_tensor = torch.tensor([t / num_steps], device=z_m_t.device).float().view(1, -1)
-                t_embed = self.time_embed(t_tensor).expand(z_m_t.shape[0], -1)
+                t_embed = self.time_embed(t_tensor).expand(self.batch_size, z_m_t.shape[2], -1)
                 
                 # Partition
                 z_m_t_patched, s_c = self.partitioner(z_m_t, s_i)
@@ -527,9 +535,12 @@ class DiT(nn.Module):
 
                 # Unpatchify and decode
                 z_m_t = self.unpatchify(z_m_t_patched)
-                z_m_t = self.pt_D_VAE(z_m_t)
 
-        return z_m_t
+            # Decoder
+            z_m_t = z_m_t.to(torch.float16)
+            z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32)
+
+        return z_m_t # ([8, 1, 400, 64])
 
 
 class DisMix_LDM(nn.Module):
@@ -592,7 +603,7 @@ class DisMix_LDM(nn.Module):
         self.D_s = D_s
         self.L = L
         self.device = device
-        self.partitioner = DiTPatchPartitioner()
+        self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.N_s = N_s # 4
         self.batch_size = batch_size
         self.dit = DiT(
@@ -626,6 +637,11 @@ class DisMix_LDM(nn.Module):
     
     
     def forward(self, x_m, x_s, evaluate=False): # x_q exactly is x_s in inference
+        # Reshape
+        _, _, F, T = x_m.shape
+        x_m = x_m.repeat(1, self.N_s, 1, 1).view(-1, 1, F, T)  # Shape: [BS*4, 1, 64, 400]
+        x_s = x_s.view(-1, 1, F, T)
+        
         e_m = self.M_Encoder(x_m)
         e_q = self.Q_Encoder(x_s)
         
@@ -647,12 +663,14 @@ class DisMix_LDM(nn.Module):
         s_i = torch.cat((pitch_latent, timbre_latent), dim=3) # s_c: batch*N_s, 8, 100, 32
         x_s = x_s.permute(0, 1, 3, 2)
         
-        """ Latent Diffusion Model """
+        # Latent Diffusion Model
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
         if evaluate:
-            x_s_recon = self.dit.evaluate(x_s, s_i).squeeze(1)
+            x_s_recon = self.dit.evaluate(x_s, s_i) #.squeeze(1)
         else:
             x_s_recon = self.dit(x_s, s_i, t).squeeze(1)
+
+        x_s_recon = x_s_recon.permute(0, 1, 3, 2).view(self.batch_size, self.N_s, F, T)
 
         return e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon #res_audio
     
@@ -703,7 +721,7 @@ class DisMix_LDM_Model(pl.LightningModule):
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
-            x_m, x_s_recon.sum(dim=0),
+            x_m, x_s_recon.sum(dim=1),
             x_s_i, x_s_recon,
             timbre_mean, timbre_logvar,
         )
@@ -730,9 +748,9 @@ class DisMix_LDM_Model(pl.LightningModule):
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
-            x_m, x_s_recon.sum(dim=0),
+            x_m, x_s_recon.sum(dim=1),
             x_s_i, x_s_recon,
-            timbre_mean, timbre_logvar,
+            timbre_mean.squeeze(2), timbre_logvar.squeeze(2),
         )
         
         ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)

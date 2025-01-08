@@ -48,6 +48,8 @@ class ELBOLoss(nn.Module):
         
         # Total ELBO loss
         loss = recon_loss_m + recon_loss_x + kl_loss #+ source_recon_loss # + pitch_loss
+        print("Tau", tau_logvars.shape, tau_means.shape)
+        print("kl", kl_loss)
         print(recon_loss_m.item(), recon_loss_x.item(), kl_loss.item()) #, source_recon_loss.item())
         return loss
     
