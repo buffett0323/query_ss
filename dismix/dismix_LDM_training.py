@@ -28,7 +28,7 @@ torch.set_float32_matmul_precision('high')
 log_wandb = False # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [1] #[0, 1, 2, 3]
+device_id = [3] #[0, 1, 2, 3]
 batch_size = 2
 N_s = 4
 lr = 1e-4
@@ -49,9 +49,10 @@ dm = CocoChoraleDataModule(
 pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16)#.to(device)
 vae = pipe.vae
 model = DisMix_LDM_Model(
-    batch_size=batch_size,
-    N_s=N_s,
     vae=vae,
+    learning_rate=lr,
+    N_s=N_s,
+    batch_size=batch_size,
 )
 
 
@@ -112,8 +113,8 @@ trainer = Trainer(
     strategy=strategy,
     callbacks=cb,
     precision='16-mixed' if use_gpu else 32,
-    gradient_clip_val=model.clip_value,
+    gradient_clip_val=0.5,
 )
 
 trainer.fit(model, dm)
-trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
+# trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)

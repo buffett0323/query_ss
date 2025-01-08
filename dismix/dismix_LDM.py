@@ -661,6 +661,7 @@ class DisMix_LDM_Model(pl.LightningModule):
     def __init__(
         self,
         vae,
+        learning_rate,
         D_z=16,
         D_s=32,
         L=25,
@@ -684,21 +685,21 @@ class DisMix_LDM_Model(pl.LightningModule):
             batch_size=batch_size,
             device=device,
         )
-        self.save_hyperparameters()
+        # self.save_hyperparameters()
         self.batch_size = batch_size
+        self.learning_rate = learning_rate
         
         # Loss functions
         self.elbo_loss_fn = ELBOLoss() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
         self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
         
-        
-    def forward(self, x_m, x_s):
-        return self.model(x_m, x_s)
+    def forward(self, x_m, x_s, evaluate=False):
+        return self.model(x_m, x_s, evaluate)
     
     def training_step(self, batch, batch_idx):
         x_m, x_s_i, pitch_annotation = batch
-        e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon = self(x_m, x_s_i)
+        e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon = self(x_m, x_s_i, evaluate=False)
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(

@@ -19,12 +19,18 @@ import matplotlib.pyplot as plt
 from typing import Optional
 
 def custom_collate_fn(batch):
-    chord_spec = torch.stack([item[0] for item in batch])
-    note_specs = [item[1] for item in batch]
-    midi_label = [item[2] for item in batch]
-    inst_label = [item[3] for item in batch]
+    mix_melspec = torch.stack([item[0] for item in batch])
+    stems_melspec = torch.stack([item[1] for item in batch])
+    pitch_annotation = torch.stack([item[2] for item in batch])
 
-    return chord_spec, note_specs, midi_label, inst_label
+    # chord_spec = torch.stack([item[0] for item in batch])
+    # note_specs = [item[1] for item in batch]
+    # midi_label = [item[2] for item in batch]
+    # inst_label = [item[3] for item in batch]
+    # return chord_spec, note_specs, midi_label, inst_label
+    return mix_melspec, stems_melspec, pitch_annotation
+
+   
 
 def spec_crop(image, height, width):
     return crop(image, top=0, left=0, height=height, width=width)
@@ -386,7 +392,7 @@ class MusicalObjectDataModule(LightningDataModule):
 class CocoChoraleDataset(Dataset):
     def __init__(
         self, 
-        N_s = 4,
+        N_s=4,
         file_dir='/home/buffett/NAS_189/cocochorales_full_v1_output/main_dataset',
         split='train',
         segment_duration=4.0,
@@ -468,8 +474,9 @@ class CocoChoraleDataset(Dataset):
             csv_df = pd.read_csv(csv_file)
             pitch_sequence = self.get_pitch_sequence(csv_df, start_frame)
             pitch_annotation.append(pitch_sequence)  
-            
-        return mix_melspec, stems_melspec, pitch_annotation
+        
+        pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
+        return mix_melspec, torch.cat(stems_melspec, dim=0), torch.cat(pitch_annotation, dim=0)
 
 
 
@@ -560,13 +567,18 @@ if __name__ == '__main__':
     root = f"{comp_path}/cocochorales_output/main_dataset"
     
     dm = CocoChoraleDataModule(root=root, batch_size=2)
-    
     dm.setup(stage='fit')
 
     print('Dataset sample count: {}'.format(dm.num_samples))
     
     mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
-
-    print(mix_melspec.shape, stems_melspec[0].shape)
+    print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    
+    for batch in dm.train_dataloader():
+        x_m, x_s_i, pitch_annotation = batch
+        print(x_m.shape, x_s_i.shape, pitch_annotation.shape); break
+    
+    
+        
 
 
