@@ -1,0 +1,63 @@
+# Pre-process
+segment_thres: 3
+segment_second: 5
+sep_model_name: "htdemucs"
+target: "chorus"
+log_wandb: True #False
+
+# distributed training
+nodes: 1
+gpus: 1 # I recommend always assigning 1 GPU to 1 node
+device: "cuda:2"
+gpu_ids: [2]
+nr: 0 # machine nr. in node (0 -- nodes - 1)
+dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
+num_workers: 24
+dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datasets"
+npy_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy"
+# pre_processed_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt"
+
+
+# train options
+seed: 42 # sacred handles automatic seeding when passed in the config
+batch_size: 32 #512 
+start_epoch: 0
+epochs: 100
+check_val_every_n_epoch: 2
+early_stop_patience: 5
+lr: 3e-4
+
+# dataset options
+max_length: 64
+n_fft: 2048
+hop_length: 1024
+sample_rate: 44100 
+n_mels: 128 
+
+# transform options
+tm_param: 30
+fm_param: 15
+crop_size: 128
+noise_level: 0.05 #0.005
+
+# model options
+# resnet: "resnet18"
+encoder_name: "GatedCNN" # "GatedCNN"
+channels: 2
+encoder_output_dim: 512
+projection_dim: 128
+model_dict_save_dir: "./model_dict"
+
+# loss options
+optimizer: "Adam" #"Adam" # or LARS (experimental)
+weight_decay: 1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+temperature: 0.5 # see appendix B.7.: Optimal temperature under different batch sizes
+
+# reload options
+model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+epoch_num: 100 # set to checkpoint number
+reload: False
+
+# # logistic regression options
+# logistic_batch_size: 256
+# logistic_epochs: 500

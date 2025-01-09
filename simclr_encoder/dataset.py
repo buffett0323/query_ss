@@ -14,15 +14,8 @@ from torchaudio.transforms import MelSpectrogram
 from pytorch_lightning import LightningDataModule
 from typing import Optional
 from tqdm import tqdm
-from mutagen.mp3 import MP3
-from scipy.signal import fade
 from torchaudio.functional import pitch_shift
-
-
-
-
-
-
+from utils import yaml_config_hook
 
 class NSynthDataset(Dataset):
     def __init__(
@@ -30,7 +23,10 @@ class NSynthDataset(Dataset):
         data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/",
         split="train",
     ):
-        self.data_path_list = os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
+        self.data_path_list = [
+            os.path.join(data_dir, f"nsynth-{split}", "npy", i)
+            for i in os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
+        ]
         
 
     def __len__(self):
@@ -39,6 +35,75 @@ class NSynthDataset(Dataset):
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
         return np.load(path)
+
+
+class NSynthDataModule(LightningDataModule):
+    def __init__(
+        self,
+        args,
+        data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/", 
+    ):
+        super(NSynthDataModule, self).__init__()
+        self.args = args
+        self.data_dir = data_dir
+        self.pin_memory = True
+        self.drop_last = False
+        
+    def setup(self, stage: Optional[str] = None):
+        # Assign train/val datasets for use in dataloaders
+        if stage == "fit" or stage is None:
+            self.train_ds = NSynthDataset(
+                data_dir=self.data_dir,
+                split="train",
+            )
+            
+            self.val_ds = NSynthDataset(
+                data_dir=self.data_dir,
+                split="valid",
+            )
+        
+        # Assign test dataset for use in dataloader(s)
+        if stage == "test" or stage is None:
+            self.test_ds = NSynthDataset(
+                data_dir=self.data_dir,
+                split="test",
+            )
+            
+            
+    def train_dataloader(self):
+        """The train dataloader."""
+        return self._data_loader(
+            self.train_ds,
+            shuffle=True)
+
+    def val_dataloader(self):
+        """The val dataloader."""
+        return self._data_loader(
+            self.val_ds,
+            shuffle=False)
+
+    def test_dataloader(self):
+        """The test dataloader."""
+        return self._data_loader(
+            self.test_ds,
+            shuffle=False)
+        
+    
+    def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
+        return DataLoader(
+            dataset,
+            batch_size=self.args.batch_size,
+            shuffle=shuffle,
+            num_workers=self.args.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory,
+        )
+    
+    @property
+    def num_samples(self) -> int:
+        self.setup(stage = 'fit')
+        return len(self.train_ds)
+
 
 
 class CLARTransform(nn.Module):
@@ -130,5 +195,17 @@ class CLARTransform(nn.Module):
 
 
 if __name__ == "__main__":
-    db = NSynthDataset()
-    print(len(db))
+    parser = argparse.ArgumentParser(description="SimCLR")
+
+    config = yaml_config_hook("config.yaml")
+    for k, v in config.items():
+        parser.add_argument(f"--{k}", default=v, type=type(v))
+
+    args = parser.parse_args()
+    dm = NSynthDataModule(
+        args=args,
+    )
+    dm.setup()
+    
+    for i in dm.train_dataloader():
+        print(i.shape); break
