@@ -44,7 +44,7 @@ class ELBOLoss(nn.Module):
         # 3. KL Divergence for timbre latent (using standard Gaussian prior)
         # kl_loss = -0.5 * torch.sum(1 + tau_logvars - tau_means.pow(2) - tau_logvars.exp(), dim=1)
         # kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means ** 2 - tau_logvars.exp(), dim = 1), dim = 0)
-        kl_loss = torch.mean(0.5 * torch.sum(tau_logvars.exp() + tau_means ** 2 - 1 - tau_logvars, dim=2))
+        kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_logvars.exp() - tau_means ** 2, dim=2))
 
         # kl_loss = self.kl_divergence(timbre_latent, tau_means, tau_logvars)
         
