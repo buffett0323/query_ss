@@ -1,9 +1,10 @@
 # Using original track, without .dbfss
 import os
 import random
-import shutil
+import math
 import torch
 import torchaudio
+import librosa
 import argparse
 import numpy as np
 import torch.nn as nn
@@ -13,6 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchaudio.transforms import MelSpectrogram
 from pytorch_lightning import LightningDataModule
 from typing import Optional
+from librosa import effects
 from tqdm import tqdm
 from torchaudio.functional import pitch_shift
 from utils import yaml_config_hook
@@ -27,14 +29,24 @@ class NSynthDataset(Dataset):
             os.path.join(data_dir, f"nsynth-{split}", "npy", i)
             for i in os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
         ]
+        self.transform = CLARTransform()
         
+        
+    def get_spec_features(self, x, sr=16000):
+        # Convert audio to mel-spectrogram
+        mel_spec = librosa.feature.melspectrogram(y=x, sr=sr, hop_length=128)
+        return librosa.power_to_db(mel_spec)
+
 
     def __len__(self):
         return len(self.data_path_list)
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        return np.load(path)
+        x_i, x_j = self.transform(np.load(path).squeeze(0))
+        return x_i, x_j
+        # mel_i, mel_j = self.get_spec_features(x_i), self.get_spec_features(x_j)
+        # return mel_i, mel_j
 
 
 class NSynthDataModule(LightningDataModule):
@@ -110,79 +122,95 @@ class CLARTransform(nn.Module):
     def __init__(self, sample_rate=16000):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
-        self.transforms = random.choice([
+        self.transforms = [
             self.pitch_shift_transform,
-            self.fade_in_out_transform,
-            self.noise_injection_transform,
+            self.add_fade_transform,
+            self.add_noise_transform,
             self.time_masking_transform,
             self.time_shift_transform,
             self.time_stretch_transform,
-        ])
+        ]
         
         
-    def pitch_shift_transform(self, audio):
-        # Randomly pick a shift in the range [-15, 15]
-        shift = random.uniform(-15, 15)
-        return pitch_shift(audio, self.sample_rate, shift)
+    def pitch_shift_transform(self, x, n_steps=15):
+        return effects.pitch_shift(x, sr=self.sample_rate, n_steps=torch.randint(low=-n_steps, high=n_steps, size=[1]).item())
 
-    def fade_in_out_transform(self, audio):
-        fade_type = random.choice(['linear', 'logarithmic', 'exponential'])
-        fade_size = random.uniform(0, 0.5) * len(audio)
-        fade_size = int(fade_size)
-        
-        if fade_type == 'linear':
-            fade_in = np.linspace(0, 1, fade_size)
-            fade_out = np.linspace(1, 0, fade_size)
-        elif fade_type == 'logarithmic':
-            fade_in = np.logspace(-1, 0, fade_size, base=10)
-            fade_in = (fade_in - fade_in.min()) / (fade_in.max() - fade_in.min())
-            fade_out = fade_in[::-1]
-        else:  # exponential
-            fade_in = np.linspace(0, 1, fade_size)**2
-            fade_out = fade_in[::-1]
+    def add_fade_transform(self, x, max_fade_size=.5):
+        def _fade_in(fade_shape, waveform_length, fade_in_len):
+            fade = np.linspace(0, 1, fade_in_len)
+            ones = np.ones(waveform_length - fade_in_len)
+            if fade_shape == 0:
+                fade = fade
+            if fade_shape == 1:
+                fade = np.power(2, (fade - 1)) * fade
+            if fade_shape == 2:
+                fade = np.log10(.1 + fade) + 1
+            if fade_shape == 3:
+                fade = np.sin(fade * math.pi / 2)
+            if fade_shape == 4:
+                fade = np.sin(fade * math.pi - math.pi / 2) / 2 + 0.5
+            return np.clip(np.concatenate((fade, ones)), 0, 1)
 
-        audio[:fade_size] *= fade_in
-        audio[-fade_size:] *= fade_out
-        return audio
+        def _fade_out(fade_shape, waveform_length, fade_out_len):
+            fade = torch.linspace(0, 1, fade_out_len)
+            ones = torch.ones(waveform_length - fade_out_len)
+            if fade_shape == 0:
+                fade = - fade + 1
+            if fade_shape == 1:
+                fade = np.power(2, - fade) * (1 - fade)
+            if fade_shape == 2:
+                fade = np.log10(1.1 - fade) + 1
+            if fade_shape == 3:
+                fade = np.sin(fade * math.pi / 2 + math.pi / 2)
+            if fade_shape == 4:
+                fade = np.sin(fade * math.pi + math.pi / 2) / 2 + 0.5
+            return np.clip(np.concatenate((ones, fade)), 0, 1)
 
-    def noise_injection_transform(self, audio):
+        waveform_length = x.shape[0]
+        fade_shape = np.random.randint(5)
+        fade_out_len = np.random.randint(int(x.shape[0] * max_fade_size))
+        fade_in_len = np.random.randint(int(x.shape[0] * max_fade_size))
+        return np.float32(
+            _fade_in(fade_shape, waveform_length, fade_in_len) * 
+            _fade_out(fade_shape, waveform_length, fade_out_len) * 
+            x
+        )
+
+
+    def add_noise_transform(self, x):
         noise_type = random.choice(['white', 'brown', 'pink'])
         snr = random.uniform(0.5, 1.5)  # Signal-to-noise ratio
         
         if noise_type == 'white':
-            noise = np.random.normal(0, 1, len(audio))
+            noise = np.random.normal(0, 1, len(x))
         elif noise_type == 'brown':
-            noise = np.cumsum(np.random.normal(0, 1, len(audio)))
+            noise = np.cumsum(np.random.normal(0, 1, len(x)))
             noise = noise / np.max(np.abs(noise))
         else:  # pink noise
-            freqs = np.fft.rfftfreq(len(audio))
+            freqs = np.fft.rfftfreq(len(x))
             noise = np.fft.irfft(np.random.randn(len(freqs)) / (freqs + 1e-6))
-
+        
         noise = noise / np.max(np.abs(noise))
-        audio = audio + noise / snr
-        return np.clip(audio, -1, 1)
+        x = x + noise / snr
+        return np.clip(x, -1, 1)
 
-    def time_masking_transform(self, audio):
-        max_segment = int(len(audio) / 8)
-        mask_size = random.randint(1, max_segment)
-        start = random.randint(0, len(audio) - mask_size)
-        audio[start:start + mask_size] = 0
-        return audio
 
-    def time_shift_transform(self, audio):
-        shift = random.randint(-len(audio) // 2, len(audio) // 2)
-        return np.roll(audio, shift)
+    def time_masking_transform(self, x, sr=0.125):
+        sr = int(x.shape[0] * sr)
+        start = np.random.randint(x.shape[0] - sr)
+        x[start: start + sr] = np.float32(np.random.normal(0, 0.01, sr))
+        return x
 
-    def time_stretch_transform(self, audio):
-        rate = random.uniform(0.5, 1.5)
-        stretched = torchaudio.functional.time_stretch(torch.tensor(audio).unsqueeze(0), self.sample_rate, rate)
-        if rate > 1:
-            # Crop to original size
-            stretched = stretched[:len(audio)]
-        else:
-            # Pad to original size
-            stretched = np.pad(stretched, (0, len(audio) - len(stretched)), mode='constant')
-        return stretched
+    def time_shift_transform(self, x, shift_rate=8000):
+        return np.roll(x, torch.randint(low=-shift_rate, high=shift_rate, size=[1]).item())
+
+    def time_stretch_transform(self, x, length=4):
+        x = effects.time_stretch(x, rate=random.uniform(0.5, 1.5))
+        x = librosa.resample(x, orig_sr=x.shape[0] / length, target_sr=self.sample_rate)
+        if x.shape[0] > (self.sample_rate * length):
+            return x[:(self.sample_rate * length)]
+        return np.pad(x, [0, (self.sample_rate * length) - x.shape[0]])
+
 
     def __call__(self, x):        
         # Apply random augmentations
@@ -207,5 +235,7 @@ if __name__ == "__main__":
     )
     dm.setup()
     
-    for i in dm.train_dataloader():
-        print(i.shape); break
+    ds = NSynthDataset()
+    for i in range(30):
+        x, y = ds[i]
+        print(x.shape, y.shape)

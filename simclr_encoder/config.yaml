@@ -3,7 +3,7 @@ segment_thres: 3
 segment_second: 5
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: True #False
+log_wandb: False #False
 
 # distributed training
 nodes: 1
@@ -13,25 +13,25 @@ gpu_ids: [2]
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 num_workers: 24
-dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datasets"
-npy_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy"
+# dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datasets"
+# npy_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy"
 # pre_processed_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt"
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 32 #512 
+batch_size: 512 #512 
 start_epoch: 0
 epochs: 100
 check_val_every_n_epoch: 2
 early_stop_patience: 5
-lr: 3e-4
+lr: 0.0003
 
 # dataset options
 max_length: 64
 n_fft: 2048
-hop_length: 1024
-sample_rate: 44100 
+hop_length: 512 #1024
+sample_rate: 16000 #44100 
 n_mels: 128 
 
 # transform options
