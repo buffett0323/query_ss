@@ -43,14 +43,14 @@ class ELBOLoss(nn.Module):
 
         # 3. KL Divergence for timbre latent (using standard Gaussian prior)
         # kl_loss = -0.5 * torch.sum(1 + tau_logvars - tau_means.pow(2) - tau_logvars.exp(), dim=1)
-        kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means ** 2 - tau_logvars.exp(), dim = 1), dim = 0)
+        # kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means ** 2 - tau_logvars.exp(), dim = 1), dim = 0)
+        kl_loss = torch.mean(0.5 * torch.sum(tau_logvars.exp() + tau_means ** 2 - 1 - tau_logvars, dim=2))
+
         # kl_loss = self.kl_divergence(timbre_latent, tau_means, tau_logvars)
         
         # Total ELBO loss
         loss = recon_loss_m + recon_loss_x + kl_loss #+ source_recon_loss # + pitch_loss
-        print("Tau", tau_logvars.shape, tau_means.shape)
-        print("kl", kl_loss)
-        print(recon_loss_m.item(), recon_loss_x.item(), kl_loss.item()) #, source_recon_loss.item())
+        # print(recon_loss_m.item(), recon_loss_x.item(), kl_loss.item()) #, source_recon_loss.item())
         return loss
     
     
@@ -76,32 +76,51 @@ class BarlowTwinsLoss(nn.Module):
         Returns:
         - loss (Tensor): Barlow Twins loss value.
         """
-        N_s, _ = e_q.size()
+        batch_size, channels, _, D_tau = e_q.shape
+        e_q = e_q.view(batch_size * channels, D_tau)  # Combine batch and channel dimensions
+        tau = tau.view(batch_size * channels, D_tau)  # Combine batch and channel dimensions
 
-        # Calculate mean and std, add epsilon to std to avoid division by zero
-        e_q_mean = e_q.mean(dim=0, keepdim=True)
-        e_q_std = e_q.std(dim=0, keepdim=True).clamp(min=self.epsilon)
-
-        tau_mean = tau.mean(dim=0, keepdim=True)
-        tau_std = tau.std(dim=0, keepdim=True).clamp(min=self.epsilon)
-        
-        # Normalize embeddings, replace NaNs in normalized tensors with zeros
-        e_q_norm = (e_q - e_q_mean) / e_q_std
-        tau_norm = (tau - tau_mean) / tau_std
-        e_q_norm = torch.nan_to_num(e_q_norm, nan=0.0)
-        tau_norm = torch.nan_to_num(tau_norm, nan=0.0)
+        # Normalize embeddings along the feature dimension (D_tau)
+        e_q = F.normalize(e_q, dim=1)  # Shape: [batch_size * channels, D_tau]
+        tau = F.normalize(tau, dim=1)  # Shape: [batch_size * channels, D_tau]
 
         # Compute the cross-correlation matrix C
-        C = torch.einsum('bi, bj -> ij', e_q_norm, tau_norm) / N_s #(N_s + self.epsilon)
-        
-        # Clamp C to avoid extreme values leading to NaNs
-        C = C.clamp(-1 + self.epsilon, 1 - self.epsilon)
+        C = torch.mm(e_q.T, tau) / (batch_size * channels)  # Shape: [D_tau, D_tau]
 
-        # Compute the loss: sum over diagonal elements
-        c_diff = (1 - torch.diag(C)) ** 2
-        loss = c_diff.sum()
+        # Create identity matrix for the same dimensionality as C
+        identity = torch.eye(C.shape[0], device=C.device)  # Shape: [D_tau, D_tau]
+
+        # Compute the Barlow Twins loss
+        # Penalize off-diagonal terms and deviations from 1 on the diagonal
+        loss = torch.sum((C - identity) ** 2)
 
         return loss
+        # N_s, _ = e_q.size()
+
+        # # Calculate mean and std, add epsilon to std to avoid division by zero
+        # e_q_mean = e_q.mean(dim=0, keepdim=True)
+        # e_q_std = e_q.std(dim=0, keepdim=True).clamp(min=self.epsilon)
+
+        # tau_mean = tau.mean(dim=0, keepdim=True)
+        # tau_std = tau.std(dim=0, keepdim=True).clamp(min=self.epsilon)
+        
+        # # Normalize embeddings, replace NaNs in normalized tensors with zeros
+        # e_q_norm = (e_q - e_q_mean) / e_q_std
+        # tau_norm = (tau - tau_mean) / tau_std
+        # e_q_norm = torch.nan_to_num(e_q_norm, nan=0.0)
+        # tau_norm = torch.nan_to_num(tau_norm, nan=0.0)
+
+        # # Compute the cross-correlation matrix C
+        # C = torch.einsum('bi, bj -> ij', e_q_norm, tau_norm) / N_s #(N_s + self.epsilon)
+        
+        # # Clamp C to avoid extreme values leading to NaNs
+        # C = C.clamp(-1 + self.epsilon, 1 - self.epsilon)
+
+        # # Compute the loss: sum over diagonal elements
+        # c_diff = (1 - torch.diag(C)) ** 2
+        # loss = c_diff.sum()
+
+        # return loss
 
     
 

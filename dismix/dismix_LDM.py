@@ -19,7 +19,7 @@ from diffusers.models import AutoencoderKL
 
 # from hifi_gan.inference import mel_to_wav
 # from hifi_gan.env import AttrDict
-import argparse, json
+# import argparse, json
 
 from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
 from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
@@ -415,6 +415,7 @@ class DiT(nn.Module):
         self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.N_s = N_s # 4
         self.batch_size = batch_size
+        self.condition_dim = condition_dim
         
         self.transformer_blocks = nn.ModuleList([
             TransformerBlock(dim, num_heads, condition_dim, ff_dim, dropout) 
@@ -486,7 +487,7 @@ class DiT(nn.Module):
         z_m_t, s_c = self.partitioner(z_s, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
 
         # Embed the diffusion step t and combine with sc
-        t_embed = self.time_embed(t)  # Shape: [batch_size, condition_dim]
+        t_embed = self.time_embed(t).view(self.batch_size, -1, self.condition_dim)  # Shape: [batch_size, condition_dim]
         condition = s_c + t_embed
         
         # Pass through transformer blocks
@@ -657,18 +658,18 @@ class DisMix_LDM(nn.Module):
         
         # Timbre Encoder
         timbre_mean, timbre_logvar, timbre_latent = self.timbre_encoder(combined)
-        timbre_latent = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
+        timbre_latent_expand = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
         
         # Concat: f_phi_s
-        s_i = torch.cat((pitch_latent, timbre_latent), dim=3) # s_c: batch*N_s, 8, 100, 32
+        s_i = torch.cat((pitch_latent, timbre_latent_expand), dim=3) # s_c: batch*N_s, 8, 100, 32
         x_s = x_s.permute(0, 1, 3, 2)
         
         # Latent Diffusion Model
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
         if evaluate:
-            x_s_recon = self.dit.evaluate(x_s, s_i) #.squeeze(1)
+            x_s_recon = self.dit.evaluate(x_s, s_i)
         else:
-            x_s_recon = self.dit(x_s, s_i, t).squeeze(1)
+            x_s_recon = self.dit(x_s, s_i, t)
 
         x_s_recon = x_s_recon.permute(0, 1, 3, 2).view(self.batch_size, self.N_s, F, T)
 
@@ -705,6 +706,7 @@ class DisMix_LDM_Model(pl.LightningModule):
         )
         # self.save_hyperparameters()
         self.batch_size = batch_size
+        self.N_s = N_s
         self.learning_rate = learning_rate
         
         # Loss functions
@@ -713,7 +715,8 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
         
     def forward(self, x_m, x_s, evaluate=False):
-        return self.model(x_m, x_s, evaluate)
+        with torch.autocast(device_type="cuda"):
+            return self.model(x_m, x_s, evaluate)
     
     def training_step(self, batch, batch_idx):
         x_m, x_s_i, pitch_annotation = batch
@@ -725,6 +728,7 @@ class DisMix_LDM_Model(pl.LightningModule):
             x_s_i, x_s_recon,
             timbre_mean, timbre_logvar,
         )
+        pitch_annotation = pitch_annotation.view(self.batch_size*self.N_s, -1)
         
         ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
@@ -750,8 +754,9 @@ class DisMix_LDM_Model(pl.LightningModule):
         elbo_loss = self.elbo_loss_fn(
             x_m, x_s_recon.sum(dim=1),
             x_s_i, x_s_recon,
-            timbre_mean.squeeze(2), timbre_logvar.squeeze(2),
+            timbre_mean, timbre_logvar,
         )
+        pitch_annotation = pitch_annotation.view(self.batch_size*self.N_s, -1)
         
         ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
@@ -813,8 +818,8 @@ class DisMix_LDM_Model(pl.LightningModule):
 if __name__ == "__main__":
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     BS, N_s = 1, 4
-    x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
-    x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)#.to(torch.float16)
+    x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)
+    x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)
     
     # choice = ["ema", "mse"]
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[0]}").to(device)
