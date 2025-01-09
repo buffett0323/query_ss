@@ -71,6 +71,7 @@ class QueryEncoder(nn.Module):
     def forward(self, x):
         h = self.encoder(x)
         h = self.temporal_pool(h)
+        h = h.to(torch.float32)
         return h
     
 # Use the pre-trained encoder and freeze
@@ -99,8 +100,8 @@ class MixtureEncoder(nn.Module):
         with torch.no_grad():
             x = x.to(torch.float16)
             h = self.encoder(x).permute(0, 1, 3, 2)
-            h = h.to(torch.float32)
-        return self.conv(h)
+            # h = h.to(torch.float32)
+        return self.conv(h).to(torch.float32)
     
     
     
@@ -410,13 +411,15 @@ class DiT(nn.Module):
             dropout (float): Dropout rate.
         """
         super(DiT, self).__init__()
-        self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
-        self.pt_D_VAE = vae.decoder
-        self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.N_s = N_s # 4
         self.batch_size = batch_size
         self.condition_dim = condition_dim
         
+        self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
+        self.pt_D_VAE = vae.decoder
+        self.freeze_encoder()
+        
+        self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.transformer_blocks = nn.ModuleList([
             TransformerBlock(dim, num_heads, condition_dim, ff_dim, dropout) 
             for _ in range(num_blocks)
@@ -428,6 +431,11 @@ class DiT(nn.Module):
             nn.Linear(condition_dim, condition_dim)
         )
         
+
+    def freeze_encoder(self):
+        """Freeze the parameters of the encoder to prevent training."""
+        for param in self.pt_D_VAE.parameters():
+            param.requires_grad = False
         
     def unpatchify(self, x):
         """
@@ -479,9 +487,10 @@ class DiT(nn.Module):
         Returns:
             Tensor: Output tensor of shape [seq_len, batch_size, dim].
         """
-        x_s = x_s.to(torch.float16)
-        z_s = self.pt_E_VAE(x_s).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-        z_s = z_s.permute(0, 1, 3, 2)
+        with torch.no_grad():
+            x_s = x_s.to(torch.float16)
+            z_s = self.pt_E_VAE(x_s)#.to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
+            z_s = z_s.to(torch.float32).permute(0, 1, 3, 2)  # Convert to float32 for further processing
         
         # Partition
         z_m_t, s_c = self.partitioner(z_s, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
@@ -494,12 +503,13 @@ class DiT(nn.Module):
         for block in self.transformer_blocks:
             z_m_t = block(z_m_t, condition)
 
-        z_m_t = self.unpatchify(z_m_t)  
+        # Unpatchify and convert to float16 for pt_D_VAE
+        z_m_t = self.unpatchify(z_m_t).to(torch.float16) 
         
         # Decoder
-        z_m_t = z_m_t.to(torch.float16)
-        z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32)
-        return z_m_t.permute(0, 1, 3, 2)  
+        with torch.no_grad():
+            z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32).permute(0, 1, 3, 2)
+        return z_m_t #.to(torch.float32).permute(0, 1, 3, 2)
     
     
     
@@ -518,8 +528,8 @@ class DiT(nn.Module):
         self.eval()  # Set model to evaluation mode
         with torch.no_grad():
             noise = noise.to(torch.float16)
-            z_m_t = self.pt_E_VAE(noise).to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-            z_m_t = z_m_t.permute(0, 1, 3, 2)
+            z_m_t = self.pt_E_VAE(noise) #.to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
+            z_m_t = z_m_t.to(torch.float32).permute(0, 1, 3, 2)
 
             for t in reversed(range(1, num_steps + 1)):
                 # Compute t_embed for the current step
@@ -539,9 +549,9 @@ class DiT(nn.Module):
 
             # Decoder
             z_m_t = z_m_t.to(torch.float16)
-            z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32)
+            z_m_t = self.pt_D_VAE(z_m_t)
 
-        return z_m_t # ([8, 1, 400, 64])
+        return z_m_t.to(torch.float32) # ([8, 1, 400, 64])
 
 
 class DisMix_LDM(nn.Module):
@@ -556,7 +566,6 @@ class DisMix_LDM(nn.Module):
         beta_end=0.02, 
         N_s=4,
         batch_size=1,
-        device='cuda',
     ):
         """
         Args:
@@ -567,7 +576,6 @@ class DisMix_LDM(nn.Module):
             diffusion_steps (int): Number of diffusion steps.
             beta_start (float): Starting value of beta for noise schedule.
             beta_end (float): Ending value of beta for noise schedule.
-            device (str): Device to run the model on.
         """
         super().__init__()
         self.Q_Encoder = QueryEncoder(
@@ -599,11 +607,9 @@ class DisMix_LDM(nn.Module):
         
         self.pitch_encoder = PitchEncoder()
         self.timbre_encoder = TimbreEncoder()
-        self.vae = vae
         self.D_z = D_z
         self.D_s = D_s
         self.L = L
-        self.device = device
         self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.N_s = N_s # 4
         self.batch_size = batch_size
@@ -615,26 +621,11 @@ class DisMix_LDM(nn.Module):
 
         # Define the noise schedule
         self.diffusion_steps = diffusion_steps
-        self.beta = torch.linspace(beta_start, beta_end, diffusion_steps).to(device)  # (T,)
+        self.beta = torch.linspace(beta_start, beta_end, diffusion_steps)#.to(device)  # (T,)
         self.alpha = 1.0 - self.beta  # (T,)
         self.alpha_cumprod = torch.cumprod(self.alpha, dim=0)  # (T,)
-        self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]).to(device), self.alpha_cumprod[:-1]], dim=0)  # (T,)
+        self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]), self.alpha_cumprod[:-1]], dim=0)  # (T,)
 
-        
-    # def hifigan(self, mel):
-    #     parser = argparse.ArgumentParser()
-    #     parser.add_argument('--input_wavs_dir', default='test_files')
-    #     parser.add_argument('--output_dir', default='generated_files')
-    #     parser.add_argument('--checkpoint_file', default='LJ_V3/generator_v3')
-    #     a = parser.parse_args()
-
-    #     config_file = os.path.join(os.path.split(a.checkpoint_file)[0], 'config.json')
-    #     with open(config_file) as f:
-    #         data = f.read()
-            
-    #     json_config = json.loads(data)
-    #     h = AttrDict(json_config)
-    #     return mel_to_wav(mel, a, h, mel.device)
     
     
     def forward(self, x_m, x_s, evaluate=False): # x_q exactly is x_s in inference
@@ -663,7 +654,7 @@ class DisMix_LDM(nn.Module):
         # Concat: f_phi_s
         s_i = torch.cat((pitch_latent, timbre_latent_expand), dim=3) # s_c: batch*N_s, 8, 100, 32
         x_s = x_s.permute(0, 1, 3, 2)
-        
+
         # Latent Diffusion Model
         t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
         if evaluate:
@@ -689,7 +680,6 @@ class DisMix_LDM_Model(pl.LightningModule):
         beta_end=0.02, 
         N_s=4,
         batch_size=1,
-        device='cuda',
     ):
         super(DisMix_LDM_Model, self).__init__()
         self.model = DisMix_LDM(
@@ -702,7 +692,6 @@ class DisMix_LDM_Model(pl.LightningModule):
             beta_end=beta_end, 
             N_s=N_s,
             batch_size=batch_size,
-            device=device,
         )
         # self.save_hyperparameters()
         self.batch_size = batch_size
@@ -715,8 +704,7 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
         
     def forward(self, x_m, x_s, evaluate=False):
-        with torch.autocast(device_type="cuda"):
-            return self.model(x_m, x_s, evaluate)
+        return self.model(x_m, x_s, evaluate)
     
     def training_step(self, batch, batch_idx):
         x_m, x_s_i, pitch_annotation = batch

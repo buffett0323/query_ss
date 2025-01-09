@@ -25,11 +25,11 @@ warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = False # False
+log_wandb = True # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [3] #[0, 1, 2, 3]
-batch_size = 2
+device_id = [2] #[0, 1, 2, 3]
+batch_size = 4
 N_s = 4
 lr = 1e-4
 early_stop_patience = 100 #260000
@@ -113,8 +113,14 @@ trainer = Trainer(
     strategy=strategy,
     callbacks=cb,
     precision='16-mixed' if use_gpu else 32,
-    gradient_clip_val=0.5,
+    # gradient_clip_val=0.5,
 )
+
+# Sanity Check float 16
+for name, param in model.named_parameters():
+    if param.requires_grad and param.dtype == torch.float16:
+        print(f"Layer: {name}, Grad: {param.requires_grad}, Dtype: {param.dtype}")
+        assert param.dtype == torch.float32, f"Layer {name} parameters must be float32!"
 
 trainer.fit(model, dm)
 # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)

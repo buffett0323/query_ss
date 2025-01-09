@@ -91,8 +91,7 @@ if __name__ == "__main__":
     # print("Selected List:", sel_list)
     
     ### TODO: 'progressive-house', 'electro-big-room', 'house', 'trap-future-bass'
-    sel_list = ['progressive-trance', 'psy-trance', 
-                'reggae-dancehall-dub', 'tech-house', 'tech-trance', 'uplifting-trance']
+    sel_list = ['psy-trance', 'reggae-dancehall-dub']
     
     load_data_and_process(sel_list, input_path, output_path, devices)
     print("---All Well Done---")
