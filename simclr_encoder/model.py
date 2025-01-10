@@ -6,6 +6,7 @@ import librosa
 import numpy as np
 import torch.nn as nn
 from pytorch_lightning import Trainer, LightningModule
+import torch.nn.functional as F
 import torchaudio.transforms as T
 import torchvision.transforms as transforms
 from torchlars import LARS
@@ -15,30 +16,76 @@ import timm
 from loss import NT_Xent
 from dataset import CLARTransform
 
-    
+class GatedConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+        """
+        A single block of Gated Convolutional Neural Network.
+        
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            kernel_size (int): Size of the convolutional kernel.
+            stride (int): Stride of the convolution.
+            padding (int): Padding for the convolution.
+        """
+        super(GatedConvBlock, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+        self.gate = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+
+    def forward(self, x):
+        conv_out = self.conv(x)
+        gate_out = torch.sigmoid(self.gate(x))
+        return conv_out * gate_out
+
+
+class GatedCNN(nn.Module):
+    def __init__(self, in_channels=2, num_classes=128):
+        """
+        Gated Convolutional Neural Network for feature extraction.
+
+        Args:
+            in_channels (int): Number of input channels.
+            num_classes (int): Number of output features.
+        """
+        super(GatedCNN, self).__init__()
+        self.block1 = GatedConvBlock(in_channels, 64, kernel_size=3, stride=1, padding=1)
+        self.block2 = GatedConvBlock(64, 128, kernel_size=3, stride=2, padding=1)
+        self.block3 = GatedConvBlock(128, 256, kernel_size=3, stride=2, padding=1)
+        self.block4 = GatedConvBlock(256, 512, kernel_size=3, stride=2, padding=1)
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling
+        self.fc = nn.Linear(512, num_classes) # self.fc = nn.Linear(512, num_classes)
+        # TODO: Reparameterize
+
+    def forward(self, x):
+        x = F.relu(self.block1(x))
+        x = F.relu(self.block2(x))
+        x = F.relu(self.block3(x))
+        x = F.relu(self.block4(x))
+        x = self.global_pool(x)
+        x = torch.flatten(x, start_dim=1)
+        x = self.fc(x)
+        return x
 
 
 class SimCLR(nn.Module):
     def __init__(
-        self, 
+        self,
+        args,
         n_features=512, 
         projection_dim=128,
     ):
         super(SimCLR, self).__init__()
-        self.encoder = timm.create_model("resnet50", pretrained=True, in_chans=1) # self.encoder = vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1)
-        self.encoder.fc = nn.Identity()
-        # self.encoder.conv_proj = nn.Conv2d(
-        #     1,  # Single channel for mel-spectrograms
-        #     self.encoder.conv_proj.out_channels,
-        #     kernel_size=self.encoder.conv_proj.kernel_size,
-        #     stride=self.encoder.conv_proj.stride,
-        #     padding=self.encoder.conv_proj.padding,
-        #     bias=False
-        # )
+        self.args = args
+        # self.encoder = timm.create_model("resnet50", pretrained=True, in_chans=1)
+        # self.encoder.fc = nn.Identity()
+        self.encoder = GatedCNN(
+            in_channels=self.args.channels, 
+            num_classes=self.args.encoder_output_dim,
+        )
 
         # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
         self.projector = nn.Sequential(
-            nn.Linear(self.encoder.num_features, n_features), #, bias=False),
+            nn.Linear(n_features, n_features), #, bias=False),
             nn.ReLU(),
             nn.Linear(n_features, projection_dim), #, bias=False),
         )
@@ -70,6 +117,7 @@ class ContrastiveLearning(LightningModule):
         
         # Load Models
         self.model = SimCLR(
+            args=args,
             n_features=self.args.encoder_output_dim,
             projection_dim=self.args.projection_dim, 
         ).to(device)
