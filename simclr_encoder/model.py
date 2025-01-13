@@ -12,9 +12,10 @@ import torchvision.transforms as transforms
 from torchlars import LARS
 from torchvision.models import vit_b_16, ViT_B_16_Weights
 from torchvision.models.vision_transformer import VisionTransformer
-import timm
+
 from loss import NT_Xent
 from dataset import CLARTransform
+from torch_models import Wavegram_Logmel128_Cnn14
 
 class GatedConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
@@ -84,8 +85,16 @@ class SimCLR(nn.Module):
                 in_channels=self.args.channels, 
                 num_classes=self.args.encoder_output_dim,
             )
-        else:
-            self.encoder = ResnetEncoder()
+        else: # Wavegram_Logmel128_Cnn14
+            self.encoder = Wavegram_Logmel128_Cnn14(
+                sample_rate=self.args.sample_rate, 
+                window_size=self.args.window_size, 
+                hop_size=self.args.hop_length, 
+                mel_bins=self.args.n_mels, 
+                fmin=self.args.fmin,
+                fmax=self.args.fmax,
+                classes_num=self.args.encoder_output_dim,
+            )
             
         # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
         self.projector = nn.Sequential(

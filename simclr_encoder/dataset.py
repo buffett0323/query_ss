@@ -24,12 +24,14 @@ class NSynthDataset(Dataset):
         self, 
         data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/",
         split="train",
+        need_transform=True,
     ):
         self.data_path_list = [
             os.path.join(data_dir, f"nsynth-{split}", "npy", i)
             for i in os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
         ]
         self.transform = CLARTransform()
+        self.need_transform = need_transform
         
         
     def get_spec_features(self, x, sr=16000):
@@ -45,7 +47,10 @@ class NSynthDataset(Dataset):
         path = self.data_path_list[idx]
         x = np.load(path).squeeze(0)
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
-        x_i, x_j = self.transform(x_i, x_j)
+        
+        if self.need_transform:
+            x_i, x_j = self.transform(x_i, x_j)
+            
         return x_i, x_j
         # mel_i, mel_j = self.get_spec_features(x_i), self.get_spec_features(x_j)
         # return mel_i, mel_j
@@ -69,11 +74,13 @@ class NSynthDataModule(LightningDataModule):
             self.train_ds = NSynthDataset(
                 data_dir=self.data_dir,
                 split="train",
+                need_transform=self.args.need_transform,
             )
             
             self.val_ds = NSynthDataset(
                 data_dir=self.data_dir,
                 split="valid",
+                need_transform=self.args.need_transform,
             )
         
         # Assign test dataset for use in dataloader(s)
@@ -81,6 +88,7 @@ class NSynthDataModule(LightningDataModule):
             self.test_ds = NSynthDataset(
                 data_dir=self.data_dir,
                 split="test",
+                need_transform=self.args.need_transform,
             )
             
             

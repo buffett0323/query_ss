@@ -4,6 +4,7 @@ segment_second: 5
 sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: False #False
+need_transform: False
 
 # distributed training
 nodes: 1
@@ -32,7 +33,10 @@ max_length: 64
 n_fft: 2048
 hop_length: 512 #1024
 sample_rate: 16000 #44100 
-n_mels: 128 
+window_size: 512
+n_mels: 128
+fmin: 20
+fmax: 8000 # 16000/2
 
 # transform options
 tm_param: 30
@@ -42,7 +46,7 @@ noise_level: 0.05 #0.005
 
 # model options
 # resnet: "resnet18"
-encoder_name: "Resnet" # "GatedCNN"
+encoder_name: "wavegram" # "GatedCNN"
 channels: 1
 encoder_output_dim: 512
 projection_dim: 128
