@@ -67,6 +67,9 @@ class GatedCNN(nn.Module):
         return x
 
 
+
+    
+
 class SimCLR(nn.Module):
     def __init__(
         self,
@@ -76,13 +79,14 @@ class SimCLR(nn.Module):
     ):
         super(SimCLR, self).__init__()
         self.args = args
-        # self.encoder = timm.create_model("resnet50", pretrained=True, in_chans=1)
-        # self.encoder.fc = nn.Identity()
-        self.encoder = GatedCNN(
-            in_channels=self.args.channels, 
-            num_classes=self.args.encoder_output_dim,
-        )
-
+        if self.args.encoder_name == "GatedCNN":
+            self.encoder = GatedCNN(
+                in_channels=self.args.channels, 
+                num_classes=self.args.encoder_output_dim,
+            )
+        else:
+            self.encoder = ResnetEncoder()
+            
         # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
         self.projector = nn.Sequential(
             nn.Linear(n_features, n_features), #, bias=False),
@@ -91,8 +95,11 @@ class SimCLR(nn.Module):
         )
 
     def forward(self, x_i, x_j):
+        print("xixj", x_i.shape, x_j.shape)
+
         h_i = self.encoder(x_i)
         h_j = self.encoder(x_j)
+        print("hihj", h_i.shape, h_j.shape)
 
         z_i = self.projector(h_i)
         z_j = self.projector(h_j)

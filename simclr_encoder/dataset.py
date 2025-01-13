@@ -43,7 +43,9 @@ class NSynthDataset(Dataset):
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        x_i, x_j = self.transform(np.load(path).squeeze(0))
+        x = np.load(path).squeeze(0)
+        x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
+        x_i, x_j = self.transform(x_i, x_j)
         return x_i, x_j
         # mel_i, mel_j = self.get_spec_features(x_i), self.get_spec_features(x_j)
         # return mel_i, mel_j
@@ -122,6 +124,7 @@ class CLARTransform(nn.Module):
     def __init__(self, sample_rate=16000):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
+        self.length = 2
         self.transforms = [
             self.pitch_shift_transform,
             self.add_fade_transform,
@@ -204,19 +207,19 @@ class CLARTransform(nn.Module):
     def time_shift_transform(self, x, shift_rate=8000):
         return np.roll(x, torch.randint(low=-shift_rate, high=shift_rate, size=[1]).item())
 
-    def time_stretch_transform(self, x, length=4):
+    def time_stretch_transform(self, x):
         x = effects.time_stretch(x, rate=random.uniform(0.5, 1.5))
-        x = librosa.resample(x, orig_sr=x.shape[0] / length, target_sr=self.sample_rate)
-        if x.shape[0] > (self.sample_rate * length):
-            return x[:(self.sample_rate * length)]
-        return np.pad(x, [0, (self.sample_rate * length) - x.shape[0]])
+        x = librosa.resample(x, orig_sr=x.shape[0] / self.length, target_sr=self.sample_rate)
+        if x.shape[0] > (self.sample_rate * self.length):
+            return x[:(self.sample_rate * self.length)]
+        return np.pad(x, [0, (self.sample_rate * self.length) - x.shape[0]])
 
 
-    def __call__(self, x):        
+    def __call__(self, x1, x2):        
         # Apply random augmentations
         transform1, transform2 = random.sample(self.transforms, 2)
-        x1 = transform1(x)
-        x2 = transform2(x)
+        x1 = transform1(x1)
+        x2 = transform2(x2)
         return x1, x2
 
 
