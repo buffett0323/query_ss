@@ -46,7 +46,7 @@ class NSynthDataset(Dataset):
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
         x = np.load(path).squeeze(0)
-        x_i, x_j = x[:x.shape[0]*3//4], x[x.shape[0]//4:]
+        x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
