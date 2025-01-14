@@ -14,7 +14,7 @@ dismix/lightning_logs/
 contras/lightning_logs/
 contras/wandb/
 contras/model_dict/
-
+simclr_encoder/model_dict/
 lightning_logs/
 checkpoints/
 __pycache__/

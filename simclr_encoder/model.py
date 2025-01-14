@@ -6,17 +6,84 @@ import librosa
 import numpy as np
 import torch.nn as nn
 from pytorch_lightning import Trainer, LightningModule
+import torch.optim as optim
 import torch.nn.functional as F
 import torchaudio.transforms as T
 import torchvision.transforms as transforms
-from torchlars import LARS
+# from torchlars import LARS #from torch.optim import LARS
 from torchvision.models import vit_b_16, ViT_B_16_Weights
 from torchvision.models.vision_transformer import VisionTransformer
 
 from loss import NT_Xent
 from dataset import CLARTransform
 from torch_models import Wavegram_Logmel_Cnn14, Wavegram_Logmel128_Cnn14
+from torch.optim.optimizer import Optimizer
 
+
+class LARS(Optimizer):
+    """Layer-wise Adaptive Rate Scaling (LARS) optimizer.
+
+    Args:
+        params (iterable): Parameters to optimize or dictionaries defining parameter groups.
+        lr (float): Learning rate.
+        momentum (float): Momentum factor (default: 0).
+        weight_decay (float): Weight decay (L2 penalty) (default: 0).
+        eps (float): Epsilon for numerical stability (default: 1e-8).
+        trust_coef (float): Trust coefficient for adaptive learning rate (default: 0.001).
+    """
+
+    def __init__(self, params, lr=1e-3, momentum=0.9, weight_decay=0, eps=1e-8, trust_coef=0.001):
+        defaults = dict(lr=lr, momentum=momentum, weight_decay=weight_decay, eps=eps, trust_coef=trust_coef)
+        super(LARS, self).__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        """Performs a single optimization step.
+
+        Args:
+            closure (callable, optional): A closure that reevaluates the model and returns the loss.
+
+        Returns:
+            loss (optional): The loss if the closure is provided.
+        """
+        loss = None
+        if closure is not None:
+            loss = closure()
+
+        for group in self.param_groups:
+            lr = group["lr"]
+            momentum = group["momentum"]
+            weight_decay = group["weight_decay"]
+            eps = group["eps"]
+            trust_coef = group["trust_coef"]
+
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+
+                grad = p.grad.data
+                if weight_decay != 0:
+                    grad = grad.add(p.data, alpha=weight_decay)
+
+                param_norm = torch.norm(p.data)
+                grad_norm = torch.norm(grad)
+                adaptive_lr = trust_coef * param_norm / (grad_norm + eps) if param_norm > 0 and grad_norm > 0 else 1.0
+
+                scaled_lr = adaptive_lr * lr
+                state = self.state[p]
+
+                # Initialize momentum buffer
+                if "momentum_buffer" not in state:
+                    state["momentum_buffer"] = torch.clone(grad).detach()
+                else:
+                    state["momentum_buffer"].mul_(momentum).add_(grad)
+
+                p.data.add_(state["momentum_buffer"], alpha=-scaled_lr)
+
+        return loss
+    
+    
+    
 class GatedConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         """
@@ -219,38 +286,44 @@ class ContrastiveLearning(LightningModule):
         if self.args.optimizer == "Adam":
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
         
-        elif self.args.optimizer == "LARS": # TODO
-            # optimized using LARS with linear learning rate scaling
-            # (i.e. LearningRate = 0.3 × BatchSize/256) and weight decay of 10−6.
+        elif self.args.optimizer == "LARS":
             learning_rate = 0.3 * self.args.batch_size / 256
-            
-            # Base optimizer: SGD with momentum
-            base_optimizer = torch.optim.SGD(
+
+            # # Base optimizer: SGD with momentum
+            # base_optimizer = optim.SGD(
+            #     self.model.parameters(),
+            #     lr=learning_rate,
+            #     momentum=0.9,
+            #     weight_decay=self.args.weight_decay,
+            # )
+
+            # optimizer = torch.optim.LARS(
+            #     base_optimizer,
+            #     eps=1e-8,  # Epsilon for numerical stability
+            #     trust_coef=0.001,  # Trust coefficient
+            # )
+            optimizer = LARS(
                 self.model.parameters(),
                 lr=learning_rate,
                 momentum=0.9,
                 weight_decay=self.args.weight_decay,
+                trust_coef=0.001,
             )
 
 
-            # Wrap the base optimizer with LARS
-            optimizer = LARS(
-                optimizer=base_optimizer,
-                eps=1e-8,  # Epsilon for numerical stability
-                trust_coef=0.001,  # Trust coefficient
-            )
 
-            # Cosine annealing scheduler
+            # Use a cosine annealing learning rate scheduler
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                base_optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1
+                optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1
             )
         else:
-            raise NotImplementedError
-
+            raise NotImplementedError(f"Optimizer {self.args.optimizer} is not implemented.")
+        
         if scheduler:
             return {"optimizer": optimizer, "lr_scheduler": scheduler}
         else:
             return {"optimizer": optimizer}
+
         
     def save_model(self, checkpoint_name="simclr.pth"):
         """Save model state dictionary."""
