@@ -1,41 +1,26 @@
+from torch_models import Wavegram_Logmel128_Cnn14, Wavegram_Logmel_Cnn14
 import torch
-import torch.nn as nn
-from torchaudio.transforms import MelSpectrogram, AmplitudeToDB
-# Load the Wavegram_Logmel_Cnn model from torch.hub
-model = torch.hub.load('qiuqiangkong/panns_inference', 'Wavegram_Logmel_Cnn14', pretrained=True)
 
-# Remove the classification head for feature extraction
-model.fc_audioset = nn.Identity()
+# Parameters for the model
+sample_rate = 16000      # 16 kHz audio sampling rate
+window_size = 1024       # FFT window size
+hop_size = 320           # Hop length
+mel_bins = 64            # Number of mel filter banks
+fmin = 20                # Minimum frequency (Hz)
+fmax = 8000              # Maximum frequency (Hz)
+classes_num = 512       # Number of output classes (e.g., 10 sound categories)
 
-# Send to device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-model.eval()
-
-print(model)
-
-# Generate a dummy mel-spectrogram (Batch Size=16, Channels=1, Height=128, Width=128)
-batch_size = 16
-n_mels = 128
-time_frames = 128
-dummy_input = torch.randn(batch_size, 1, n_mels, time_frames).to(device)  # Log-mel spectrogram
-
-# Alternatively, preprocess real audio
-# waveform: [Batch Size, Samples] - Raw audio waveform
-sample_rate = 16000
-mel_transform = MelSpectrogram(
+# Initialize the model
+model = Wavegram_Logmel_Cnn14(
     sample_rate=sample_rate,
-    n_fft=2048,
-    hop_length=512,
-    n_mels=n_mels
+    window_size=window_size,
+    hop_size=hop_size,
+    mel_bins=mel_bins,
+    fmin=fmin,
+    fmax=fmax,
+    classes_num=classes_num
 )
-amplitude_to_db = AmplitudeToDB()
 
-waveform = torch.randn(batch_size, sample_rate * 4)  # Example 4-second audio
-mel_spectrogram = amplitude_to_db(mel_transform(waveform)).unsqueeze(1).to(device)  # Add channel dimension
-
-# Pass the input through the model
-output_embeddings = model(mel_spectrogram)  # Shape: [Batch Size, Feature Dimension]
-
-print(f"Input Shape: {mel_spectrogram.shape}")  # torch.Size([16, 1, 128, 128])
-print(f"Output Shape: {output_embeddings.shape}")  # torch.Size([16, 2048])
+sample_input = torch.randn(16, 32000)
+output = model(sample_input)
+print(output.shape)

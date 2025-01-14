@@ -2354,8 +2354,8 @@ class Wavegram_Logmel_Cnn14(nn.Module):
         self.conv_block5 = ConvBlock(in_channels=512, out_channels=1024)
         self.conv_block6 = ConvBlock(in_channels=1024, out_channels=2048)
 
-        self.fc1 = nn.Linear(2048, 2048, bias=True)
-        self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
+        self.fc1 = nn.Linear(2048, classes_num, bias=True)
+        # self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
         
         self.init_weight()
 
@@ -2364,7 +2364,7 @@ class Wavegram_Logmel_Cnn14(nn.Module):
         init_bn(self.pre_bn0)
         init_bn(self.bn0)
         init_layer(self.fc1)
-        init_layer(self.fc_audioset)
+        # init_layer(self.fc_audioset)
  
     def forward(self, input, mixup_lambda=None):
         """
@@ -2418,11 +2418,11 @@ class Wavegram_Logmel_Cnn14(nn.Module):
         x = F.dropout(x, p=0.5, training=self.training)
         x = F.relu_(self.fc1(x))
         embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
+        return embedding
+    
+        # clipwise_output = torch.sigmoid(self.fc_audioset(x))
+        # output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
+        # return output_dict
 
 
 class Wavegram_Logmel128_Cnn14(nn.Module):
@@ -2468,8 +2468,8 @@ class Wavegram_Logmel128_Cnn14(nn.Module):
         self.conv_block5 = ConvBlock(in_channels=512, out_channels=1024)
         self.conv_block6 = ConvBlock(in_channels=1024, out_channels=2048)
 
-        self.fc1 = nn.Linear(2048, 2048, bias=True)
-        self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
+        self.fc1 = nn.Linear(2048, classes_num, bias=True)
+        # self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
         
         self.init_weight()
 
@@ -2478,7 +2478,7 @@ class Wavegram_Logmel128_Cnn14(nn.Module):
         init_bn(self.pre_bn0)
         init_bn(self.bn0)
         init_layer(self.fc1)
-        init_layer(self.fc_audioset)
+        # init_layer(self.fc_audioset)
  
     def forward(self, input, mixup_lambda=None):
         """
@@ -2532,11 +2532,10 @@ class Wavegram_Logmel128_Cnn14(nn.Module):
         x = F.dropout(x, p=0.5, training=self.training)
         x = F.relu_(self.fc1(x))
         embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
-        
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
-
-        return output_dict
+        return embedding
+        # clipwise_output = torch.sigmoid(self.fc_audioset(x))
+        # output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
+        # return output_dict
 
 
 class Cnn14_16k(nn.Module):

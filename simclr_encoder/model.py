@@ -15,7 +15,7 @@ from torchvision.models.vision_transformer import VisionTransformer
 
 from loss import NT_Xent
 from dataset import CLARTransform
-from torch_models import Wavegram_Logmel128_Cnn14
+from torch_models import Wavegram_Logmel_Cnn14, Wavegram_Logmel128_Cnn14
 
 class GatedConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
@@ -85,16 +85,29 @@ class SimCLR(nn.Module):
                 in_channels=self.args.channels, 
                 num_classes=self.args.encoder_output_dim,
             )
-        else: # Wavegram_Logmel128_Cnn14
+            
+        elif self.args.encoder_name == "Wavegram_Logmel128_Cnn14": # Wavegram_Logmel128_Cnn14
             self.encoder = Wavegram_Logmel128_Cnn14(
                 sample_rate=self.args.sample_rate, 
                 window_size=self.args.window_size, 
                 hop_size=self.args.hop_length, 
-                mel_bins=self.args.n_mels, 
+                mel_bins=128, #self.args.n_mels, 
                 fmin=self.args.fmin,
                 fmax=self.args.fmax,
-                classes_num=self.args.encoder_output_dim,
+                classes_num=n_features,
             )
+        elif self.args.encoder_name == "Wavegram_Logmel_Cnn14": # Wavegram_Logmel128_Cnn14
+            self.encoder = Wavegram_Logmel_Cnn14(
+                sample_rate=self.args.sample_rate, 
+                window_size=self.args.window_size, 
+                hop_size=self.args.hop_length, 
+                mel_bins=64, #self.args.n_mels, 
+                fmin=self.args.fmin,
+                fmax=self.args.fmax,
+                classes_num=n_features,
+            )
+        else:
+            self.encoder = None
             
         # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
         self.projector = nn.Sequential(
@@ -104,14 +117,8 @@ class SimCLR(nn.Module):
         )
 
     def forward(self, x_i, x_j):
-        print("xixj", x_i.shape, x_j.shape)
-
-        h_i = self.encoder(x_i)
-        h_j = self.encoder(x_j)
-        print("hihj", h_i.shape, h_j.shape)
-
-        z_i = self.projector(h_i)
-        z_j = self.projector(h_j)
+        h_i, h_j = self.encoder(x_i), self.encoder(x_j)
+        z_i, z_j = self.projector(h_i), self.projector(h_j)
         
         return h_i, h_j, z_i, z_j
     
@@ -159,11 +166,9 @@ class ContrastiveLearning(LightningModule):
             
 
     def forward(self, x_i, x_j):
-        if x_i.dtype != torch.float32:
-            x_i = x_i.to(torch.float32)
-        if x_j.dtype != torch.float32:
-            x_j = x_j.to(torch.float32)
-        x_i, x_j = self.mel_transform(x_i).unsqueeze(1), self.mel_transform(x_j).unsqueeze(1)
+        if self.args.need_transform:
+            x_i, x_j = self.mel_transform(x_i).unsqueeze(1), self.mel_transform(x_j).unsqueeze(1)
+        
         h_i, h_j, z_i, z_j = self.model(x_i, x_j) # SimCLR Model
         return h_i, h_j, z_i, z_j
 
