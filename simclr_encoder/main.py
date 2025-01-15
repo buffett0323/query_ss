@@ -84,7 +84,7 @@ if __name__ == "__main__":
     trainer.fit(model, dm)
     
     print("-------Start Testing-------")
-    # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
+    trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
     
     # # if load best model    
     # cl.load_model(checkpoint_name="best_model.ckpt")

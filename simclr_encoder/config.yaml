@@ -3,14 +3,14 @@ segment_thres: 3
 segment_second: 5
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
+log_wandb: True #False
 need_transform: False #Wavegram will transform for us
 
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:1"
-gpu_ids: [1]
+device: "cuda:2"
+gpu_ids: [2]
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 num_workers: 24
@@ -21,12 +21,12 @@ num_workers: 24
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 8 #256 #512 
+batch_size: 256 #512 
 start_epoch: 0
-epochs: 100
-check_val_every_n_epoch: 2
+epochs: 200
+check_val_every_n_epoch: 4
 early_stop_patience: 5
-lr: 0.0003
+lr: 0.01 #0.0003
 
 # dataset options
 max_length: 64
@@ -53,8 +53,8 @@ projection_dim: 128
 model_dict_save_dir: "./model_dict"
 
 # loss options
-optimizer: "LARS" #"Adam" # or LARS (experimental)
-weight_decay: 1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+optimizer: "Adam" # or LARS (experimental)
+weight_decay: 1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
 temperature: 0.5 # see appendix B.7.: Optimal temperature under different batch sizes
 lr_decay_factor: 0.01
 
