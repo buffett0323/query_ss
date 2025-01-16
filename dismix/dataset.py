@@ -22,16 +22,17 @@ def custom_collate_fn(batch):
     mix_melspec = torch.stack([item[0] for item in batch])
     stems_melspec = torch.stack([item[1] for item in batch])
     pitch_annotation = torch.stack([item[2] for item in batch])
-
-    # chord_spec = torch.stack([item[0] for item in batch])
-    # note_specs = [item[1] for item in batch]
-    # midi_label = [item[2] for item in batch]
-    # inst_label = [item[3] for item in batch]
-    # return chord_spec, note_specs, midi_label, inst_label
     return mix_melspec, stems_melspec, pitch_annotation
 
    
-
+def music_object_collate_fn(batch):
+    chord_spec = torch.stack([item[0] for item in batch])
+    note_specs = [item[1] for item in batch]
+    midi_label = [item[2] for item in batch]
+    inst_label = [item[3] for item in batch]
+    return chord_spec, note_specs, midi_label, inst_label
+   
+   
 def spec_crop(image, height, width):
     return crop(image, top=0, left=0, height=height, width=width)
 
@@ -271,7 +272,7 @@ class MusicalObjectDataset(Dataset):
 
         # Mixture, note, midi label, instrument_label: 
         # torch.Size([1, 128, 35]) torch.Size([4, 128, 35]) tensor([18, 20, 25, 34]) tensor([0, 1, 1, 2])
-        return spec.squeeze(0), note_tensors, midi_label, instrument_label, example_spec
+        return spec.squeeze(0), note_tensors, midi_label, instrument_label
 
     def __len__(self):
         return len(self.spec_list)
@@ -370,7 +371,7 @@ class MusicalObjectDataModule(LightningDataModule):
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
-            collate_fn=custom_collate_fn
+            collate_fn=music_object_collate_fn,
         )
     
     @property

@@ -336,9 +336,9 @@ class DisMixModel(pl.LightningModule):
         rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
             timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
 
-        # # Get pitch priors
-        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # Get pitch priors
+        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -349,8 +349,8 @@ class DisMixModel(pl.LightningModule):
         elbo_loss = self.elbo_loss_fn(
             spec, rec_mixture,
             note_tensors, rec_source_spec,
-            timbre_latent, timbre_mean, timbre_logvar,
-            # pitch_latent, pitch_priors,
+            timbre_mean, timbre_logvar,
+            pitch_latent, pitch_priors,
         )
         
         ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)

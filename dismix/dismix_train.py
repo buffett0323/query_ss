@@ -27,17 +27,17 @@ torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = True # False
+log_wandb = False # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [0, 5] #[0, 1, 2, 3]
+device_id = [0, 1] #[0, 1, 2, 3]
 batch_size = 32
 num_frames = 10 #32
 lr = 4e-4
 early_stop_patience = 100 #260000
 best_val_loss = float('inf')
 max_steps = 10000000
-comp_path = "/home/buffett/NAS_NTU"
+comp_path = "/home/buffett/NAS_189"
 root = f"{comp_path}/MusicSlots/data/jsb_multi"
 os.environ["WANDB_MODE"] = "online"
 
@@ -45,7 +45,7 @@ os.environ["WANDB_MODE"] = "online"
 dm = MusicalObjectDataModule(
     root=root,
     batch_size=batch_size,
-    num_workers=8,
+    num_workers=24,
 )
 
 
