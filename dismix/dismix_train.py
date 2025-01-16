@@ -13,7 +13,6 @@ from functools import partial
 
 from dismix_model import DisMixModel
 from dataset import MusicalObjectDataModule, spec_crop # CocoChoralesTinyDataset
-from dismix_loss import ELBOLoss, BarlowTwinsLoss
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
@@ -27,17 +26,17 @@ torchvision.disable_beta_transforms_warning()
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = False # False
+log_wandb = True # False
 use_gpu = True
-find_unused_parameters = True # False if train all params
-device_id = [0, 1] #[0, 1, 2, 3]
-batch_size = 32
+find_unused_parameters = False # False if train all params
+device_id = [0, 1, 3, 4, 5] #[0, 1, 2, 3]
+batch_size = 64 #32
 num_frames = 10 #32
 lr = 4e-4
 early_stop_patience = 100 #260000
 best_val_loss = float('inf')
 max_steps = 10000000
-comp_path = "/home/buffett/NAS_189"
+comp_path = "/home/buffett/NAS_NTU"
 root = f"{comp_path}/MusicSlots/data/jsb_multi"
 os.environ["WANDB_MODE"] = "online"
 

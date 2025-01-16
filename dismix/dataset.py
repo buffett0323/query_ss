@@ -210,8 +210,9 @@ class MusicalObjectDataset(Dataset):
         self.spec_list = sorted(
             glob.glob(
                 os.path.join(
-                    self.out_path,
-                    '{}_spec-*-of-*.pt'.format(spec)
+                    self.root, 
+                    f"{self.split}_npy",
+                    '{}_spec-*-of-*.npy'.format(spec)
                     )
                 )
             )
@@ -229,7 +230,7 @@ class MusicalObjectDataset(Dataset):
     
     def __getitem__(self, index):
         spec_file = self.spec_list[index]
-        spec = torch.load(spec_file, weights_only=True)
+        spec = torch.tensor(np.load(spec_file, mmap_mode='r')) #torch.load(spec_file, weights_only=True)
         instrument_list = self.instrument_list[index]
 
         if self.to_db:
@@ -237,31 +238,18 @@ class MusicalObjectDataset(Dataset):
 
         chord = self.examples[index % len(self.examples)]
         note_spec_list = []
-        note_audio_list = []
 
         for note, inst in zip(chord[chord.nonzero(as_tuple=True)], instrument_list):
             instrument_name = self.all_instrument_names[inst].replace(" ", "")
-            note_spec = torch.load(os.path.join(
+            note_spec = torch.tensor(np.load(os.path.join(
                 self.root, 'notes/{}'.format(instrument_name), str(note.item()),
-                '{}_spec.pt'.format(self.spec)), weights_only=True)
-            note_audio_tmp = torch.load(os.path.join(
-                self.root, 'notes/{}'.format(instrument_name), str(note.item()),
-                'audio.pt'))
+                '{}_spec.npy'.format(self.spec)), mmap_mode='r'))
+            # note_spec = torch.load(os.path.join(
+            #     self.root, 'notes/{}'.format(instrument_name), str(note.item()),
+            #     '{}_spec.pt'.format(self.spec)), weights_only=True)
             note_spec_list.append(note_spec)
-            note_audio_list.append(note_audio_tmp)
 
         note_tensors = torch.cat(note_spec_list, dim=0)
-        example_audio_tensor = torch.cat(
-                note_audio_list, dim=0).sum(dim=0).unsqueeze(dim=0)
-
-        spec_transform = T.MelSpectrogram(
-            sample_rate=16000,
-            n_fft=1024,
-            win_length=None,
-            hop_length=512,
-            n_mels = 128
-        )
-        example_spec = spec_transform(example_audio_tensor)
         
         if self.transform is not None:
             spec = self.transform(spec)

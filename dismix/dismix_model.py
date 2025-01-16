@@ -11,7 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from matplotlib.colors import ListedColormap
 
-from dismix_loss import ELBOLoss, BarlowTwinsLoss
+from dismix_loss import ELBOLoss_Old, BarlowTwinsLoss_Old
 
 
 class Conv1DEncoder(nn.Module):
@@ -256,6 +256,7 @@ class DisMixModel(pl.LightningModule):
         learning_rate=4e-4,
         num_layers=2,
         clip_value=0.5,
+        lambda_weight=0.005,
     ):
         super(DisMixModel, self).__init__()
         self.save_hyperparameters()
@@ -295,12 +296,15 @@ class DisMixModel(pl.LightningModule):
         )
 
         # Loss functions
-        self.elbo_loss_fn = ELBOLoss() # For ELBO
+        self.elbo_loss_fn = ELBOLoss_Old() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
-        self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
+        self.bt_loss_fn = BarlowTwinsLoss_Old(
+            lambda_weight=lambda_weight,
+            embedding_dim=latent_dim,
+        ) # Barlow Twins
         
         # Pitch Priors
-        # self.pitch_prior = self.pitch_encoder.fc_proj
+        self.pitch_prior = self.pitch_encoder.fc_proj
         
         # Add storage for stored test timbre latents and instrument labels
         self.test_timbre_latents = []
@@ -357,7 +361,7 @@ class DisMixModel(pl.LightningModule):
         bt_loss = self.bt_loss_fn(eq, timbre_latent)
 
         # Total loss
-        total_loss = elbo_loss + ce_loss + bt_loss
+        total_loss = elbo_loss + ce_loss + bt_loss #print(elbo_loss.item(), ce_loss.item(), bt_loss.item())
         
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
@@ -386,9 +390,9 @@ class DisMixModel(pl.LightningModule):
         self.test_timbre_latents.append(timbre_latent.detach().cpu())
         self.test_instrument_labels.append(instrument_label.detach().cpu())
             
-        # # Get pitch priors
-        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # Get pitch priors
+        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -399,8 +403,8 @@ class DisMixModel(pl.LightningModule):
         elbo_loss = self.elbo_loss_fn(
             spec, rec_mixture,
             note_tensors, rec_source_spec,
-            timbre_latent, timbre_mean, timbre_logvar,
-            # pitch_latent, pitch_priors,
+            timbre_mean, timbre_logvar,
+            pitch_latent, pitch_priors,
         )
         
         ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
@@ -438,7 +442,8 @@ class DisMixModel(pl.LightningModule):
         return [optimizer], [scheduler]
     
     def on_validation_epoch_end(self):
-        return self.plotting(stage='val')
+        pass
+        # return self.plotting(stage='val')
     
     def on_test_epoch_end(self):
         return self.plotting(stage='test')
