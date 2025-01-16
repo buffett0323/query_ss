@@ -76,7 +76,7 @@ model = DisMixModel(
 # Log model and hyperparameters in wandb
 if log_wandb: 
     project = "Dismix_jsb_multi"
-    name = "Dismix_Training"
+    name = "Dismix_No_BT_Recm_pitch"
     save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
     wandb_logger = WandbLogger(
         project=project, 

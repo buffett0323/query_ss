@@ -31,17 +31,17 @@ class ELBOLoss_Old(nn.Module):
 
 
         # 1. Reconstruction loss (MSE)
-        recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
+        # recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
         recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction=self.reduction)
 
         # 2. Pitch supervision loss
-        pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
+        # pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
 
         # 3. KL Divergence for timbre latent (using standard Gaussian prior)
         kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means.pow(2) - tau_logvars.exp(), dim=1))
 
         # Total ELBO loss
-        loss = recon_loss_m + recon_loss_x + kl_loss + pitch_loss
+        loss = recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
         
         # print(recon_loss_m.item(), recon_loss_x.item(), pitch_loss.item(), kl_loss.item()) #, source_recon_loss.item())
         return loss
