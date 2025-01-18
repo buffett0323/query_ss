@@ -9,8 +9,8 @@ need_transform: False #Wavegram will transform for us
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:2"
-gpu_ids: [2]
+device: "cuda:1"
+gpu_ids: [1]
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 num_workers: 24
