@@ -11,9 +11,93 @@ import torchaudio.transforms as T
 import torchvision.transforms as transforms
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, LightningModule
+from diffusers import AudioLDM2Pipeline
+from diffusers.models import AutoencoderKL
+from audioldm_train.modules.diffusionmodules.model import Encoder, Decoder
+from audioldm_train.modules.diffusionmodules.distributions import DiagonalGaussianDistribution
+import warnings
+warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", message="Could not initialize NNPACK")
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 from loss import ELBOLoss, NT_Xent
 
+class QueryEncoder(nn.Module):
+    def __init__(
+        self,
+        *,
+        ch,
+        out_ch,
+        ch_mult=(1, 2, 4, 8),
+        num_res_blocks,
+        attn_resolutions,
+        dropout=0.0,
+        resamp_with_conv=True,
+        in_channels,
+        resolution,
+        z_channels,
+        double_z=False,
+        use_linear_attn=False,
+        attn_type="vanilla",
+        downsample_time_stride4_levels=[],
+    ):
+        super().__init__()
+
+        self.encoder = Encoder(
+            ch=ch,
+            out_ch=out_ch,
+            ch_mult=ch_mult,
+            num_res_blocks=num_res_blocks,
+            attn_resolutions=attn_resolutions,
+            dropout=dropout,
+            resamp_with_conv=resamp_with_conv,
+            in_channels=in_channels,
+            resolution=resolution,
+            z_channels=z_channels,
+            double_z=double_z,
+            use_linear_attn=use_linear_attn,
+            attn_type=attn_type,
+            downsample_time_stride4_levels=downsample_time_stride4_levels,
+        )
+        self.temporal_pool = nn.AdaptiveAvgPool2d((1, 16))
+
+    def forward(self, x):
+        h = self.encoder(x)
+        h = self.temporal_pool(h)
+        # h = h.to(torch.float32)
+        return h
+    
+
+# Use the pre-trained encoder and freeze
+class MixtureEncoder(nn.Module):
+    def __init__(
+        self,
+        vae,
+    ):
+        super().__init__()
+        self.encoder = vae.encoder
+        self.freeze_encoder()
+        self.conv = nn.Conv2d(
+            in_channels=16,  # Input channels
+            out_channels=8,  # Output channels
+            kernel_size=(1, 1),  # Kernel size to maintain spatial dimensions
+            stride=(1, 1),  # Stride to maintain spatial dimensions
+            padding=(0, 0)  # No padding needed for (1, 1) kernel
+        )
+
+    def freeze_encoder(self):
+        """Freeze the parameters of the encoder to prevent training."""
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+
+    def forward(self, x):
+        with torch.no_grad():
+            # x = x.to(torch.float16)
+            h = self.encoder(x).permute(0, 1, 3, 2)
+        return self.conv(h) #.to(torch.float32)
+    
+    
 
 class Conv1DEncoder(nn.Module):
     def __init__(self, input_channels, output_channels, kernel_size, stride, padding, norm_layer, activation):
@@ -55,7 +139,7 @@ class MixtureQueryEncoder(nn.Module):
 
     def forward(self, x):
         x = self.encoder_layers(x)
-        return torch.mean(x, dim=-1)  # Mean pooling along the temporal dimension
+        return x #torch.mean(x, dim=-1)  # Mean pooling along the temporal dimension
 
 
 
@@ -231,6 +315,9 @@ class DisMixDecoder(nn.Module):
 class SimCLRDisMix(pl.LightningModule):
     def __init__(
         self,
+        vae,
+        batch_size=4,
+        temperature=0.5,
         input_dim=128, 
         latent_dim=64, 
         hidden_dim=256, 
@@ -244,20 +331,34 @@ class SimCLRDisMix(pl.LightningModule):
         lambda_weight=0.005,
     ):
         super(SimCLRDisMix, self).__init__()
+        self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.pitch_classes = pitch_classes
         self.clip_value = clip_value
         
         # Latents of mixture and query
-        self.E_m = MixtureQueryEncoder(
-            input_dim=input_dim,
-            hidden_dim=768,
-            output_dim=latent_dim,
-        )
-        self.E_q = MixtureQueryEncoder(
-            input_dim=input_dim,
-            hidden_dim=768,
-            output_dim=latent_dim,
+        # self.E_m = MixtureQueryEncoder(
+        #     input_dim=input_dim,
+        # )
+        # self.E_q = MixtureQueryEncoder(
+        #     input_dim=input_dim,
+        # )
+        self.E_m = MixtureEncoder(vae=vae) # Pre-trained model
+        self.E_q = QueryEncoder(
+            ch=64,  # Initial number of channels, can be adjusted as needed
+            out_ch=8,  # Desired number of output channels
+            ch_mult=(1, 2, 4),  # Two resolution levels for two downsampling steps
+            num_res_blocks=2,  # Number of residual blocks per resolution level
+            attn_resolutions=[],  # Adjust based on whether you want attention
+            dropout=0.0,
+            resamp_with_conv=True,
+            in_channels=1,  # Set according to your input data (e.g., 1 for mono audio)
+            resolution=64,  # Frequency dimension of input
+            z_channels=8,  # Latent space channels
+            double_z=False,  # To keep z_channels as 8
+            use_linear_attn=False,
+            attn_type="vanilla",
+            downsample_time_stride4_levels=[],  # No special downsampling for time
         )
         
         # Pitch and Timbre Encoder
@@ -286,17 +387,22 @@ class SimCLRDisMix(pl.LightningModule):
         # Loss functions
         self.elbo_loss_fn = ELBOLoss() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
-        self.nt_xent_fn = NT_Xent() # NT-Xent Loss
+        self.nt_xent_fn = NT_Xent(
+            batch_size=batch_size, 
+            temperature=temperature, 
+            world_size=1,    
+        ) # NT-Xent Loss
         
         
-    def forward(self, x_m, x_q):
-        # Slicing
-        x_m1, x_m2 = x_m[], x_m[]
-        x_q1, x_q2 = x_q[], x_q[]
+    def forward(self, x_m1, x_m2, x_q1, x_q2):
+        x_m1, x_m2 = x_m1.repeat_interleave(4, dim=0), x_m2.repeat_interleave(4, dim=0)
+        x_q1, x_q2 = x_q1.reshape(-1, 1, 64, 200), x_q2.reshape(-1, 1, 64, 200)
+        print(x_m2.shape, x_q1.shape)
         
-        x_m1, x_m2 = self.E_m(x_m1), self.E_m(x_m2)
+        # x_m1, x_m2 = self.E_m(x_m1), self.E_m(x_m2)
         x_q1, x_q2 = self.E_q(x_q1), self.E_q(x_q2)
-        
+        return x_q1, x_q2 # x_m1, x_m2, x_q1, x_q2
+    
         pitch_latent_i, pitch_logits_i = self.E_Pitch(x_m1, x_q1)
         timbre_latent_i, mean_i, logvar_i = self.E_Timbre(x_m1, x_q1)
         
@@ -306,8 +412,53 @@ class SimCLRDisMix(pl.LightningModule):
         s_i = self.Decoder(pitch_latent_i, timbre_latent_i)
         s_j = self.Decoder(pitch_latent_j, timbre_latent_j)
         
-        return s_i, s_j
+        return s_i, s_j, timbre_latent_i, timbre_latent_j, \
+                pitch_logits_i, pitch_logits_j, \
+                mean_i, logvar_i, mean_j, logvar_j 
+    
+    
+    def training_step(self, batch, batch_idx):
+        mix_i, mix_j, stem_i, stem_j, pitch_i, pitch_j = batch
+        if mix_i.shape[0] != self.batch_size:
+            return None
+        
+        s_i, s_j, timbre_latent_i, timbre_latent_j, pitch_logits_i, pitch_logits_j, mean_i, logvar_i, mean_j, logvar_j  = self(mix_i, mix_j, stem_i, stem_j)
+        
+        # Loss Cal
+        elbo_loss = criterion["elbo_loss"](mix_latent, query_latent, reconstruction)
+        ce_loss = criterion["ce_loss"](pitch_latent, pitch_i) + criterion["ce_loss"](pitch_latent, pitch_j)
+        nt_xent_loss = criterion["nt_xent_loss"](timbre_latent_i, timbre_latent_j)
+        
+        train_loss = elbo_loss + ce_loss + nt_xent_loss
+        
+        # Log the individual losses and total loss
+        self.log("elbo_loss", elbo_loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
+        self.log("ce_loss", ce_loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
+        self.log("nt_xent_loss", nt_xent_loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_loss', train_loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
+        return train_loss
+    
+    
+    def configure_criterion(self):
+        return {
+            "elbo_loss": self.elbo_loss_fn,
+            "ce_loss": self.ce_loss_fn,
+            "nt_xent_loss": self.nt_xent_fn
+        }
     
 
 if __name__ == "__main__":
-    model = SimCLRDisMix()
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    
+    model = SimCLRDisMix(       
+        vae=None,
+        batch_size=4,
+        input_dim=64, 
+    ).to(device)
+
+    mix_i, mix_j, stem_i, stem_j, pitch_i, pitch_j = torch.randn([4, 1, 64, 200]).to(device), torch.randn([4, 1, 64, 200]).to(device), \
+            torch.randn([4, 4, 64, 200]).to(device), torch.randn([4, 4, 64, 200]).to(device), \
+            torch.randn([4, 4, 200]).to(device), torch.randn([4, 4, 200]).to(device)
+    
+    res = model(mix_i, mix_j, stem_i, stem_j)
+    print(res[0].shape, res[-1].shape)

@@ -17,25 +17,6 @@ from torchaudio.transforms import MelSpectrogram
 from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning import LightningDataModule
 
-
-
-
-
-
-def custom_collate_fn(batch):
-    mix_melspec = torch.stack([item[0] for item in batch])
-    stems_melspec = torch.stack([item[1] for item in batch])
-    pitch_annotation = torch.stack([item[2] for item in batch])
-    return mix_melspec, stems_melspec, pitch_annotation
-
-   
-def music_object_collate_fn(batch):
-    chord_spec = torch.stack([item[0] for item in batch])
-    note_specs = [item[1] for item in batch]
-    midi_label = [item[2] for item in batch]
-    inst_label = [item[3] for item in batch]
-    return chord_spec, note_specs, midi_label, inst_label
-   
    
 def spec_crop(image, height, width):
     return crop(image, top=0, left=0, height=height, width=width)
@@ -242,24 +223,13 @@ class CocoChoraleDataset(Dataset):
     
     def __getitem__(self, idx):
         audio_path = self.file_path[idx]
-        mix_audio = os.path.join(audio_path, 'mix.wav')
-        
-        with open(os.path.join(audio_path, 'metadata.yaml'), 'r') as file:
-            stems = yaml.safe_load(file).get('instrument_name', {})
-        stems_audio = [os.path.join(audio_path, 'stems_audio', f'{i+1}_{j}.wav') for i, j in stems.items()]
-
-        # Load audio
-        mix_wav, _ = torchaudio.load(mix_audio)
-        stems_wav = [torchaudio.load(i)[0] for i in stems_audio]
-
-        # Apply MelSpectrogram
-        mix_melspec = self.transform(mix_wav)
-        stems_melspec = [self.transform(i) for i in stems_wav]
+        mix_melspec = np.load(os.path.join(audio_path, 'mix_melspec.npy')) #, mmap_mode='r')
+        stems_melspec = np.load(os.path.join(audio_path, 'stems_melspec.npy')) #, mmap_mode='r')
         
         # Randomly sample segment
         start_frame = np.random.randint(0, mix_melspec.shape[-1] - self.segment_length + 1)
         mix_melspec = mix_melspec[:, :, start_frame:start_frame + self.segment_length]
-        stems_melspec = [i[:, :, start_frame:start_frame + self.segment_length] for i in stems_melspec]
+        stems_melspec = stems_melspec[:, :, start_frame:start_frame + self.segment_length]
 
         # Get pitch annotation by reading pickle
         csv_folder = audio_path.replace('main_dataset', 'note_expression')
@@ -271,11 +241,15 @@ class CocoChoraleDataset(Dataset):
             pitch_annotation.append(pitch_sequence)  
         
         pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
-
-        stems_melspec = torch.cat(stems_melspec, dim=0)
         pitch_annotation = torch.cat(pitch_annotation, dim=0)
 
-        return mix_melspec, stems_melspec, pitch_annotation
+        # Split in time zone
+        split_idx = mix_melspec.shape[-1] // 2
+        
+        return torch.tensor(mix_melspec[:, :, :split_idx]), torch.tensor(mix_melspec[:, :, split_idx:]), \
+            torch.tensor(stems_melspec[:, :, :split_idx]), torch.tensor(stems_melspec[:, :, split_idx:]), \
+            pitch_annotation[:, :split_idx], pitch_annotation[:, split_idx:]
+
     
     def process_file(self):
         for audio_path in tqdm(self.file_path):
@@ -375,7 +349,6 @@ class CocoChoraleDataModule(LightningDataModule):
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
-            collate_fn=custom_collate_fn
         )
     
     @property
@@ -383,15 +356,6 @@ class CocoChoraleDataModule(LightningDataModule):
         self.setup(stage = 'fit')
         return len(self.train_ds)
 
-    # @property
-    # def num_notes(self) -> int:
-    #     self.setup(stage = 'fit')
-    #     return len(self.train_ds.notes)
-    
-    # @property
-    # def num_instruments(self) -> int:
-    #     self.setup(stage = 'fit')
-    #     return len(self.train_ds.instrument_tokens)
 
 
 
@@ -401,25 +365,26 @@ if __name__ == '__main__':
     comp_path = "/mnt/gestalt/home/ddmanddman"
     root = f"{comp_path}/cocochorales_output/main_dataset"
     
-    # dm = CocoChoraleDataModule(
-    #     root=root,
-    #     batch_size=4,
-    #     num_workers=24,
-    # )
-    # dm.setup(stage='fit')
     ccd = CocoChoraleDataset(file_dir=root)
-    ccd.process_file()
+    ccd[0]
+    # ccd = CocoChoraleDataset(file_dir=root, split='valid')
+    # ccd.process_file()
+    # ccd = CocoChoraleDataset(file_dir=root, split='test')
+    # ccd.process_file()
     
-    # print('Dataset sample count: {}'.format(dm.num_samples))
+    dm = CocoChoraleDataModule(
+        root=root,
+        batch_size=4,
+        num_workers=24,
+    )
+    dm.setup(stage='fit')
     
-    # mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
-    # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
-    # mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
-    # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
     
-    # for batch in dm.train_dataloader():
-    #     x_m, x_s_i, pitch_annotation = batch
-    #     print(x_m.shape, x_s_i.shape, pitch_annotation.shape); break
+    print('Dataset sample count: {}'.format(dm.num_samples))
+    
+    for batch in dm.train_dataloader():
+        mix_i, mix_j, stem_i, stem_j, pitch_i, pitch_j = batch
+        print(mix_i.shape, mix_j.shape, stem_i.shape, stem_j.shape, pitch_i.shape, pitch_j.shape); break
     
     
         
