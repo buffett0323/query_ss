@@ -5,67 +5,309 @@ import torchvision
 import librosa
 import numpy as np
 import torch.nn as nn
-from pytorch_lightning import Trainer, LightningModule
 import torch.optim as optim
 import torch.nn.functional as F
 import torchaudio.transforms as T
 import torchvision.transforms as transforms
-from torchvision.models import vit_b_16, ViT_B_16_Weights
-from torchvision.models.vision_transformer import VisionTransformer
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer, LightningModule
+
+from loss import ELBOLoss, NT_Xent
 
 
-class SimCLR(nn.Module):
+class Conv1DEncoder(nn.Module):
+    def __init__(self, input_channels, output_channels, kernel_size, stride, padding, norm_layer, activation):
+        super(Conv1DEncoder, self).__init__()
+        self.conv = nn.Conv1d(input_channels, output_channels, kernel_size, stride, padding)
+        self.norm = norm_layer(output_channels) if norm_layer else None
+        self.activation = activation() if activation else None
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.norm:
+            x = x.transpose(1, 2)  # Change shape from (batch, channels, sequence) to (batch, sequence, channels)
+            x = self.norm(x)        # Apply LayerNorm to the last dimension (channels)
+            x = x.transpose(1, 2)  # Change back shape to (batch, channels, sequence)
+        if self.activation:
+            x = self.activation(x)
+        return x
+
+
+class MixtureQueryEncoder(nn.Module):
+    """
+        R^128x10 --> R^64
+    """
     def __init__(
         self,
-        args,
-        n_features=512, 
-        projection_dim=128,
+        input_dim=128,
+        hidden_dim=768,
+        output_dim=64,
     ):
-        super(SimCLR, self).__init__()
-        self.args = args
-        self.encoder = None
-            
-        # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
-        self.projector = nn.Sequential(
-            nn.Linear(n_features, n_features), #, bias=False),
-            nn.ReLU(),
-            nn.Linear(n_features, projection_dim), #, bias=False),
+        super(MixtureQueryEncoder, self).__init__()
+        self.encoder_layers = nn.Sequential(
+            Conv1DEncoder(input_dim, hidden_dim, 3, 1, 0, nn.LayerNorm, nn.ReLU),
+            Conv1DEncoder(hidden_dim, hidden_dim, 3, 1, 1, nn.LayerNorm, nn.ReLU),
+            Conv1DEncoder(hidden_dim, hidden_dim, 4, 2, 1, nn.LayerNorm, nn.ReLU),
+            Conv1DEncoder(hidden_dim, hidden_dim, 3, 1, 1, nn.LayerNorm, nn.ReLU),
+            Conv1DEncoder(hidden_dim, hidden_dim, 3, 1, 1, nn.LayerNorm, nn.ReLU),
+            Conv1DEncoder(hidden_dim, output_dim, 1, 1, 1, None, None)
         )
 
-    def forward(self, x_i, x_j):
-        h_i, h_j = self.encoder(x_i), self.encoder(x_j)
-        z_i, z_j = self.projector(h_i), self.projector(h_j)
+    def forward(self, x):
+        x = self.encoder_layers(x)
+        return torch.mean(x, dim=-1)  # Mean pooling along the temporal dimension
+
+
+
+class TimbreEncoder(nn.Module):
+    def __init__(
+        self, 
+        input_dim=128, 
+        hidden_dim=256, 
+        output_dim=64  # Latent space dimension for timbre
+    ):
+        super(TimbreEncoder, self).__init__()
+
+        # Shared architecture with Eφν (PitchEncoder)
+        self.shared_layers = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), # First layer
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), 
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), # Last layer
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+        )
+
+        # Gaussian parameterization layers
+        self.mean_layer = nn.Linear(hidden_dim, output_dim)
+        self.logvar_layer = nn.Linear(hidden_dim, output_dim)
+
+    def reparameterize(self, mean, logvar):
+        """
+            Reparameterization trick to sample from N(mean, var)
+            Sampling by μφτ (·) + ε σφτ (·)
+        """
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mean + (eps * std)
+
+    def forward(self, em, eq):
+        # Concatenate the mixture and query embeddings
+        concat_input = torch.cat([em, eq], dim=-1)  # Concatenate along feature dimension
+        hidden_state = self.shared_layers(concat_input)  # Shared hidden state output
+
+        # Calculate mean and log variance
+        mean, logvar = self.mean_layer(hidden_state), self.logvar_layer(hidden_state)  # Gaussian distribution
+
+        # Sample the timbre latent using the reparameterization trick
+        timbre_latent = self.reparameterize(mean, logvar)
+
+        return timbre_latent, mean, logvar
+    
+    
+class StochasticBinarizationLayer(nn.Module):
+    def __init__(self):
+        super(StochasticBinarizationLayer, self).__init__()
+    
+    def forward(self, logits):
+        """
+        Forward pass of the stochastic binarization layer.
+        """
+        prob = torch.sigmoid(logits)
+        if self.training:
+            h = torch.rand_like(prob)  # Use random threshold during training
+        else:
+            h = torch.full_like(prob, 0.5)  # Fixed threshold of 0.5 during inference
+            
+        return (prob > h).float()  # Binarize based on the threshold h
         
-        return h_i, h_j, z_i, z_j
+        
+        
+        
+class PitchEncoder(nn.Module):
+    def __init__(
+        self, 
+        input_dim=128, 
+        hidden_dim=256, 
+        pitch_classes=52, # true labels not 0-51
+        output_dim=64
+    ):
+        super(PitchEncoder, self).__init__()
+
+        # Transcriber: Linear layers for pitch classification
+        self.transcriber = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, pitch_classes),  # Output logits for pitch classification
+        )
+
+        # Stochastic Binarization (SB) Layer: Converts pitch logits to a binary representation
+        self.sb_layer = StochasticBinarizationLayer()
+
+        # Projection Layer: Project the binarized pitch representation to the latent space
+        self.fc_proj = nn.Sequential(
+            nn.Linear(pitch_classes, output_dim),
+            nn.ReLU(),
+            nn.Linear(output_dim, output_dim),
+            nn.ReLU(),
+            nn.Linear(output_dim, output_dim),
+        )
+
+
+    def forward(self, em, eq):
+        concat_input = torch.cat([em, eq], dim=-1)  # Concatenate em and eq
+        pitch_logits = self.transcriber(concat_input) # Transcriber
+        y_bin = self.sb_layer(pitch_logits) # SB Layer # Apply binarisation
+        pitch_latent = self.fc_proj(y_bin) # Projection Layer
+        
+        return pitch_latent, pitch_logits
+
+
+
+class FiLM(nn.Module):
+    def __init__(self, pitch_dim, timbre_dim):
+        super(FiLM, self).__init__()
+        self.scale = nn.Linear(timbre_dim, pitch_dim)
+        self.shift = nn.Linear(timbre_dim, pitch_dim)
     
+    def forward(self, pitch_latent, timbre_latent):
+        scale = self.scale(timbre_latent)
+        shift = self.shift(timbre_latent)
+        return scale * pitch_latent + shift
+
+
+class DisMixDecoder(nn.Module):
+    def __init__(
+        self, 
+        pitch_dim=64, 
+        timbre_dim=64, 
+        gru_hidden_dim=256, 
+        output_dim=128, 
+        num_frames=32, #10,
+        num_layers=2
+    ):
+        super(DisMixDecoder, self).__init__()
+        self.num_frames = num_frames
+        
+        self.film = FiLM(pitch_dim, timbre_dim)
+        self.gru = nn.GRU(input_size=pitch_dim, hidden_size=gru_hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
+        self.linear = nn.Linear(gru_hidden_dim * 2, output_dim)  # Bi-directional GRU output dimension is doubled
     
-class DisMix(nn.Module):
+    def forward(self, pitch_latents, timbre_latents):
+        # FiLM layer: modulates pitch latents based on timbre latents
+        source_latents = self.film(pitch_latents, timbre_latents)
+        source_latents = source_latents.unsqueeze(1).repeat(1, self.num_frames, 1) # Expand source_latents along time axis if necessary
+        output, _ = self.gru(source_latents)
+        output = self.linear(output).transpose(1, 2) # torch.Size([32, 10, 64])
+        
+        return output # reconstructed spectrogram
+
+
+class SimCLRDisMix(pl.LightningModule):
     def __init__(
         self,
-        args,
+        input_dim=128, 
+        latent_dim=64, 
+        hidden_dim=256, 
+        gru_hidden_dim=256,
+        num_frames=10,
+        pitch_classes=52,
+        output_dim=128,
+        learning_rate=4e-4,
+        num_layers=2,
+        clip_value=0.5,
+        lambda_weight=0.005,
     ):
-        super(DisMix, self).__init__()
-        self.args = args
+        super(SimCLRDisMix, self).__init__()
+        self.learning_rate = learning_rate
+        self.pitch_classes = pitch_classes
+        self.clip_value = clip_value
         
         # Latents of mixture and query
-        self.E_m = None
-        self.E_qi = None
+        self.E_m = MixtureQueryEncoder(
+            input_dim=input_dim,
+            hidden_dim=768,
+            output_dim=latent_dim,
+        )
+        self.E_q = MixtureQueryEncoder(
+            input_dim=input_dim,
+            hidden_dim=768,
+            output_dim=latent_dim,
+        )
         
         # Pitch and Timbre Encoder
-        self.E_Pitch = None
-        self.E_Timbre = None
+        self.E_Pitch = PitchEncoder(
+            input_dim=input_dim, 
+            hidden_dim=hidden_dim, 
+            pitch_classes=pitch_classes,
+            output_dim=latent_dim,
+        )
+        self.E_Timbre = TimbreEncoder(
+            input_dim=input_dim, 
+            hidden_dim=hidden_dim, 
+            output_dim=latent_dim,
+        )
         
         # Reconstruct
-        self.Decoder = None
+        self.Decoder = DisMixDecoder(
+            pitch_dim=latent_dim, 
+            timbre_dim=latent_dim, 
+            gru_hidden_dim=gru_hidden_dim, 
+            output_dim=output_dim, 
+            num_frames=num_frames,
+            num_layers=num_layers,
+        )
+        
+        # Loss functions
+        self.elbo_loss_fn = ELBOLoss() # For ELBO
+        self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
+        self.nt_xent_fn = NT_Xent() # NT-Xent Loss
         
         
     def forward(self, x_m, x_q):
-        x_m = self.E_m(x_m)
-        x_q = self.E_q(x_q)
+        # Slicing
+        x_m1, x_m2 = x_m[], x_m[]
+        x_q1, x_q2 = x_q[], x_q[]
         
-        pitch_latent, pitch_logits = self.E_Pitch(x_m, x_q)
-        timbre_latent, mean, logvar = self.E_Timbre(x_m, x_q)
+        x_m1, x_m2 = self.E_m(x_m1), self.E_m(x_m2)
+        x_q1, x_q2 = self.E_q(x_q1), self.E_q(x_q2)
         
-        return self.Decoder(pitch_latent, timbre_latent)
+        pitch_latent_i, pitch_logits_i = self.E_Pitch(x_m1, x_q1)
+        timbre_latent_i, mean_i, logvar_i = self.E_Timbre(x_m1, x_q1)
+        
+        pitch_latent_j, pitch_logits_j = self.E_Pitch(x_m2, x_q2)
+        timbre_latent_j, mean_j, logvar_j = self.E_Timbre(x_m2, x_q2)
+        
+        s_i = self.Decoder(pitch_latent_i, timbre_latent_i)
+        s_j = self.Decoder(pitch_latent_j, timbre_latent_j)
+        
+        return s_i, s_j
+    
 
-        
+if __name__ == "__main__":
+    model = SimCLRDisMix()
