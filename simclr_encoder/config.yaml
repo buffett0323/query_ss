@@ -21,12 +21,12 @@ num_workers: 24
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #512 
+batch_size: 512 #512 
 start_epoch: 0
 epochs: 200
 check_val_every_n_epoch: 4
 early_stop_patience: 5
-lr: 0.01 #0.0003
+lr: 0.03 #0.0003
 
 # dataset options
 max_length: 64
