@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import torchaudio.functional as AF
 import torchaudio.transforms as T
 
+from tqdm import tqdm
 from typing import Optional
 from torchvision.transforms.functional import crop
 from torchaudio.transforms import MelSpectrogram
@@ -196,6 +197,7 @@ class CocoChoraleDataset(Dataset):
         hop_length=160,
         num_pitches=129,
     ):
+        super(CocoChoraleDataset, self).__init__()
         self.transform = MelSpectrogram(
             sample_rate=sample_rate,
             n_mels=n_mels,
@@ -290,24 +292,24 @@ class CocoChoraleDataset(Dataset):
             # Apply MelSpectrogram
             mix_melspec = self.transform(mix_wav)
             stems_melspec = [self.transform(i) for i in stems_wav]
+            stems_melspec = torch.cat(stems_melspec, dim=0)
             
             # TODO: Store mix_melspec and stems_melspec
+            np.save(os.path.join(audio_path, 'mix_melspec.npy'), mix_melspec)
+            np.save(os.path.join(audio_path, 'stems_melspec.npy'), np.array(stems_melspec))
             
            
-            # Get pitch annotation by reading pickle
-            csv_folder = audio_path.replace('main_dataset', 'note_expression')
-            pitch_annotation = []
-            for csv_file in os.listdir(csv_folder):
-                csv_file = os.path.join(csv_folder, csv_file)
-                csv_df = pd.read_csv(csv_file)
-                pitch_sequence = self.get_pitch_sequence(csv_df, start_frame)
-                pitch_annotation.append(pitch_sequence)  
-            
-            pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
-            pitch_annotation = torch.cat(pitch_annotation, dim=0)
-            
-            # TODO: Store the pitch_annotation
-            
+            # TODO: Store the csv file for pitch_annotation
+            # # Get pitch annotation by reading pickle
+            # csv_folder = audio_path.replace('main_dataset', 'note_expression')
+
+            # for csv_file in os.listdir(csv_folder):
+            #     csv_file = os.path.join(csv_folder, csv_file)
+            #     csv_df = pd.read_csv(csv_file, encoding='utf-8') #, errors='ignore')
+            #     csv_data = csv_df.to_numpy()
+                
+            #     npy_path = csv_file.replace('.csv', '.npy')
+            #     np.save(npy_path, csv_data)
 
             
 
@@ -399,23 +401,25 @@ if __name__ == '__main__':
     comp_path = "/mnt/gestalt/home/ddmanddman"
     root = f"{comp_path}/cocochorales_output/main_dataset"
     
-    dm = CocoChoraleDataModule(
-        root=root,
-        batch_size=4,
-        num_workers=24,
-    )
-    dm.setup(stage='fit')
-
-    print('Dataset sample count: {}'.format(dm.num_samples))
+    # dm = CocoChoraleDataModule(
+    #     root=root,
+    #     batch_size=4,
+    #     num_workers=24,
+    # )
+    # dm.setup(stage='fit')
+    ccd = CocoChoraleDataset(file_dir=root)
+    ccd.process_file()
     
-    mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
-    print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
-    mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
-    print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    # print('Dataset sample count: {}'.format(dm.num_samples))
     
-    for batch in dm.train_dataloader():
-        x_m, x_s_i, pitch_annotation = batch
-        print(x_m.shape, x_s_i.shape, pitch_annotation.shape); break
+    # mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
+    # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    # mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
+    # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    
+    # for batch in dm.train_dataloader():
+    #     x_m, x_s_i, pitch_annotation = batch
+    #     print(x_m.shape, x_s_i.shape, pitch_annotation.shape); break
     
     
         
