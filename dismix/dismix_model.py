@@ -382,7 +382,7 @@ class DisMixModel(pl.LightningModule):
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_off_diag', bt_loss['off_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
         return total_loss
@@ -444,7 +444,7 @@ class DisMixModel(pl.LightningModule):
         # self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log(f'{stage}_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log(f'{stage}_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_bt_off_diag', bt_loss['off_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
         return total_loss
