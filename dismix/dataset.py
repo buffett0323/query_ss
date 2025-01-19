@@ -3,10 +3,12 @@ import torchaudio
 import torchaudio.functional as AF
 import torchaudio.transforms as T
 from torchvision.transforms.functional import crop
+from torchvision import transforms
 from torchaudio.transforms import MelSpectrogram
 from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning import LightningDataModule
-
+from typing import Optional
+from functools import partial
 
 import glob
 import os
@@ -16,7 +18,7 @@ import torchaudio
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from typing import Optional
+
 
 def custom_collate_fn(batch):
     mix_melspec = torch.stack([item[0] for item in batch])
@@ -26,8 +28,8 @@ def custom_collate_fn(batch):
 
    
 def music_object_collate_fn(batch):
-    chord_spec = torch.stack([item[0] for item in batch])
-    note_specs = [item[1] for item in batch]
+    chord_spec = torch.stack([item[0] for item in batch], dim=0)
+    note_specs = [item[1] for item in batch] # cannot be torch stack since it possibly have different shape
     midi_label = [item[2] for item in batch]
     inst_label = [item[3] for item in batch]
     return chord_spec, note_specs, midi_label, inst_label
@@ -230,6 +232,7 @@ class MusicalObjectDataset(Dataset):
     
     def __getitem__(self, index):
         spec_file = self.spec_list[index]
+        # print(spec_file)
         spec = torch.tensor(np.load(spec_file, mmap_mode='r')) #torch.load(spec_file, weights_only=True)
         instrument_list = self.instrument_list[index]
 
@@ -554,22 +557,40 @@ class CocoChoraleDataModule(LightningDataModule):
 if __name__ == '__main__':
     
     # check that all datasets load correctly
-    comp_path = "/mnt/gestalt/home/ddmanddman"
-    root = f"{comp_path}/cocochorales_output/main_dataset"
+    comp_path = "/home/buffett/NAS_NTU"
+    root = f"{comp_path}/MusicSlots/data/jsb_multi"
+    num_frames = 10
+    batch_size = 16
     
-    dm = CocoChoraleDataModule(root=root, batch_size=2)
+    dm = MusicalObjectDataModule(
+        root=root,
+        batch_size=batch_size,
+        num_workers=24,
+    )
     dm.setup(stage='fit')
+    
+    img_transforms = [transforms.Lambda(partial(spec_crop, height=128, width=num_frames))]
 
-    print('Dataset sample count: {}'.format(dm.num_samples))
+    train_transforms = transforms.Compose(img_transforms)
+    test_transforms = transforms.Compose(img_transforms)
+
+    dm.train_transforms = train_transforms
+    dm.test_transforms = test_transforms
+    dm.val_transforms = test_transforms
     
-    mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
-    print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
-    mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
-    print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
-    
-    for batch in dm.train_dataloader():
-        x_m, x_s_i, pitch_annotation = batch
-        print(x_m.shape, x_s_i.shape, pitch_annotation.shape); break
+    # mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
+    # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    # mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
+    # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
+    for i in range(1):
+        x_m, x_s_i, pitch_annotation, instrument_label = dm.train_ds[i]
+        print(x_m.shape, x_s_i.shape, pitch_annotation, instrument_label)
+        
+    # for batch in dm.train_dataloader():
+    #     x_m, x_s_i, pitch_annotation, instrument_label = batch
+    #     x_s_i = torch.cat(x_s_i, dim=0)
+    #     print(x_m.shape, x_s_i.shape, len(pitch_annotation), instrument_label)
+    #     break
     
     
         

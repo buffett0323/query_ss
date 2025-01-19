@@ -5,53 +5,45 @@ import torch.distributions as dist
 
 
 class ELBOLoss_Old(nn.Module):
-    def __init__(
-        self,
-        reduction='mean',
-    ):
+    def __init__(self):
         super(ELBOLoss_Old, self).__init__()
-        self.reduction = reduction
 
-
-    def forward(self, x_m, x_m_recon, x_s, x_s_recon, tau_means, tau_logvars, pitch_latent, pitch_priors):
-        """
-        Computes the ELBO loss.
-
-        Args:
-            x_m (torch.Tensor): Original mixture data of shape (batch_size, data_dim).
-            x_m_recon (torch.Tensor): Reconstructed mixture data of shape (batch_size, data_dim).
-            tau_means (list of torch.Tensor): List of timbre latent means for each source.
-            tau_logvars (list of torch.Tensor): List of timbre latent log variances for each source.
-            nu_logits (list of torch.Tensor): List of pitch latent logits for each source.
-            y_pitch (list of torch.Tensor): List of ground truth pitch labels for each source.
-
-        Returns:
-            torch.Tensor: Scalar loss value.
-        """
-
-
+    def forward(
+        self, 
+        x_m, x_m_recon, 
+        x_s, x_s_recon, 
+        tau_means, tau_logvars, 
+        pitch_latent=None, pitch_priors=None,
+    ):
+        
         # 1. Reconstruction loss (MSE)
-        # recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction=self.reduction)
-        recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction=self.reduction)
+        # recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction='sum')
+        recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction='mean')
 
         # 2. Pitch supervision loss
-        # pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
+        pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
 
         # 3. KL Divergence for timbre latent (using standard Gaussian prior)
-        kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means.pow(2) - tau_logvars.exp(), dim=1))
+        kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means**2 - tau_logvars.exp(), dim=1))
 
         # Total ELBO loss
         loss = recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
         
-        # print(recon_loss_m.item(), recon_loss_x.item(), pitch_loss.item(), kl_loss.item()) #, source_recon_loss.item())
-        return loss
+        return {
+            'loss': loss, 
+            'recon_x': recon_loss_x.detach(), 
+            'kld': kl_loss.detach(), #-kl_loss.detach(),
+            'pitch_loss': pitch_loss.detach(),
+            # 'recon_m': recon_loss_m.detach(),
+        }
     
 
 class BarlowTwinsLoss_Old(nn.Module):
     def __init__(
         self, 
-        lambda_weight, 
-        embedding_dim, 
+        batch_size=32,
+        lambda_weight=0.005, 
+        embedding_dim=64, 
         epsilon=1e-6,
     ):
         """
@@ -65,50 +57,38 @@ class BarlowTwinsLoss_Old(nn.Module):
         self.lambda_weight = lambda_weight
         self.epsilon = epsilon
         self.identity_matrix = torch.eye(embedding_dim, requires_grad=False)  # D x D identity matrix
+        self.batch_size = batch_size
 
     def forward(self, e_q, tau):
-        """
-        Compute the Barlow Twins loss.
-
-        Args:
-            e_q (Tensor): Normalized embeddings from first augmented view (N x D).
-            tau (Tensor): Normalized embeddings from second augmented view (N x D).
-
-        Returns:
-            loss (Tensor): Scalar loss value.
-        """
         # Normalize embeddings along the batch dimension
-        e_q_norm = (e_q - e_q.mean(dim=0)) / (e_q.std(dim=0) + self.epsilon)
-        tau_norm = (tau - tau.mean(dim=0)) / (tau.std(dim=0) + self.epsilon)
+        e_q_norm = (e_q - e_q.mean(dim=0)) / (e_q.std(dim=0) + self.epsilon) # N x D
+        tau_norm = (tau - tau.mean(dim=0)) / (tau.std(dim=0) + self.epsilon) # N x D
 
-        # Cross-correlation matrix
-        N = e_q.size(0)
-        c = torch.mm(e_q_norm.T, tau_norm) / N  # D x D
+        # Cross-correlation matrix C
+        c = torch.mm(e_q_norm.T, tau_norm) / self.batch_size # D x D
 
         # Loss computation
-        c_diff = (c - self.identity_matrix.to(c.device)).pow(2)  # D x D
+        # c_diff = (c - self.identity_matrix.to(c.device)).pow(2)  # D x D
         
         # Scale off-diagonal elements
-        off_diagonal_loss = self._off_diagonal(c_diff).sum() * self.lambda_weight
-        diagonal_loss = torch.diagonal(c_diff).sum()
-        loss = diagonal_loss + off_diagonal_loss
+        on_diag = torch.diagonal(c).add_(-1).pow_(2).sum() #torch.diagonal(c_diff).sum()
+        off_diag = self._off_diagonal(c).pow_(2).sum() #self._off_diagonal(c_diff).sum() * self.lambda_weight
+        loss = on_diag + off_diag * self.lambda_weight
         
         if torch.isnan(loss).any(): 
             raise ValueError("NaN detected in loss computation")
-        return loss
+        
+        return {
+            'loss': loss, 
+            'on_diag': on_diag.detach(), 
+            'off_diag': off_diag.detach(),
+        }
 
     def _off_diagonal(self, matrix):
-        """
-        Extract off-diagonal elements from a square matrix.
-        
-        Args:
-            matrix (Tensor): Input square matrix.
-        
-        Returns:
-            off_diag_elements (Tensor): Tensor of off-diagonal elements.
-        """
-        n = matrix.size(0)
-        return matrix.flatten()[1:].view(n - 1, n + 1)[:, :-1].flatten()
+        n, m = matrix.shape
+        assert n == m
+        return matrix.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten() 
+            # matrix.flatten()[1:].view(n - 1, n + 1)[:, :-1].flatten()
 
 
 

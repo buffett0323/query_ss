@@ -115,29 +115,24 @@ class TimbreEncoder(nn.Module):
         """
             Reparameterization trick to sample from N(mean, var)
             Sampling by μφτ (·) + ε σφτ (·)
+            
+            std = torch.exp(logvar / 2)
+            q = torch.distributions.Normal(mean, std)
+            z = q.rsample()
         """
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mean + (eps * std)
+    
 
     def forward(self, em, eq):
-        # Concatenate the mixture and query embeddings
         concat_input = torch.cat([em, eq], dim=-1)  # Concatenate along feature dimension
-        
-        # Shared layers forward pass
-        hidden_state = self.shared_layers(concat_input)  # Shared hidden state output
+        h = self.shared_layers(concat_input)  # Shared hidden state output
 
-        # Calculate mean and log variance
-        mean, logvar = self.mean_layer(hidden_state), self.logvar_layer(hidden_state)  # Gaussian distribution
-
-        # Sample the timbre latent using the reparameterization trick
-        timbre_latent = self.reparameterize(mean, logvar)
+        # Gaussian distribution: mean and log variance
+        mean, logvar = self.mean_layer(h), self.logvar_layer(h)  
+        timbre_latent = self.reparameterize(mean, logvar) # Reparameterization trick
        
-        # # sample z from q
-        # std = torch.exp(logvar / 2)
-        # q = torch.distributions.Normal(mean, std)
-        # timbre_latent = q.rsample()
-        
         return timbre_latent, mean, logvar
 
 
@@ -190,14 +185,9 @@ class PitchEncoder(nn.Module):
     def forward(self, em, eq):
         concat_input = torch.cat([em, eq], dim=-1)  # Concatenate em and eq
         
-        # Transcriber
-        pitch_logits = self.transcriber(concat_input)
-
-        # SB Layer
-        y_bin = self.sb_layer(pitch_logits)  # Apply binarisation
-        
-        # Projection Layer
-        pitch_latent = self.fc_proj(y_bin)
+        pitch_logits = self.transcriber(concat_input) # Transcriber
+        y_bin = self.sb_layer(pitch_logits) # SB Layer
+        pitch_latent = self.fc_proj(y_bin) # Projection Layer
         
         return pitch_latent, pitch_logits
     
@@ -232,9 +222,10 @@ class DisMixDecoder(nn.Module):
         self.gru = nn.GRU(input_size=pitch_dim, hidden_size=gru_hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
         self.linear = nn.Linear(gru_hidden_dim * 2, output_dim)  # Bi-directional GRU output dimension is doubled
     
-    def forward(self, pitch_latents, timbre_latents):
+    
+    def forward(self, pitch_latent, timbre_latent):
         # FiLM layer: modulates pitch latents based on timbre latents
-        source_latents = self.film(pitch_latents, timbre_latents)
+        source_latents = self.film(pitch_latent, timbre_latent)
         source_latents = source_latents.unsqueeze(1).repeat(1, self.num_frames, 1) # Expand source_latents along time axis if necessary
         output, _ = self.gru(source_latents)
         output = self.linear(output).transpose(1, 2) # torch.Size([32, 10, 64])
@@ -246,11 +237,12 @@ class DisMixDecoder(nn.Module):
 class DisMixModel(pl.LightningModule):
     def __init__(
         self, 
+        batch_size=32,
         input_dim=128, 
         latent_dim=64, 
         hidden_dim=256, 
         gru_hidden_dim=256,
-        num_frames=32, #10,
+        num_frames=10, #10,
         pitch_classes=52,
         output_dim=128,
         learning_rate=4e-4,
@@ -263,6 +255,8 @@ class DisMixModel(pl.LightningModule):
         self.learning_rate = learning_rate
         self.pitch_classes = pitch_classes
         self.clip_value = clip_value
+        self.input_dim = input_dim
+        self.num_frames = num_frames
 
         # Model components
         self.mixture_encoder = MixtureQueryEncoder(
@@ -299,12 +293,13 @@ class DisMixModel(pl.LightningModule):
         self.elbo_loss_fn = ELBOLoss_Old() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
         self.bt_loss_fn = BarlowTwinsLoss_Old(
+            batch_size=batch_size,
             lambda_weight=lambda_weight,
             embedding_dim=latent_dim,
         ) # Barlow Twins
         
         # Pitch Priors
-        self.pitch_prior = self.pitch_encoder.fc_proj
+        # self.pitch_prior = self.pitch_encoder.fc_proj
         
         # Add storage for stored test timbre latents and instrument labels
         self.test_timbre_latents = []
@@ -329,9 +324,9 @@ class DisMixModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         spec, note_tensors, pitch_annotation, _ = batch
         batch_size = spec.size(0)  # Extract batch size
-        note_numbers = [i.shape[0] for i in note_tensors] # [4, 4, 4, 3, 4, 4, 4, 3, 3, 4, 3, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4]
+        note_numbers = [i.shape[0] for i in note_tensors] # [4, 3, 4, ..., 4]
 
-        """ Reconstruct spec, note_tensors, pitch_annotation """
+        # Reconstruct spec, note_tensors, pitch_annotation 
         repeated_slices = [spec[i].repeat(count, 1, 1) for i, count in enumerate(note_numbers)]
         repeated_spec = torch.cat(repeated_slices, dim=0)
         note_tensors = torch.cat(note_tensors, dim=0)
@@ -342,8 +337,8 @@ class DisMixModel(pl.LightningModule):
             timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
 
         # Get pitch priors
-        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -351,22 +346,25 @@ class DisMixModel(pl.LightningModule):
         rec_mixture = torch.cat(summed_splits, dim=0)
                 
         # Compute losses
-        elbo_loss = self.elbo_loss_fn(
+        criterion = self.configure_criterion()
+        elbo_loss = criterion["elbo_loss"](
             spec, rec_mixture,
             note_tensors, rec_source_spec,
             timbre_mean, timbre_logvar,
-            pitch_latent, pitch_priors,
+            # pitch_latent, pitch_priors,
         )
-        
-        ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
-        # bt_loss = self.bt_loss_fn(eq, timbre_latent)
+        ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
+        # bt_loss = criterion["bt_loss"](eq, timbre_latent)
+
 
         # Total loss
-        total_loss = elbo_loss + ce_loss #+ bt_loss #print(elbo_loss.item(), ce_loss.item(), bt_loss.item())
+        total_loss = elbo_loss['loss'] + ce_loss #elbo_loss + ce_loss + bt_loss #print(elbo_loss.item(), ce_loss.item(), bt_loss.item())
         
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         
@@ -377,7 +375,7 @@ class DisMixModel(pl.LightningModule):
         batch_size = spec.size(0)  # Extract batch size
         note_numbers = [i.shape[0] for i in note_tensors] # [4, 3, 4, ..., 4]
 
-        """ Reconstruct spec, note_tensors, pitch_annotation """
+        # Reconstruct spec, note_tensors, pitch_annotation 
         repeated_slices = [spec[i].repeat(count, 1, 1) for i, count in enumerate(note_numbers)]
         repeated_spec = torch.cat(repeated_slices, dim=0)
         note_tensors = torch.cat(note_tensors, dim=0)
@@ -392,8 +390,8 @@ class DisMixModel(pl.LightningModule):
         self.test_instrument_labels.append(instrument_label.detach().cpu())
             
         # Get pitch priors
-        ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
-        pitch_priors = self.pitch_prior(ohe_pitch_annotation)
+        # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        # pitch_priors = self.pitch_prior(ohe_pitch_annotation)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -401,18 +399,18 @@ class DisMixModel(pl.LightningModule):
         rec_mixture = torch.cat(summed_splits, dim=0)
                 
         # Compute losses
-        elbo_loss = self.elbo_loss_fn(
+        criterion = self.configure_criterion()
+        elbo_loss = criterion["elbo_loss"](
             spec, rec_mixture,
             note_tensors, rec_source_spec,
             timbre_mean, timbre_logvar,
-            pitch_latent, pitch_priors,
+            # pitch_latent, pitch_priors,
         )
-        
-        ce_loss = self.ce_loss_fn(pitch_logits, pitch_annotation)
-        # bt_loss = self.bt_loss_fn(eq, timbre_latent)
+        ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
+        # bt_loss = criterion["bt_loss"](eq, timbre_latent)
 
         # Total loss
-        total_loss = elbo_loss + ce_loss #+ bt_loss
+        total_loss = elbo_loss['loss'] + ce_loss  #elbo_loss + ce_loss + bt_loss
         
         # Get accuracy
         predicted_classes = torch.argmax(pitch_logits, dim=1)
@@ -422,32 +420,41 @@ class DisMixModel(pl.LightningModule):
         
         # Log losses and metrics
         self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
-        self.log(f'{stage}_elbo_loss', elbo_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        
         self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         return total_loss
-
-
-
-    def validation_step(self, batch, batch_idx):
-        return self.evaluate(batch, stage='val')
-
-    def test_step(self, batch, batch_idx):
-        return self.evaluate(batch, stage='test')
-
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
         return [optimizer], [scheduler]
     
+    def configure_criterion(self):
+        return {
+            "elbo_loss": self.elbo_loss_fn,
+            "ce_loss": self.ce_loss_fn,
+            "bt_loss": self.bt_loss_fn,
+        }
+        
+    def validation_step(self, batch, batch_idx):
+        return self.evaluate(batch, stage='val')
+
+    def test_step(self, batch, batch_idx):
+        pass
+        # return self.evaluate(batch, stage='test')
+    
     def on_validation_epoch_end(self):
         pass
         # return self.plotting(stage='val')
     
     def on_test_epoch_end(self):
-        return self.plotting(stage='test')
+        pass
+        # return self.plotting(stage='test')
     
     def plotting(self, stage='val'):
         # Concatenate stored latents and labels
