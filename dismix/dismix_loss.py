@@ -52,7 +52,7 @@ class ELBOLoss_VAE(nn.Module):
 
         # Total ELBO loss
         # elbo
-        elbo = (kl_loss - recon_loss_x).mean()
+        elbo = (kl_loss + recon_loss_x).mean()
         loss = elbo #recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
         
         return {
