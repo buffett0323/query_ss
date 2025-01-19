@@ -101,7 +101,7 @@ class BarlowTwinsLoss_VAE(nn.Module):
         
         return {
             'loss': loss, 
-            'on_diag': on_diag.detach(), 
+            # 'on_diag': on_diag.detach(), 
             # 'off_diag': off_diag.detach()* self.lambda_weight,
         }
 
