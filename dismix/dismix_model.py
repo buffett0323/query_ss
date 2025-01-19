@@ -139,7 +139,11 @@ class TimbreEncoder(nn.Module):
         mu, logvar = self.mean_layer(h), self.logvar_layer(h)  
         
         # Reparameterization trick: sample z from q
-        std = torch.exp(logvar / 2)
+        assert not torch.isnan(mu).any(), "mu contains NaN values"
+        assert not torch.isnan(std).any(), "std contains NaN values"
+
+        std = torch.exp(0.5 * logvar)
+        std = torch.clamp(std, min=1e-6)
         q = torch.distributions.Normal(mu, std)
         timbre_latent = q.rsample()
        
