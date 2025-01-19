@@ -4,41 +4,67 @@ import torch.nn.functional as F
 import torch.distributions as dist
 
 
-class ELBOLoss_Old(nn.Module):
+class ELBOLoss_VAE(nn.Module):
     def __init__(self):
-        super(ELBOLoss_Old, self).__init__()
+        super(ELBOLoss_VAE, self).__init__()
+        self.log_scale = nn.Parameter(torch.Tensor([0.0]))
+        
+    def gaussian_likelihood(self, mean, logscale, sample):
+        scale = torch.exp(logscale)
+        dist = torch.distributions.Normal(mean, scale)
+        log_pxz = dist.log_prob(sample)
+        return log_pxz.sum(dim=(1, 2))#, 3)) # shape: torch.Size([32, 128, 10])
+    
+    def kl_divergence(self, z, mu, std): # Monte carlo KL divergence
+        # 1. define the first two probabilities (in this case Normal for both)
+        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
+        q = torch.distributions.Normal(mu, std)
+
+        # 2. get the probabilities from the equation
+        log_qzx = q.log_prob(z)
+        log_pz = p.log_prob(z)
+
+        # kl
+        kl = (log_qzx - log_pz)
+        kl = kl.sum(-1)
+        return kl
+    
 
     def forward(
         self, 
         x_m, x_m_recon, 
         x_s, x_s_recon, 
-        tau_means, tau_logvars, 
+        timbre_latent, tau_mu, tau_std,
         pitch_latent=None, pitch_priors=None,
     ):
         
         # 1. Reconstruction loss (MSE)
         # recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction='sum')
-        recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction='mean')
+        # recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction='mean')
+        recon_loss_x = self.gaussian_likelihood(x_s_recon, self.log_scale, x_s)
 
         # 2. Pitch supervision loss
-        pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction=self.reduction)
+        # pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction='mean')
 
         # 3. KL Divergence for timbre latent (using standard Gaussian prior)
-        kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means**2 - tau_logvars.exp(), dim=1))
+        # kl_loss = torch.mean(-0.5 * torch.sum(1 + tau_logvars - tau_means**2 - tau_logvars.exp(), dim=1))
+        kl_loss = self.kl_divergence(timbre_latent, tau_mu, tau_std)
 
         # Total ELBO loss
-        loss = recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
+        # elbo
+        elbo = (kl_loss - recon_loss_x).mean()
+        loss = elbo #recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
         
         return {
             'loss': loss, 
-            'recon_x': recon_loss_x.detach(), 
-            'kld': kl_loss.detach(), #-kl_loss.detach(),
-            'pitch_loss': pitch_loss.detach(),
+            'recon_x': recon_loss_x.mean(), 
+            'kld': kl_loss.mean(), #-kl_loss.detach(),
+            # 'pitch_loss': pitch_loss.detach(),
             # 'recon_m': recon_loss_m.detach(),
         }
     
 
-class BarlowTwinsLoss_Old(nn.Module):
+class BarlowTwinsLoss_VAE(nn.Module):
     def __init__(
         self, 
         batch_size=32,
@@ -53,7 +79,7 @@ class BarlowTwinsLoss_Old(nn.Module):
             lambda_weight (float): Weight on the off-diagonal terms.
             embedding_dim (int): Dimensionality of the embeddings.
         """
-        super(BarlowTwinsLoss_Old, self).__init__()
+        super(BarlowTwinsLoss_VAE, self).__init__()
         self.lambda_weight = lambda_weight
         self.epsilon = epsilon
         self.identity_matrix = torch.eye(embedding_dim, requires_grad=False)  # D x D identity matrix
@@ -68,20 +94,15 @@ class BarlowTwinsLoss_Old(nn.Module):
         c = torch.mm(e_q_norm.T, tau_norm) / self.batch_size # D x D
 
         # Loss computation
-        # c_diff = (c - self.identity_matrix.to(c.device)).pow(2)  # D x D
-        
-        # Scale off-diagonal elements
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum() #torch.diagonal(c_diff).sum()
-        off_diag = self._off_diagonal(c).pow_(2).sum() #self._off_diagonal(c_diff).sum() * self.lambda_weight
-        loss = on_diag + off_diag * self.lambda_weight
+        # off_diag = self._off_diagonal(c).pow_(2).sum() #self._off_diagonal(c_diff).sum() * self.lambda_weight
+        loss = on_diag # + off_diag * self.lambda_weight
         
-        if torch.isnan(loss).any(): 
-            raise ValueError("NaN detected in loss computation")
         
         return {
             'loss': loss, 
             'on_diag': on_diag.detach(), 
-            'off_diag': off_diag.detach(),
+            # 'off_diag': off_diag.detach()* self.lambda_weight,
         }
 
     def _off_diagonal(self, matrix):

@@ -28,9 +28,9 @@ torch.set_float32_matmul_precision('high')
 
 if __name__ == "__main__":
     # Initial settings
-    log_wandb = True # False
-    wanbd_proj_name = "VAE timbre + CE"
-    find_unused_parameters = False # False if train all params
+    log_wandb = False # False
+    wanbd_proj_name = "VAE ELBO(new) + BT"
+    find_unused_parameters = True # False if train all params
     device_id = [0, 1] #[0, 1, 2, 3 , 4, 5]
     batch_size = 64 #32
     num_frames = 10 #32

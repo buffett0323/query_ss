@@ -11,7 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from matplotlib.colors import ListedColormap
 
-from dismix_loss import ELBOLoss_Old, BarlowTwinsLoss_Old
+from dismix_loss import ELBOLoss_VAE, BarlowTwinsLoss_VAE
 
 
 class Conv1DEncoder(nn.Module):
@@ -111,18 +111,24 @@ class TimbreEncoder(nn.Module):
         self.mean_layer = nn.Linear(hidden_dim, output_dim)
         self.logvar_layer = nn.Linear(hidden_dim, output_dim)
 
-    def reparameterize(self, mean, logvar):
-        """
-            Reparameterization trick to sample from N(mean, var)
-            Sampling by μφτ (·) + ε σφτ (·)
+    # def reparameterize(self, mean, logvar):
+    #     """
+    #         Reparameterization trick to sample from N(mean, var)
+    #         Sampling by μφτ (·) + ε σφτ (·)
             
-            std = torch.exp(logvar / 2)
-            q = torch.distributions.Normal(mean, std)
-            z = q.rsample()
-        """
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mean + (eps * std)
+    #         1. std = torch.exp(logvar / 2)
+    #         q = torch.distributions.Normal(mean, std)
+    #         z = q.rsample()
+            
+    #         2. std = torch.exp(0.5 * logvar)
+    #         eps = torch.randn_like(std)
+    #         return mean + (eps * std)
+    #     """
+    #     std = torch.exp(logvar / 2)
+    #     q = torch.distributions.Normal(mean, std)
+    #     z = q.rsample()
+    #     return z
+        
     
 
     def forward(self, em, eq):
@@ -130,10 +136,14 @@ class TimbreEncoder(nn.Module):
         h = self.shared_layers(concat_input)  # Shared hidden state output
 
         # Gaussian distribution: mean and log variance
-        mean, logvar = self.mean_layer(h), self.logvar_layer(h)  
-        timbre_latent = self.reparameterize(mean, logvar) # Reparameterization trick
+        mu, logvar = self.mean_layer(h), self.logvar_layer(h)  
+        
+        # Reparameterization trick: sample z from q
+        std = torch.exp(logvar / 2)
+        q = torch.distributions.Normal(mu, std)
+        timbre_latent = q.rsample()
        
-        return timbre_latent, mean, logvar
+        return timbre_latent, mu, std
 
 
 
@@ -225,7 +235,7 @@ class DisMixDecoder(nn.Module):
     
     def forward(self, pitch_latent, timbre_latent):
         # FiLM layer: modulates pitch latents based on timbre latents
-        source_latents = self.film(pitch_latent, timbre_latent)
+        source_latents = timbre_latent #self.film(pitch_latent, timbre_latent)
         source_latents = source_latents.unsqueeze(1).repeat(1, self.num_frames, 1) # Expand source_latents along time axis if necessary
         output, _ = self.gru(source_latents)
         output = self.linear(output).transpose(1, 2) # torch.Size([32, 10, 64])
@@ -251,7 +261,6 @@ class DisMixModel(pl.LightningModule):
         lambda_weight=0.005,
     ):
         super(DisMixModel, self).__init__()
-        self.save_hyperparameters()
         self.learning_rate = learning_rate
         self.pitch_classes = pitch_classes
         self.clip_value = clip_value
@@ -290,9 +299,9 @@ class DisMixModel(pl.LightningModule):
         )
 
         # Loss functions
-        self.elbo_loss_fn = ELBOLoss_Old() # For ELBO
+        self.elbo_loss_fn = ELBOLoss_VAE() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
-        self.bt_loss_fn = BarlowTwinsLoss_Old(
+        self.bt_loss_fn = BarlowTwinsLoss_VAE(
             batch_size=batch_size,
             lambda_weight=lambda_weight,
             embedding_dim=latent_dim,
@@ -312,13 +321,13 @@ class DisMixModel(pl.LightningModule):
         eq = self.query_encoder(query)
 
         # Encode pitch and timbre latents
-        pitch_latent, pitch_logits = self.pitch_encoder(em, eq)
-        timbre_latent, timbre_mean, timbre_logvar = self.timbre_encoder(em, eq)
+        pitch_latent, pitch_logits = None, None #self.pitch_encoder(em, eq)
+        timbre_latent, tau_mu, tau_std = self.timbre_encoder(em, eq)
         
         # Decode to reconstruct the mixture
         rec_source_spec = self.decoder(pitch_latent, timbre_latent)
-        return rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
-                    timbre_mean, timbre_logvar, eq
+        return rec_source_spec, pitch_latent, pitch_logits, \
+            timbre_latent, tau_mu, tau_std, eq
 
 
     def training_step(self, batch, batch_idx):
@@ -333,8 +342,8 @@ class DisMixModel(pl.LightningModule):
         pitch_annotation = torch.cat(pitch_annotation, dim=0)
         
         # Forward pass
-        rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
-            timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
+        rec_source_spec, pitch_latent, pitch_logits, \
+            timbre_latent, tau_mu, tau_std, eq = self(repeated_spec, note_tensors)
 
         # Get pitch priors
         # ohe_pitch_annotation = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
@@ -350,23 +359,25 @@ class DisMixModel(pl.LightningModule):
         elbo_loss = criterion["elbo_loss"](
             spec, rec_mixture,
             note_tensors, rec_source_spec,
-            timbre_mean, timbre_logvar,
+            timbre_latent, tau_mu, tau_std,
             # pitch_latent, pitch_priors,
         )
-        ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
-        # bt_loss = criterion["bt_loss"](eq, timbre_latent)
+        # ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
+        bt_loss = criterion["bt_loss"](eq, timbre_latent)
 
 
         # Total loss
-        total_loss = elbo_loss['loss'] + ce_loss #elbo_loss + ce_loss + bt_loss #print(elbo_loss.item(), ce_loss.item(), bt_loss.item())
+        total_loss = elbo_loss['loss'] + bt_loss['loss'] #elbo_loss + ce_loss + bt_loss #print(elbo_loss.item(), ce_loss.item(), bt_loss.item())
         
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_bt_off_diag', bt_loss['off_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
         return total_loss
 
@@ -383,8 +394,8 @@ class DisMixModel(pl.LightningModule):
         instrument_label = torch.cat(instrument_label, dim=0)
         
         # Forward pass
-        rec_source_spec, pitch_latent, pitch_logits, timbre_latent, \
-            timbre_mean, timbre_logvar, eq = self(repeated_spec, note_tensors)
+        rec_source_spec, pitch_latent, pitch_logits, \
+            timbre_latent, tau_mu, tau_std, eq = self(repeated_spec, note_tensors)
 
         self.test_timbre_latents.append(timbre_latent.detach().cpu())
         self.test_instrument_labels.append(instrument_label.detach().cpu())
@@ -403,19 +414,19 @@ class DisMixModel(pl.LightningModule):
         elbo_loss = criterion["elbo_loss"](
             spec, rec_mixture,
             note_tensors, rec_source_spec,
-            timbre_mean, timbre_logvar,
+            timbre_latent, tau_mu, tau_std,
             # pitch_latent, pitch_priors,
         )
-        ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
-        # bt_loss = criterion["bt_loss"](eq, timbre_latent)
+        # ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
+        bt_loss = criterion["bt_loss"](eq, timbre_latent)
 
         # Total loss
-        total_loss = elbo_loss['loss'] + ce_loss  #elbo_loss + ce_loss + bt_loss
+        total_loss = elbo_loss['loss'] + bt_loss['loss']  #elbo_loss + ce_loss + bt_loss
         
         # Get accuracy
-        predicted_classes = torch.argmax(pitch_logits, dim=1)
-        correct_predictions = (predicted_classes == pitch_annotation).float().sum()
-        accuracy = correct_predictions / len(predicted_classes)
+        # predicted_classes = torch.argmax(pitch_logits, dim=1)
+        # correct_predictions = (predicted_classes == pitch_annotation).float().sum()
+        # accuracy = correct_predictions / len(predicted_classes)
 
         
         # Log losses and metrics
@@ -424,9 +435,12 @@ class DisMixModel(pl.LightningModule):
         self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
-        self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log(f'{stage}_bt_off_diag', bt_loss['off_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        
         return total_loss
 
     def configure_optimizers(self):
