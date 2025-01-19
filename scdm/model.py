@@ -418,6 +418,7 @@ class SimCLRDisMix(pl.LightningModule):
     
     
     def training_step(self, batch, batch_idx):
+        criterion = self.configure_criterion()
         mix_i, mix_j, stem_i, stem_j, pitch_i, pitch_j = batch
         if mix_i.shape[0] != self.batch_size:
             return None
