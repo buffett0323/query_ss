@@ -127,7 +127,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         strategy=strategy,
         callbacks=cb,
-        precision='16-mixed',
+        precision=32,#'16-mixed',
         gradient_clip_val=model.clip_value,
     )
 

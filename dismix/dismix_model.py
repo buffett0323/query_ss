@@ -136,6 +136,7 @@ class TimbreEncoder(nn.Module):
         h = self.shared_layers(concat_input)  # Shared hidden state output
 
         # Gaussian distribution: mean and log variance
+        assert not torch.isnan(h).any(), "h contains NaN values"
         mu, logvar = self.mean_layer(h), self.logvar_layer(h)  
         
         # Reparameterization trick: sample z from q
