@@ -368,21 +368,21 @@ class DisMixModel(pl.LightningModule):
             timbre_latent, tau_mu, tau_std,
             # pitch_latent, pitch_priors,
         )
-        # ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
+        ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
         bt_loss = criterion["bt_loss"](eq, timbre_latent)
 
 
         # Total loss
-        total_loss = elbo_loss['loss'] + bt_loss['loss'] #elbo_loss + ce_loss + bt_loss #print(elbo_loss.item(), ce_loss.item(), bt_loss.item())
+        total_loss = elbo_loss['loss'] + ce_loss + bt_loss['loss']
         
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_off_diag', bt_loss['off_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
         return total_loss
@@ -423,16 +423,16 @@ class DisMixModel(pl.LightningModule):
             timbre_latent, tau_mu, tau_std,
             # pitch_latent, pitch_priors,
         )
-        # ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
+        ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
         bt_loss = criterion["bt_loss"](eq, timbre_latent)
 
         # Total loss
-        total_loss = elbo_loss['loss'] + bt_loss['loss']  #elbo_loss + ce_loss + bt_loss
-        
+        total_loss = elbo_loss['loss'] + bt_loss['loss'] + ce_loss
+
         # Get accuracy
-        # predicted_classes = torch.argmax(pitch_logits, dim=1)
-        # correct_predictions = (predicted_classes == pitch_annotation).float().sum()
-        # accuracy = correct_predictions / len(predicted_classes)
+        predicted_classes = torch.argmax(pitch_logits, dim=1)
+        correct_predictions = (predicted_classes == pitch_annotation).float().sum()
+        accuracy = correct_predictions / len(predicted_classes)
 
         
         # Log losses and metrics
@@ -441,10 +441,10 @@ class DisMixModel(pl.LightningModule):
         self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
-        # self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        self.log(f'{stage}_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log(f'{stage}_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_bt_off_diag', bt_loss['off_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
         return total_loss
