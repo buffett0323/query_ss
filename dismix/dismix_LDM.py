@@ -77,10 +77,11 @@ class QueryEncoder(nn.Module):
 class MixtureEncoder(nn.Module):
     def __init__(
         self,
-        vae,
+        repo_id,
     ):
         super().__init__()
-        self.encoder = vae.encoder
+        self.encoder = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float32).vae.encoder
+        
         self.freeze_encoder()
         self.conv = nn.Conv2d(
             in_channels=16,  # Input channels
@@ -384,7 +385,7 @@ class TransformerBlock(nn.Module):
 class DiT(nn.Module):
     def __init__(
         self, 
-        vae,
+        repo_id,
         batch_size,
         N_s,
         dim=512, 
@@ -410,8 +411,8 @@ class DiT(nn.Module):
         self.batch_size = batch_size
         self.condition_dim = condition_dim
         
-        self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
-        self.pt_D_VAE = vae.decoder
+        self.pt_E_VAE = MixtureEncoder(repo_id=repo_id) # pipe.vae.encoder
+        self.pt_D_VAE = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float32).vae.decoder
         self.freeze_decoder()
         
         self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
@@ -550,7 +551,7 @@ class DiT(nn.Module):
 class DisMix_LDM_Model(pl.LightningModule):
     def __init__(
         self,
-        vae,
+        repo_id="cvssp/audioldm2-music",
         learning_rate=1e-4,
         D_z=16,
         D_s=32,
@@ -581,7 +582,7 @@ class DisMix_LDM_Model(pl.LightningModule):
             downsample_time_stride4_levels=[],  # No special downsampling for time
         )
         
-        self.M_Encoder = MixtureEncoder(vae=vae) # Pre-trained model
+        self.M_Encoder = MixtureEncoder(repo_id=repo_id) # Pre-trained model
         
         self.combine_conv = nn.Conv2d(
             in_channels=32,  # 16 from em and 16 from eq after concatenation
@@ -594,7 +595,7 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.pitch_encoder = PitchEncoder()
         self.timbre_encoder = TimbreEncoder()
         self.dit = DiT(
-            vae=vae,
+            repo_id=repo_id,
             batch_size=batch_size,
             N_s=N_s,
         )

@@ -63,3 +63,16 @@ This stepwise process allows for efficient and high-quality reconstruction while
 
 HIFI-GAN Usage example:
 https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/assets/hub/nvidia_deeplearningexamples_hifigan.ipynb#scrollTo=b02dd30d
+
+
+  | Name           | Type             | Params
+----------------------------------------------------
+0 | Q_Encoder      | QueryEncoder     | 5.6 M 
+1 | M_Encoder      | MixtureEncoder   | 22.4 M
+2 | combine_conv   | Conv2d           | 528   
+3 | pitch_encoder  | PitchEncoder     | 14.2 M
+4 | timbre_encoder | TimbreEncoder    | 279 K 
+5 | dit            | DiT              | 72.2 M
+6 | elbo_loss_fn   | ELBOLoss         | 1     
+7 | ce_loss_fn     | CrossEntropyLoss | 0     
+8 | bt_loss_fn     | BarlowTwinsLoss  | 0     
