@@ -28,8 +28,8 @@ torch.set_float32_matmul_precision('high')
 log_wandb = False # False
 wanbd_proj_name = "Without recon"
 find_unused_parameters = True # False if train all params
-device_id = [1] #[0, 1, 2, 3]
-batch_size = 2
+device_id = [3] #[0, 1, 2, 3]
+batch_size = 4
 N_s = 4
 lr = 1e-4
 early_stop_patience = 100 #260000

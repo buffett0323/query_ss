@@ -617,7 +617,7 @@ class DisMix_LDM_Model(pl.LightningModule):
 
         # Loss functions
         self.elbo_loss_fn = ELBOLoss() # For ELBO
-        self.ce_loss_fn = F.binary_cross_entropy_with_logits() #nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
+        self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
         self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
         
         
@@ -661,8 +661,13 @@ class DisMix_LDM_Model(pl.LightningModule):
     
     
     def training_step(self, batch, batch_idx):
-        x_m, x_s_i, pitch_annotation = batch
+        x_m, x_s_i, y_gt = batch
         e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon = self(x_m, x_s_i, evaluate=False)
+        
+        # Pitch annotation ohe for BCE Loss
+        y_gt = y_gt.view(self.batch_size*self.N_s, -1)
+        bs, tf = y_gt.shape
+        y_gt_ohe = F.one_hot(y_gt, num_classes=self.pitch_labels).float().permute(0, 2, 1)  # Shape: [Batch_size, 129, Time_frames]
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
@@ -670,20 +675,18 @@ class DisMix_LDM_Model(pl.LightningModule):
             x_s_i, x_s_recon,
             timbre_latent, timbre_mean, timbre_std,
         )
-        pitch_annotation = pitch_annotation.view(self.batch_size*self.N_s, -1)
-        
-        ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)
+        bce_loss = F.binary_cross_entropy_with_logits(y_hat, y_gt_ohe) # ce_loss = self.ce_loss_fn(y_hat, y_gt)
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
         
         # Total loss
-        total_loss = elbo_loss['loss'] + ce_loss + bt_loss
+        total_loss = elbo_loss['loss'] + bce_loss + bt_loss #elbo_loss['loss'] + ce_loss + bt_loss
         
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
-        self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_bce_loss', bce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         
         return total_loss
@@ -691,8 +694,13 @@ class DisMix_LDM_Model(pl.LightningModule):
     
         
     def evaluate(self, batch, stage='val'):
-        x_m, x_s_i, pitch_annotation = batch
+        x_m, x_s_i, y_gt = batch
         e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon = self(x_m, x_s_i, evaluate=True)
+        
+        # Pitch annotation ohe for BCE Loss
+        y_gt = y_gt.view(self.batch_size*self.N_s, -1)
+        bs, tf = y_gt.shape
+        y_gt_ohe = F.one_hot(y_gt, num_classes=self.pitch_labels).float().permute(0, 2, 1)  # Shape: [Batch_size, 129, Time_frames]
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
@@ -700,33 +708,25 @@ class DisMix_LDM_Model(pl.LightningModule):
             x_s_i, x_s_recon,
             timbre_latent, timbre_mean, timbre_std,
         )
-        pitch_annotation = pitch_annotation.view(self.batch_size*self.N_s, -1)
-        
-        ce_loss = self.ce_loss_fn(y_hat, pitch_annotation)
+        bce_loss = F.binary_cross_entropy_with_logits(y_hat, y_gt_ohe) # ce_loss = self.ce_loss_fn(y_hat, y_gt)
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
         
         # Total loss
-        total_loss = elbo_loss['loss'] + ce_loss + bt_loss
+        total_loss = elbo_loss['loss'] + bce_loss + bt_loss #elbo_loss['loss'] + ce_loss + bt_loss
         
         # Get accuracy
-        print("acc shape check", y_hat.shape, pitch_annotation.shape)
-        print(pitch_annotation)
-        bs, time_frames = pitch_annotation.shape
-        pitch_annotation_ohe = F.one_hot(pitch_annotation, num_classes=self.pitch_labels).float().permute(0, 2, 1)  # Shape: [Batch_size, Time_frames, 129]
-
         predicted_pitches = torch.argmax(y_hat, dim=1)  # Shape: [Batch_size, Time_frames]
-        correct_predictions = (predicted_pitches == pitch_annotation).float().sum()
-        total_predictions = bs * time_frames
-        accuracy = correct_predictions / total_predictions
+        correct_predictions = (predicted_pitches == y_gt).float().sum()
+        accuracy = correct_predictions / (bs * tf)
         
         # Log losses and metrics
         self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
-        self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
-        self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_bce_loss', bce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_acc', accuracy.item(), on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         return total_loss
         
     
