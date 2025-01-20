@@ -439,24 +439,13 @@ class CocoChoraleDataset(Dataset):
     
     def __getitem__(self, idx):
         audio_path = self.file_path[idx]
-        mix_audio = os.path.join(audio_path, 'mix.wav')
-        
-        with open(os.path.join(audio_path, 'metadata.yaml'), 'r') as file:
-            stems = yaml.safe_load(file).get('instrument_name', {})
-        stems_audio = [os.path.join(audio_path, 'stems_audio', f'{i+1}_{j}.wav') for i, j in stems.items()]
-
-        # Load audio
-        mix_wav, _ = torchaudio.load(mix_audio)
-        stems_wav = [torchaudio.load(i)[0] for i in stems_audio]
-
-        # Apply MelSpectrogram
-        mix_melspec = self.transform(mix_wav)
-        stems_melspec = [self.transform(i) for i in stems_wav]
+        mix_melspec = np.load(os.path.join(audio_path, 'mix_melspec.npy')) #, mmap_mode='r')
+        stems_melspec = np.load(os.path.join(audio_path, 'stems_melspec.npy')) #, mmap_mode='r')
         
         # Randomly sample segment
         start_frame = np.random.randint(0, mix_melspec.shape[-1] - self.segment_length + 1)
         mix_melspec = mix_melspec[:, :, start_frame:start_frame + self.segment_length]
-        stems_melspec = [i[:, :, start_frame:start_frame + self.segment_length] for i in stems_melspec]
+        stems_melspec = stems_melspec[:, :, start_frame:start_frame + self.segment_length]
 
         # Get pitch annotation by reading pickle
         csv_folder = audio_path.replace('main_dataset', 'note_expression')
@@ -468,12 +457,85 @@ class CocoChoraleDataset(Dataset):
             pitch_annotation.append(pitch_sequence)  
         
         pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
-
-        stems_melspec = torch.cat(stems_melspec, dim=0)
         pitch_annotation = torch.cat(pitch_annotation, dim=0)
 
-        return mix_melspec, stems_melspec, pitch_annotation
 
+        return torch.tensor(mix_melspec), torch.tensor(stems_melspec), pitch_annotation
+
+    
+    def process_file(self):
+        for audio_path in tqdm(self.file_path):
+            mix_audio = os.path.join(audio_path, 'mix.wav')
+        
+            with open(os.path.join(audio_path, 'metadata.yaml'), 'r') as file:
+                stems = yaml.safe_load(file).get('instrument_name', {})
+            stems_audio = [os.path.join(audio_path, 'stems_audio', f'{i+1}_{j}.wav') for i, j in stems.items()]
+
+            # Load audio
+            mix_wav, _ = torchaudio.load(mix_audio)
+            stems_wav = [torchaudio.load(i)[0] for i in stems_audio]
+
+            # Apply MelSpectrogram
+            mix_melspec = self.transform(mix_wav)
+            stems_melspec = [self.transform(i) for i in stems_wav]
+            stems_melspec = torch.cat(stems_melspec, dim=0)
+            
+            # TODO: Store mix_melspec and stems_melspec
+            np.save(os.path.join(audio_path, 'mix_melspec.npy'), mix_melspec)
+            np.save(os.path.join(audio_path, 'stems_melspec.npy'), np.array(stems_melspec))
+            
+           
+            # TODO: Store the csv file for pitch_annotation
+            # # Get pitch annotation by reading pickle
+            # csv_folder = audio_path.replace('main_dataset', 'note_expression')
+
+            # for csv_file in os.listdir(csv_folder):
+            #     csv_file = os.path.join(csv_folder, csv_file)
+            #     csv_df = pd.read_csv(csv_file, encoding='utf-8') #, errors='ignore')
+            #     csv_data = csv_df.to_numpy()
+                
+            #     npy_path = csv_file.replace('.csv', '.npy')
+            #     np.save(npy_path, csv_data)
+            
+            
+    # def __getitem__(self, idx): # Slower load data version
+    #     audio_path = self.file_path[idx]
+    #     mix_audio = os.path.join(audio_path, 'mix.wav')
+        
+    #     with open(os.path.join(audio_path, 'metadata.yaml'), 'r') as file:
+    #         stems = yaml.safe_load(file).get('instrument_name', {})
+    #     stems_audio = [os.path.join(audio_path, 'stems_audio', f'{i+1}_{j}.wav') for i, j in stems.items()]
+
+    #     # Load audio
+    #     mix_wav, _ = torchaudio.load(mix_audio)
+    #     stems_wav = [torchaudio.load(i)[0] for i in stems_audio]
+
+    #     # Apply MelSpectrogram
+    #     mix_melspec = self.transform(mix_wav)
+    #     stems_melspec = [self.transform(i) for i in stems_wav]
+        
+    #     # Randomly sample segment
+    #     start_frame = np.random.randint(0, mix_melspec.shape[-1] - self.segment_length + 1)
+    #     mix_melspec = mix_melspec[:, :, start_frame:start_frame + self.segment_length]
+    #     stems_melspec = [i[:, :, start_frame:start_frame + self.segment_length] for i in stems_melspec]
+
+    #     # Get pitch annotation by reading pickle
+    #     csv_folder = audio_path.replace('main_dataset', 'note_expression')
+    #     pitch_annotation = []
+    #     for csv_file in os.listdir(csv_folder):
+    #         csv_file = os.path.join(csv_folder, csv_file)
+    #         csv_df = pd.read_csv(csv_file)
+    #         pitch_sequence = self.get_pitch_sequence(csv_df, start_frame)
+    #         pitch_annotation.append(pitch_sequence)  
+        
+    #     pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
+
+    #     stems_melspec = torch.cat(stems_melspec, dim=0)
+    #     pitch_annotation = torch.cat(pitch_annotation, dim=0)
+
+    #     return mix_melspec, stems_melspec, pitch_annotation
+    
+    
 class CocoChoraleDataModule(LightningDataModule):
     def __init__(
         self,
@@ -534,7 +596,6 @@ class CocoChoraleDataModule(LightningDataModule):
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
-            collate_fn=custom_collate_fn
         )
     
     @property
