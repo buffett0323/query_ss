@@ -98,7 +98,9 @@ class MixtureEncoder(nn.Module):
     def forward(self, x):
         with torch.no_grad():
             h = self.encoder(x).permute(0, 1, 3, 2)
-        return self.conv(h)
+
+        h = self.conv(h)            
+        return h
     
     
     
@@ -165,8 +167,8 @@ class PitchEncoder(nn.Module):
     def forward(self, x):
         y_hat = self.E_phai_nu(x) # BS, 8, 100, 16 --> BS, 129, 400
         y_hat_sb = self.sb_layer(y_hat)
-        tau = self.f_phai_nu(y_hat_sb.unsqueeze(1)) # BS, 129, 400 --> BS, 8, 100, 16
-        return y_hat, tau
+        pitch_latent = self.f_phai_nu(y_hat_sb.unsqueeze(1)) # BS, 1, 129, 400 --> BS, 8, 100, 16
+        return y_hat, pitch_latent
 
 
 class TimbreEncoder(nn.Module):
@@ -189,14 +191,6 @@ class TimbreEncoder(nn.Module):
         self.temporal_pool = nn.AdaptiveAvgPool1d(output_size=1) # nn.AdaptiveAvgPool2d((1, 16))  # Output size: (time=1, feature=16)
 
 
-    def reparameterize(self, mean, logvar):
-        """
-            Reparameterization trick to sample from N(mean, var)
-            Sampling by μφτ (·) + ε σφτ (·)
-        """
-        std = torch.exp(logvar) # std = torch.exp(0.5 * torch.clamp(logvar, min=-10, max=10))
-        eps = torch.randn_like(std) # Random noise ~ N(0, 1)
-        return mean + (eps * std)
 
     def forward(self, x):
         BS, C, T, F = x.shape
@@ -207,8 +201,12 @@ class TimbreEncoder(nn.Module):
         split_x = torch.split(x, 128, dim=1)
         reshaped_x = [t.view(t.size(0), 8, 1, 16) for t in split_x]
         mean, logvar = reshaped_x[0], reshaped_x[1]
-        timbre_latent = self.reparameterize(mean, logvar)
-        return mean, logvar, timbre_latent
+        
+        std = torch.exp(0.5 * logvar)
+        std = torch.clamp(std, min=1e-6)
+        q = torch.distributions.Normal(mean, std)
+        timbre_latent = q.rsample()
+        return timbre_latent, mean, std
 
 
 # Sinusoidal Positional Encoding
@@ -414,7 +412,7 @@ class DiT(nn.Module):
         
         self.pt_E_VAE = MixtureEncoder(vae=vae) # pipe.vae.encoder
         self.pt_D_VAE = vae.decoder
-        self.freeze_encoder()
+        self.freeze_decoder()
         
         self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.transformer_blocks = nn.ModuleList([
@@ -429,8 +427,8 @@ class DiT(nn.Module):
         )
         
 
-    def freeze_encoder(self):
-        """Freeze the parameters of the encoder to prevent training."""
+    def freeze_decoder(self):
+        """Freeze the parameters of the decoder to prevent training."""
         for param in self.pt_D_VAE.parameters():
             param.requires_grad = False
         
@@ -485,8 +483,8 @@ class DiT(nn.Module):
             Tensor: Output tensor of shape [seq_len, batch_size, dim].
         """
         with torch.no_grad():
-            z_s = self.pt_E_VAE(x_s)#.to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-            z_s = z_s.permute(0, 1, 3, 2)  # Convert to float32 for further processing
+            z_s = self.pt_E_VAE(x_s) # [batch*N_s, C=8, H=16, W=100]
+            z_s = z_s.permute(0, 1, 3, 2)
         
         # Partition
         z_m_t, s_c = self.partitioner(z_s, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
@@ -499,13 +497,13 @@ class DiT(nn.Module):
         for block in self.transformer_blocks:
             z_m_t = block(z_m_t, condition)
 
-        # Unpatchify and convert to float16 for pt_D_VAE
+        # Unpatchify
         z_m_t = self.unpatchify(z_m_t)
         
         # Decoder
         with torch.no_grad():
             z_m_t = self.pt_D_VAE(z_m_t).permute(0, 1, 3, 2)
-        return z_m_t #.to(torch.float32).permute(0, 1, 3, 2)
+        return z_m_t
     
     
     
@@ -548,10 +546,12 @@ class DiT(nn.Module):
         return z_m_t# ([8, 1, 400, 64])
 
 
-class DisMix_LDM(nn.Module):
+    
+class DisMix_LDM_Model(pl.LightningModule):
     def __init__(
         self,
         vae,
+        learning_rate=1e-4,
         D_z=16,
         D_s=32,
         L=25,
@@ -560,18 +560,10 @@ class DisMix_LDM(nn.Module):
         beta_end=0.02, 
         N_s=4,
         batch_size=1,
+        pitch_labels=129,
     ):
-        """
-        Args:
-            encoder (nn.Module): Encoder module.
-            partitioner (nn.Module): DiT Patch Partitioner module.
-            dit (nn.Module): Diffusion Transformer module.
-            decoder (nn.Module): Decoder module.
-            diffusion_steps (int): Number of diffusion steps.
-            beta_start (float): Starting value of beta for noise schedule.
-            beta_end (float): Ending value of beta for noise schedule.
-        """
-        super().__init__()
+        super(DisMix_LDM_Model, self).__init__()
+        # self.save_hyperparameters()
         self.Q_Encoder = QueryEncoder(
             ch=64,  # Initial number of channels, can be adjusted as needed
             out_ch=8,  # Desired number of output channels
@@ -601,17 +593,20 @@ class DisMix_LDM(nn.Module):
         
         self.pitch_encoder = PitchEncoder()
         self.timbre_encoder = TimbreEncoder()
-        self.D_z = D_z
-        self.D_s = D_s
-        self.L = L
-        self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
-        self.N_s = N_s # 4
-        self.batch_size = batch_size
         self.dit = DiT(
             vae=vae,
             batch_size=batch_size,
             N_s=N_s,
         )
+        
+        # Params
+        self.D_z = D_z
+        self.D_s = D_s
+        self.L = L
+        self.N_s = N_s # 4
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.pitch_labels = pitch_labels
 
         # Define the noise schedule
         self.diffusion_steps = diffusion_steps
@@ -620,18 +615,22 @@ class DisMix_LDM(nn.Module):
         self.alpha_cumprod = torch.cumprod(self.alpha, dim=0)  # (T,)
         self.alpha_cumprod_prev = torch.cat([torch.tensor([1.0]), self.alpha_cumprod[:-1]], dim=0)  # (T,)
 
-    
-    
+        # Loss functions
+        self.elbo_loss_fn = ELBOLoss() # For ELBO
+        self.ce_loss_fn = F.binary_cross_entropy_with_logits() #nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
+        self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
+        
+        
     def forward(self, x_m, x_s, evaluate=False): # x_q exactly is x_s in inference
         # Reshape
         _, _, F, T = x_m.shape
-        x_m = x_m.repeat(1, self.N_s, 1, 1).view(-1, 1, F, T)  # Shape: [BS*4, 1, 64, 400]
-        x_s = x_s.view(-1, 1, F, T)
+        x_s = x_s.view(-1, 1, F, T) # Shape: [BS*N_s, 1, 64, 400]
         
-        e_m = self.M_Encoder(x_m)
         e_q = self.Q_Encoder(x_s)
+        e_m = self.M_Encoder(x_m)
+        e_m = e_m.repeat(self.N_s, 1, 1, 1)  # Shape: [BS*4, 8, 100, 16]
         
-        # Concat
+        # BroadCast & Concat
         eq_broadcast = e_q.expand(-1, -1, e_m.size(2), -1)
         combined = torch.cat([e_m, eq_broadcast], dim=3).permute(0, 3, 2, 1)
         combined = self.combine_conv(combined)
@@ -642,15 +641,15 @@ class DisMix_LDM(nn.Module):
         pitch_latent = pitch_latent.permute(0, 1, 3, 2)
         
         # Timbre Encoder
-        timbre_mean, timbre_logvar, timbre_latent = self.timbre_encoder(combined)
+        timbre_latent, timbre_mean, timbre_std = self.timbre_encoder(combined)
         timbre_latent_expand = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
         
         # Concat: f_phi_s
         s_i = torch.cat((pitch_latent, timbre_latent_expand), dim=3) # s_c: batch*N_s, 8, 100, 32
-        x_s = x_s.permute(0, 1, 3, 2)
+        x_s = x_s.permute(0, 1, 3, 2) # shape: torch.Size([batch*N_s, 1, 400, 64])
 
         # Latent Diffusion Model
-        t = torch.randint(0, 1000, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
+        t = torch.randint(0, self.diffusion_steps, (self.batch_size * self.N_s * self.L, 1)).float().to(s_i.device)  # Diffusion step
         if evaluate:
             x_s_recon = self.dit.evaluate(x_s, s_i)
         else:
@@ -658,57 +657,18 @@ class DisMix_LDM(nn.Module):
 
         x_s_recon = x_s_recon.permute(0, 1, 3, 2).view(self.batch_size, self.N_s, F, T)
 
-        return e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon #res_audio
+        return e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon #res_audio
     
-    
-class DisMix_LDM_Model(pl.LightningModule):
-    def __init__(
-        self,
-        vae,
-        learning_rate,
-        D_z=16,
-        D_s=32,
-        L=25,
-        diffusion_steps=1000, 
-        beta_start=1e-4, 
-        beta_end=0.02, 
-        N_s=4,
-        batch_size=1,
-    ):
-        super(DisMix_LDM_Model, self).__init__()
-        self.model = DisMix_LDM(
-            vae=vae,
-            D_z=D_z,
-            D_s=D_s,
-            L=L,
-            diffusion_steps=diffusion_steps, 
-            beta_start=beta_start, 
-            beta_end=beta_end, 
-            N_s=N_s,
-            batch_size=batch_size,
-        )
-        # self.save_hyperparameters()
-        self.batch_size = batch_size
-        self.N_s = N_s
-        self.learning_rate = learning_rate
-        
-        # Loss functions
-        self.elbo_loss_fn = ELBOLoss() # For ELBO
-        self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
-        self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
-        
-    def forward(self, x_m, x_s, evaluate=False):
-        return self.model(x_m, x_s, evaluate)
     
     def training_step(self, batch, batch_idx):
         x_m, x_s_i, pitch_annotation = batch
-        e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon = self(x_m, x_s_i, evaluate=False)
+        e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon = self(x_m, x_s_i, evaluate=False)
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
-            x_m, x_s_recon.sum(dim=1),
+            None, None, # x_m, x_s_recon.sum(dim=1),
             x_s_i, x_s_recon,
-            timbre_mean, timbre_logvar,
+            timbre_latent, timbre_mean, timbre_std,
         )
         pitch_annotation = pitch_annotation.view(self.batch_size*self.N_s, -1)
         
@@ -716,11 +676,13 @@ class DisMix_LDM_Model(pl.LightningModule):
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
         
         # Total loss
-        total_loss = elbo_loss + ce_loss + bt_loss
+        total_loss = elbo_loss['loss'] + ce_loss + bt_loss
         
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
-        self.log('train_elbo_loss', elbo_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         
@@ -730,13 +692,13 @@ class DisMix_LDM_Model(pl.LightningModule):
         
     def evaluate(self, batch, stage='val'):
         x_m, x_s_i, pitch_annotation = batch
-        e_q, y_hat, timbre_mean, timbre_logvar, timbre_latent, x_s_recon = self(x_m, x_s_i, evaluate=True)
+        e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon = self(x_m, x_s_i, evaluate=True)
         
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
-            x_m, x_s_recon.sum(dim=1),
+            None, None, # x_m, x_s_recon.sum(dim=1),
             x_s_i, x_s_recon,
-            timbre_mean, timbre_logvar,
+            timbre_latent, timbre_mean, timbre_std,
         )
         pitch_annotation = pitch_annotation.view(self.batch_size*self.N_s, -1)
         
@@ -744,17 +706,24 @@ class DisMix_LDM_Model(pl.LightningModule):
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
         
         # Total loss
-        total_loss = elbo_loss + ce_loss + bt_loss
+        total_loss = elbo_loss['loss'] + ce_loss + bt_loss
         
         # Get accuracy
-        predicted_classes = torch.argmax(y_hat, dim=1)
-        correct_predictions = (predicted_classes == pitch_annotation).float().sum()
-        accuracy = correct_predictions / len(predicted_classes)
+        print("acc shape check", y_hat.shape, pitch_annotation.shape)
+        print(pitch_annotation)
+        bs, time_frames = pitch_annotation.shape
+        pitch_annotation_ohe = F.one_hot(pitch_annotation, num_classes=self.pitch_labels).float().permute(0, 2, 1)  # Shape: [Batch_size, Time_frames, 129]
 
+        predicted_pitches = torch.argmax(y_hat, dim=1)  # Shape: [Batch_size, Time_frames]
+        correct_predictions = (predicted_pitches == pitch_annotation).float().sum()
+        total_predictions = bs * time_frames
+        accuracy = correct_predictions / total_predictions
         
         # Log losses and metrics
         self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
-        self.log(f'{stage}_elbo_loss', elbo_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
@@ -799,20 +768,21 @@ class DisMix_LDM_Model(pl.LightningModule):
     
 if __name__ == "__main__":
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    BS, N_s = 1, 4
-    x_q = torch.randn(BS*N_s, 1, 64, 400).to(device)
-    x_m = torch.randn(BS*N_s, 1, 64, 400).to(device)
+    BS, N_s = 2, 4
+    x_q = torch.randn(BS, N_s, 64, 400).to(device)
+    x_m = torch.randn(BS, 1, 64, 400).to(device)
+    
+
     
     # choice = ["ema", "mse"]
-    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[0]}").to(device)
+    # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[1]}").to(device)
     pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float32).to(device)
     vae = pipe.vae 
     
-    model = DisMix_LDM(
+    model = DisMix_LDM_Model(
         batch_size=BS,
         N_s=N_s,
         vae=vae,
     ).to(device)
     
     res = model(x_m, x_q)
-    print(res)

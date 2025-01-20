@@ -307,6 +307,7 @@ class DisMixModel(pl.LightningModule):
         # Loss functions
         self.elbo_loss_fn = ELBOLoss_VAE() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
+        self.bce_loss_fn = F.binary_cross_entropy_with_logits()
         self.bt_loss_fn = BarlowTwinsLoss_VAE(
             batch_size=batch_size,
             lambda_weight=lambda_weight,
@@ -370,7 +371,8 @@ class DisMixModel(pl.LightningModule):
         )
         # ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
         # bt_loss = criterion["bt_loss"](eq, timbre_latent)
-
+        pitch_annotation_ohe = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        bce_loss = criterion["bce_loss"](pitch_logits, pitch_annotation_ohe)
 
         # Total loss
         total_loss = elbo_loss['loss'] #+ bt_loss['loss'] + ce_loss
@@ -380,6 +382,7 @@ class DisMixModel(pl.LightningModule):
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        # self.log('train_bce_loss', bce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
@@ -425,6 +428,8 @@ class DisMixModel(pl.LightningModule):
         )
         # ce_loss = criterion["ce_loss"](pitch_logits, pitch_annotation)
         # bt_loss = criterion["bt_loss"](eq, timbre_latent)
+        pitch_annotation_ohe = F.one_hot(pitch_annotation, num_classes=self.pitch_classes).float()
+        bce_loss = criterion["bce_loss"](pitch_logits, pitch_annotation_ohe)
 
         # Total loss
         total_loss = elbo_loss['loss'] #+ bt_loss['loss'] + ce_loss
@@ -441,6 +446,7 @@ class DisMixModel(pl.LightningModule):
         self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
+        # self.log(f'{stage}_bce_loss', bce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_ce_loss', ce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_acc', accuracy, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
@@ -459,6 +465,7 @@ class DisMixModel(pl.LightningModule):
             "elbo_loss": self.elbo_loss_fn,
             "ce_loss": self.ce_loss_fn,
             "bt_loss": self.bt_loss_fn,
+            "bce_loss": self.bce_loss_fn,
         }
         
     def validation_step(self, batch, batch_idx):

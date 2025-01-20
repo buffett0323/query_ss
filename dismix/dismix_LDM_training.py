@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from functools import partial
 
-from dismix_LDM import DisMix_LDM, DisMix_LDM_Model
+from dismix_LDM import DisMix_LDM_Model
 from dataset import CocoChoraleDataModule
 from dismix_loss import ELBOLoss, BarlowTwinsLoss
 from diffusers import AudioLDM2Pipeline
@@ -26,10 +26,10 @@ torch.set_float32_matmul_precision('high')
 
 # Initial settings
 log_wandb = False # False
-use_gpu = True
+wanbd_proj_name = "Without recon"
 find_unused_parameters = True # False if train all params
 device_id = [1] #[0, 1, 2, 3]
-batch_size = 4
+batch_size = 2
 N_s = 4
 lr = 1e-4
 early_stop_patience = 100 #260000
@@ -59,7 +59,7 @@ model = DisMix_LDM_Model(
 # Log model and hyperparameters in wandb
 if log_wandb: 
     project = "Dismix_ldm"
-    name = "Dismix_LDM_Training"
+    name = wanbd_proj_name
     save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
     wandb_logger = WandbLogger(
         project=project, 
@@ -72,21 +72,16 @@ else:
     
 
 # GPU Accelerator Settings
-if use_gpu:
-    accelerator = "gpu"
-    if str(-1) in device_id:
-        devices = -1
-        strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
-    else:
-        devices = [int(i) for i in device_id]
-        if len(devices) == 1:
-            strategy = "auto"
-        else:
-            strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
+accelerator = "gpu"
+if str(-1) in device_id:
+    devices = -1
+    strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
 else:
-    accelerator = "cpu"
-    devices = 1
-    strategy = "auto"
+    devices = [int(i) for i in device_id]
+    if len(devices) == 1:
+        strategy = "auto"
+    else:
+        strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
 
 
 # Other settings
@@ -112,15 +107,10 @@ trainer = Trainer(
     logger=wandb_logger,
     strategy=strategy,
     callbacks=cb,
-    precision=32, #'16-mixed' if use_gpu else 32,
+    precision=32,
     # gradient_clip_val=0.5,
 )
 
-# Sanity Check float 16
-for name, param in model.named_parameters():
-    if param.requires_grad and param.dtype == torch.float16:
-        print(f"Layer: {name}, Grad: {param.requires_grad}, Dtype: {param.dtype}")
-        assert param.dtype == torch.float32, f"Layer {name} parameters must be float32!"
 
-# trainer.fit(model, dm)
+trainer.fit(model, dm)
 # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
