@@ -29,7 +29,7 @@ torch.set_float32_matmul_precision('high')
 if __name__ == "__main__":
     # Initial settings
     log_wandb = True # False
-    wanbd_proj_name = "VAE ELBO(new) + BT + CE"
+    wanbd_proj_name = "VAE only ELBO"
     find_unused_parameters = True # False if train all params
     device_id = [0, 1, 2, 3] #[0, 1, 2, 3 , 4, 5]
     batch_size = 64 #32
@@ -132,4 +132,4 @@ if __name__ == "__main__":
     )
 
     trainer.fit(model, dm)
-    trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
+    # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
