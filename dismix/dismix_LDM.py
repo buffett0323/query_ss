@@ -65,13 +65,12 @@ class QueryEncoder(nn.Module):
             use_linear_attn=use_linear_attn,
             attn_type=attn_type,
             downsample_time_stride4_levels=downsample_time_stride4_levels,
-        ) #.half() # convert to torch float16
+        )
         self.temporal_pool = nn.AdaptiveAvgPool2d((1, 16))
 
     def forward(self, x):
         h = self.encoder(x)
         h = self.temporal_pool(h)
-        h = h.to(torch.float32)
         return h
     
 # Use the pre-trained encoder and freeze
@@ -98,10 +97,8 @@ class MixtureEncoder(nn.Module):
 
     def forward(self, x):
         with torch.no_grad():
-            x = x.to(torch.float16)
             h = self.encoder(x).permute(0, 1, 3, 2)
-            # h = h.to(torch.float32)
-        return self.conv(h).to(torch.float32)
+        return self.conv(h)
     
     
     
@@ -488,9 +485,8 @@ class DiT(nn.Module):
             Tensor: Output tensor of shape [seq_len, batch_size, dim].
         """
         with torch.no_grad():
-            x_s = x_s.to(torch.float16)
             z_s = self.pt_E_VAE(x_s)#.to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-            z_s = z_s.to(torch.float32).permute(0, 1, 3, 2)  # Convert to float32 for further processing
+            z_s = z_s.permute(0, 1, 3, 2)  # Convert to float32 for further processing
         
         # Partition
         z_m_t, s_c = self.partitioner(z_s, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
@@ -504,11 +500,11 @@ class DiT(nn.Module):
             z_m_t = block(z_m_t, condition)
 
         # Unpatchify and convert to float16 for pt_D_VAE
-        z_m_t = self.unpatchify(z_m_t).to(torch.float16) 
+        z_m_t = self.unpatchify(z_m_t)
         
         # Decoder
         with torch.no_grad():
-            z_m_t = self.pt_D_VAE(z_m_t).to(torch.float32).permute(0, 1, 3, 2)
+            z_m_t = self.pt_D_VAE(z_m_t).permute(0, 1, 3, 2)
         return z_m_t #.to(torch.float32).permute(0, 1, 3, 2)
     
     
@@ -527,9 +523,8 @@ class DiT(nn.Module):
         """
         self.eval()  # Set model to evaluation mode
         with torch.no_grad():
-            noise = noise.to(torch.float16)
             z_m_t = self.pt_E_VAE(noise) #.to(torch.float32) # [batch*N_s, C=8, H=16, W=100]
-            z_m_t = z_m_t.to(torch.float32).permute(0, 1, 3, 2)
+            z_m_t = z_m_t.permute(0, 1, 3, 2)
 
             for t in reversed(range(1, num_steps + 1)):
                 # Compute t_embed for the current step
@@ -548,10 +543,9 @@ class DiT(nn.Module):
                 z_m_t = self.unpatchify(z_m_t_patched)
 
             # Decoder
-            z_m_t = z_m_t.to(torch.float16)
             z_m_t = self.pt_D_VAE(z_m_t)
 
-        return z_m_t.to(torch.float32) # ([8, 1, 400, 64])
+        return z_m_t# ([8, 1, 400, 64])
 
 
 class DisMix_LDM(nn.Module):
@@ -811,7 +805,7 @@ if __name__ == "__main__":
     
     # choice = ["ema", "mse"]
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[0]}").to(device)
-    pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16).to(device)
+    pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float32).to(device)
     vae = pipe.vae 
     
     model = DisMix_LDM(

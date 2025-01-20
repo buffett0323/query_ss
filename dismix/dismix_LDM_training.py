@@ -25,10 +25,10 @@ warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is
 torch.set_float32_matmul_precision('high') 
 
 # Initial settings
-log_wandb = True # False
+log_wandb = False # False
 use_gpu = True
 find_unused_parameters = True # False if train all params
-device_id = [2] #[0, 1, 2, 3]
+device_id = [1] #[0, 1, 2, 3]
 batch_size = 4
 N_s = 4
 lr = 1e-4
@@ -42,11 +42,11 @@ os.environ["WANDB_MODE"] = "online"
 dm = CocoChoraleDataModule(
     root=root,
     batch_size=batch_size,
-    num_workers=8,
+    num_workers=24,
 )
 
 # Models and other settings
-pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float16)#.to(device)
+pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float32)#.to(device)
 vae = pipe.vae
 model = DisMix_LDM_Model(
     vae=vae,
@@ -112,7 +112,7 @@ trainer = Trainer(
     logger=wandb_logger,
     strategy=strategy,
     callbacks=cb,
-    precision='16-mixed' if use_gpu else 32,
+    precision=32, #'16-mixed' if use_gpu else 32,
     # gradient_clip_val=0.5,
 )
 
@@ -122,5 +122,5 @@ for name, param in model.named_parameters():
         print(f"Layer: {name}, Grad: {param.requires_grad}, Dtype: {param.dtype}")
         assert param.dtype == torch.float32, f"Layer {name} parameters must be float32!"
 
-trainer.fit(model, dm)
+# trainer.fit(model, dm)
 # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
