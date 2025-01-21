@@ -29,12 +29,12 @@ torch.set_float32_matmul_precision('high')
 if __name__ == "__main__":
     # Initial settings
     log_wandb = True # False
-    wanbd_proj_name = "VAE ELBO + BCE"# + Pitch prior"
+    wanbd_proj_name = "P+T Enc with KLD" # + Pitch prior"
     find_unused_parameters = True # False if train all params
     device_id = [0, 1, 2, 3] #[0, 1, 2, 3 , 4, 5]
     batch_size = 64 #32
     num_frames = 10 #32
-    dropout_rate = 0.3
+    dropout_rate = 0 #0.3
     lr = 4e-4
     early_stop_patience = 100 #260000
     best_val_loss = float('inf')

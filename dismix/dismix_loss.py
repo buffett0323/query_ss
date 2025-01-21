@@ -41,7 +41,7 @@ class ELBOLoss_VAE(nn.Module):
         # 1. Reconstruction loss (MSE)
         # recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction='sum')
         # recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction='mean')
-        recon_loss_x = self.gaussian_likelihood(x_s_recon, self.log_scale, x_s)
+        # recon_loss_x = self.gaussian_likelihood(x_s_recon, self.log_scale, x_s)
 
         # 2. Pitch supervision loss
         # pitch_loss = F.mse_loss(pitch_latent, pitch_priors, reduction='mean')
@@ -51,12 +51,12 @@ class ELBOLoss_VAE(nn.Module):
         kl_loss = self.kl_divergence(timbre_latent, tau_mu, tau_std)
 
         # Total ELBO loss
-        elbo = (kl_loss - recon_loss_x).mean()
+        elbo = kl_loss.mean() #(kl_loss - recon_loss_x).mean()
         loss = elbo # + pitch_loss #recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
         
         return {
             'loss': loss, 
-            'recon_x': recon_loss_x.mean(), 
+            # 'recon_x': recon_loss_x.mean(), 
             'kld': kl_loss.mean(), #-kl_loss.detach(),
             # 'pitch_loss': pitch_loss.detach(),
             # 'recon_m': recon_loss_m.detach(),
