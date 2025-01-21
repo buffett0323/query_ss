@@ -304,6 +304,8 @@ class DisMixModel(pl.LightningModule):
             num_frames=num_frames,
             num_layers=num_layers,
         )
+        # Pitch Priors
+        self.pitch_prior = self.pitch_encoder.fc_proj
 
         # Loss functions
         self.elbo_loss_fn = ELBOLoss_VAE() # For ELBO
@@ -313,8 +315,6 @@ class DisMixModel(pl.LightningModule):
             embedding_dim=latent_dim,
         ) # Barlow Twins
         
-        # Pitch Priors
-        # self.pitch_prior = self.pitch_encoder.fc_proj
         
         # Add storage for stored test timbre latents and instrument labels
         self.test_timbre_latents = []
@@ -355,7 +355,7 @@ class DisMixModel(pl.LightningModule):
         y_gt_ohe = F.one_hot(y_gt, num_classes=self.pitch_classes).float()
 
         # Get pitch priors
-        # pitch_priors = self.pitch_prior(y_gt_ohe)
+        pitch_priors = self.pitch_prior(y_gt_ohe)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -368,7 +368,7 @@ class DisMixModel(pl.LightningModule):
             spec, rec_mixture,
             note_tensors, rec_source_spec,
             timbre_latent, tau_mu, tau_std,
-            # pitch_latent, pitch_priors,
+            pitch_latent, pitch_priors,
         )        
         bce_loss = F.binary_cross_entropy_with_logits(pitch_logits, y_gt_ohe)
         # bt_loss = criterion["bt_loss"](eq, timbre_latent)
@@ -381,6 +381,7 @@ class DisMixModel(pl.LightningModule):
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_elbo_pitch_loss', elbo_loss['pitch_loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_bce_loss', bce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_loss', bt_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_bt_on_diag', bt_loss['on_diag'], on_epoch=True, batch_size=batch_size, sync_dist=True)
@@ -411,7 +412,7 @@ class DisMixModel(pl.LightningModule):
         y_gt_ohe = F.one_hot(y_gt, num_classes=self.pitch_classes).float()
 
         # Get pitch priors
-        # pitch_priors = self.pitch_prior(y_gt_ohe)
+        pitch_priors = self.pitch_prior(y_gt_ohe)
         
         # Get reconstruct mixture by summing each split along the first dimension and concatenate
         splits = torch.split(rec_source_spec, note_numbers, dim=0)
@@ -424,7 +425,7 @@ class DisMixModel(pl.LightningModule):
             spec, rec_mixture,
             note_tensors, rec_source_spec,
             timbre_latent, tau_mu, tau_std,
-            # pitch_latent, pitch_priors,
+            pitch_latent, pitch_priors,
         )
         bce_loss = F.binary_cross_entropy_with_logits(pitch_logits, y_gt_ohe)
         # bt_loss = criterion["bt_loss"](eq, timbre_latent)
@@ -443,6 +444,7 @@ class DisMixModel(pl.LightningModule):
         self.log(f'{stage}_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_pitch_loss', elbo_loss['pitch_loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
         self.log(f'{stage}_bce_loss', bce_loss, on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_acc', accuracy.item(), on_epoch=True, batch_size=batch_size, sync_dist=True)
