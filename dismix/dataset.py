@@ -9,6 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning import LightningDataModule
 from typing import Optional
 from functools import partial
+from tqdm import tqdm
 
 import glob
 import os
@@ -643,9 +644,9 @@ if __name__ == '__main__':
     # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
     # mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
     # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
-    for i in range(1):
+    for i in range(100):
         x_m, x_s_i, pitch_annotation, instrument_label = dm.train_ds[i]
-        print(x_m.shape, x_s_i.shape, pitch_annotation, instrument_label)
+        print(x_m.shape, x_s_i.shape, pitch_annotation)#, instrument_label)
         
     # for batch in dm.train_dataloader():
     #     x_m, x_s_i, pitch_annotation, instrument_label = batch
