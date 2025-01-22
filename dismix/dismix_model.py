@@ -358,7 +358,7 @@ class DisMixModel(pl.LightningModule):
         timbre_latent, tau_mu, tau_std = self.timbre_encoder(em, eq)
         
         # Decode to reconstruct the mixture
-        rec_source_spec = None # self.decoder(pitch_latent, timbre_latent)
+        rec_source_spec = self.decoder(pitch_latent, timbre_latent)
         return rec_source_spec, pitch_latent, pitch_logits, \
                 timbre_latent, tau_mu, tau_std, eq
 
@@ -411,7 +411,7 @@ class DisMixModel(pl.LightningModule):
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log('train_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log('train_elbo_pitch_loss', elbo_loss['pitch_loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log('train_acc', accuracy.item(), on_epoch=True, batch_size=batch_size, sync_dist=True)
@@ -475,7 +475,7 @@ class DisMixModel(pl.LightningModule):
         # Log losses and metrics
         self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
-        # self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
+        self.log(f'{stage}_elbo_recon_x_loss', elbo_loss['recon_x'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         # self.log(f'{stage}_elbo_pitch_loss', elbo_loss['pitch_loss'], on_epoch=True, batch_size=batch_size, sync_dist=True)
         
