@@ -9,8 +9,8 @@ need_transform: False #Wavegram will transform for us
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:1"
-gpu_ids: [1]
+device: "cuda:3"
+gpu_ids: [3]
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 num_workers: 24
@@ -21,7 +21,7 @@ num_workers: 24
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 512 #512 
+batch_size: 256 #512 
 start_epoch: 0
 epochs: 200
 check_val_every_n_epoch: 4
@@ -57,6 +57,9 @@ optimizer: "Adam" # or LARS (experimental)
 weight_decay: 1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
 temperature: 0.5 # see appendix B.7.: Optimal temperature under different batch sizes
 lr_decay_factor: 0.01
+gradient_accumulation_steps: 4
+number_of_gpus: 1
+# Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 
 
 # reload options

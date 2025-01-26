@@ -22,3 +22,25 @@ def yaml_config_hook(config_file):
         del cfg["defaults"]
 
     return cfg
+
+
+def define_param_groups(model, weight_decay, optimizer_name):
+   def exclude_from_wd_and_adaptation(name):
+       if 'bn' in name:
+           return True
+       if optimizer_name == 'lars' and 'bias' in name:
+           return True
+
+   param_groups = [
+       {
+           'params': [p for name, p in model.named_parameters() if not exclude_from_wd_and_adaptation(name)],
+           'weight_decay': weight_decay,
+           'layer_adaptation': True,
+       },
+       {
+           'params': [p for name, p in model.named_parameters() if exclude_from_wd_and_adaptation(name)],
+           'weight_decay': 0.,
+           'layer_adaptation': False,
+       },
+   ]
+   return param_groups

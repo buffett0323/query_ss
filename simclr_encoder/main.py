@@ -2,13 +2,18 @@ import os
 import argparse
 import torch
 import warnings
+
+# Suppress specific warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, GradientAccumulationScheduler
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 
 from utils import yaml_config_hook
-from model import ContrastiveLearning
+from model import SimCLR_pl
 from dataset import NSynthDataModule
 
 torch.set_float32_matmul_precision('high')
@@ -46,11 +51,13 @@ if __name__ == "__main__":
 
     
     dm = NSynthDataModule(args=args)
-    model = ContrastiveLearning(args, device)
+    model = SimCLR_pl(args, device)
     
 
     # Callbacks
-    cb = [TQDMProgressBar(refresh_rate=10)]
+    accumulator = GradientAccumulationScheduler(scheduling={0: args.gradient_accumulation_steps})
+
+    cb = [TQDMProgressBar(refresh_rate=10), accumulator]
     model_ckpt = ModelCheckpoint(
         dirpath=args.model_dict_save_dir,  # Directory to save checkpoints
         filename="best_model",  # Filename for the best model

@@ -3,9 +3,14 @@ import argparse
 import torch
 import torchvision
 import librosa
+import warnings
+
+# Suppress specific warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 import numpy as np
 import torch.nn as nn
-from pytorch_lightning import Trainer, LightningModule
 import torch.optim as optim
 import torch.nn.functional as F
 import torchaudio.transforms as T
@@ -13,75 +18,16 @@ import torchvision.transforms as transforms
 # from torchlars import LARS #from torch.optim import LARS
 from torchvision.models import vit_b_16, ViT_B_16_Weights
 from torchvision.models.vision_transformer import VisionTransformer
+from torch.optim import SGD, Adam
+from pytorch_lightning import Trainer, LightningModule
+from pl_bolts.optimizers.lr_scheduler import LinearWarmupCosineAnnealingLR
 
-from loss import NT_Xent
+from loss import NT_Xent, ContrastiveLoss
+from utils import define_param_groups
 from dataset import CLARTransform
 from torch_models import Wavegram_Logmel_Cnn14, Wavegram_Logmel128_Cnn14
-from torch.optim.optimizer import Optimizer
 
 
-class LARS(Optimizer):
-    """Layer-wise Adaptive Rate Scaling (LARS) optimizer.
-
-    Args:
-        params (iterable): Parameters to optimize or dictionaries defining parameter groups.
-        lr (float): Learning rate.
-        momentum (float): Momentum factor (default: 0).
-        weight_decay (float): Weight decay (L2 penalty) (default: 0).
-        eps (float): Epsilon for numerical stability (default: 1e-8).
-        trust_coef (float): Trust coefficient for adaptive learning rate (default: 0.001).
-    """
-
-    def __init__(self, params, lr=1e-3, momentum=0.9, weight_decay=0, eps=1e-8, trust_coef=0.001):
-        defaults = dict(lr=lr, momentum=momentum, weight_decay=weight_decay, eps=eps, trust_coef=trust_coef)
-        super(LARS, self).__init__(params, defaults)
-
-    @torch.no_grad()
-    def step(self, closure=None):
-        """Performs a single optimization step.
-
-        Args:
-            closure (callable, optional): A closure that reevaluates the model and returns the loss.
-
-        Returns:
-            loss (optional): The loss if the closure is provided.
-        """
-        loss = None
-        if closure is not None:
-            loss = closure()
-
-        for group in self.param_groups:
-            lr = group["lr"]
-            momentum = group["momentum"]
-            weight_decay = group["weight_decay"]
-            eps = group["eps"]
-            trust_coef = group["trust_coef"]
-
-            for p in group["params"]:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad.data
-                if weight_decay != 0:
-                    grad = grad.add(p.data, alpha=weight_decay)
-
-                param_norm = torch.norm(p.data)
-                grad_norm = torch.norm(grad)
-                adaptive_lr = trust_coef * param_norm / (grad_norm + eps) if param_norm > 0 and grad_norm > 0 else 1.0
-
-                scaled_lr = adaptive_lr * lr
-                state = self.state[p]
-
-                # Initialize momentum buffer
-                if "momentum_buffer" not in state:
-                    state["momentum_buffer"] = torch.clone(grad).detach()
-                else:
-                    state["momentum_buffer"].mul_(momentum).add_(grad)
-
-                p.data.add_(state["momentum_buffer"], alpha=-scaled_lr)
-
-        return loss
-    
     
     
 class GatedConvBlock(nn.Module):
@@ -182,22 +128,35 @@ class SimCLR(nn.Module):
             nn.ReLU(),
             nn.Linear(n_features, projection_dim), #, bias=False),
         )
-
-    def forward(self, x_i, x_j):
-        h_i, h_j = self.encoder(x_i), self.encoder(x_j)
-        z_i, z_j = self.projector(h_i), self.projector(h_j)
         
-        return h_i, h_j, z_i, z_j
+        
+        # add mlp projection head
+        self.projection = nn.Sequential(
+            nn.Linear(in_features=n_features, out_features=n_features),
+            nn.BatchNorm1d(n_features),
+            nn.ReLU(),
+            nn.Linear(in_features=n_features, out_features=projection_dim),
+            nn.BatchNorm1d(projection_dim),
+        )
+
+
+    def forward(self, x, return_embedding=False):
+        embedding = self.encoder(x)
+        
+        if return_embedding:
+            return embedding
+        
+        return self.projection(embedding) # return self.projector(embedding)
     
 
 
-class ContrastiveLearning(LightningModule):
+class SimCLR_pl(LightningModule):
     def __init__(
         self, 
         args, 
         device,
     ):
-        super(ContrastiveLearning, self).__init__()
+        super(SimCLR_pl, self).__init__()
 
         self.args = args
         self.batch_size = args.batch_size
@@ -210,13 +169,10 @@ class ContrastiveLearning(LightningModule):
             args=args,
             n_features=self.args.encoder_output_dim,
             projection_dim=self.args.projection_dim, 
-        ).to(device)
+        )
         
-        self.criterion = NT_Xent(
-            self.args.batch_size, 
-            self.args.temperature, 
-            world_size=1,
-        ).to(device)
+        # self.criterion = NT_Xent(args.batch_size, args.temperature, world_size=1,)
+        self.criterion = ContrastiveLoss(args.batch_size, temperature=args.temperature)
         
         # self.save_hyperparameters()
         
@@ -229,36 +185,28 @@ class ContrastiveLearning(LightningModule):
                 power=2.0
             ),
             T.AmplitudeToDB()
-        ).to(device)
+        )
             
 
-    def forward(self, x_i, x_j):
+    def forward(self, x):
         if self.args.need_transform:
-            x_i, x_j = self.mel_transform(x_i).unsqueeze(1), self.mel_transform(x_j).unsqueeze(1)
-        
-        h_i, h_j, z_i, z_j = self.model(x_i, x_j) # SimCLR Model
-        return h_i, h_j, z_i, z_j
+            x = self.mel_transform(x).unsqueeze(1)
+        return self.model(x) # SimCLR Model
 
 
     def training_step(self, batch, batch_idx):
         x_i, x_j = batch
-        if x_i.shape[0] != self.batch_size:
-            return None
-        
-        _, _, z_i, z_j = self(x_i, x_j)
-        loss = self.criterion(z_i, z_j)
-        
+        z_i, z_j = self(x_i), self(x_j)
+        loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
+
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
         x_i, x_j = batch
-        if x_i.shape[0] != self.batch_size:
-            return None
-        
-        _, _, z_i, z_j = self(x_i, x_j)
-        loss = self.criterion(z_i, z_j)
+        z_i, z_j = self(x_i), self(x_j)
+        loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
         self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
@@ -266,63 +214,73 @@ class ContrastiveLearning(LightningModule):
     
     def test_step(self, batch, batch_idx):
         x_i, x_j = batch
-        if x_i.shape[0] != self.batch_size:
-            return None
-        
-        _, _, z_i, z_j = self(x_i, x_j)
-        loss = self.criterion(z_i, z_j)
+        z_i, z_j = self(x_i), self(x_j)
+        loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
         self.log('test_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
 
     
-    def configure_criterion(self):
-        criterion = NT_Xent(self.args.batch_size, self.args.temperature)
-        return criterion
-
 
     def configure_optimizers(self):
-        scheduler = None
-        if self.args.optimizer == "Adam":
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
+       max_epochs = int(self.args.epochs)
+       param_groups = define_param_groups(self.model, self.args.weight_decay, 'adam')
+       lr = self.args.lr
+       optimizer = Adam(param_groups, lr=lr, weight_decay=self.args.weight_decay)
+
+       print(f'Optimizer Adam, '
+             f'Learning Rate {lr}, '
+             f'Effective batch size {self.args.batch_size * self.args.gradient_accumulation_steps}')
+
+       scheduler_warmup = LinearWarmupCosineAnnealingLR(
+           optimizer, warmup_epochs=10, 
+           max_epochs=max_epochs, warmup_start_lr=0.0
+        )
+
+       return [optimizer], [scheduler_warmup]
+
+    # def configure_optimizers(self):
+    #     scheduler = None
+    #     if self.args.optimizer == "Adam":
+    #         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
         
-        elif self.args.optimizer == "LARS":
-            learning_rate = 0.3 * self.args.batch_size / 256
+    #     elif self.args.optimizer == "LARS":
+    #         learning_rate = 0.3 * self.args.batch_size / 256
 
-            # # Base optimizer: SGD with momentum
-            # base_optimizer = optim.SGD(
-            #     self.model.parameters(),
-            #     lr=learning_rate,
-            #     momentum=0.9,
-            #     weight_decay=self.args.weight_decay,
-            # )
+    #         # # Base optimizer: SGD with momentum
+    #         # base_optimizer = optim.SGD(
+    #         #     self.model.parameters(),
+    #         #     lr=learning_rate,
+    #         #     momentum=0.9,
+    #         #     weight_decay=self.args.weight_decay,
+    #         # )
 
-            # optimizer = torch.optim.LARS(
-            #     base_optimizer,
-            #     eps=1e-8,  # Epsilon for numerical stability
-            #     trust_coef=0.001,  # Trust coefficient
-            # )
-            optimizer = LARS(
-                self.model.parameters(),
-                lr=learning_rate,
-                momentum=0.9,
-                weight_decay=self.args.weight_decay,
-                trust_coef=0.001,
-            )
+    #         # optimizer = torch.optim.LARS(
+    #         #     base_optimizer,
+    #         #     eps=1e-8,  # Epsilon for numerical stability
+    #         #     trust_coef=0.001,  # Trust coefficient
+    #         # )
+    #         optimizer = LARS(
+    #             self.model.parameters(),
+    #             lr=learning_rate,
+    #             momentum=0.9,
+    #             weight_decay=self.args.weight_decay,
+    #             trust_coef=0.001,
+    #         )
 
 
 
-            # Use a cosine annealing learning rate scheduler
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1
-            )
-        else:
-            raise NotImplementedError(f"Optimizer {self.args.optimizer} is not implemented.")
+    #         # Use a cosine annealing learning rate scheduler
+    #         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    #             optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1
+    #         )
+    #     else:
+    #         raise NotImplementedError(f"Optimizer {self.args.optimizer} is not implemented.")
         
-        if scheduler:
-            return {"optimizer": optimizer, "lr_scheduler": scheduler}
-        else:
-            return {"optimizer": optimizer}
+    #     if scheduler:
+    #         return {"optimizer": optimizer, "lr_scheduler": scheduler}
+    #     else:
+    #         return {"optimizer": optimizer}
 
         
     def save_model(self, checkpoint_name="simclr.pth"):
