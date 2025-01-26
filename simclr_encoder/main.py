@@ -57,16 +57,15 @@ if __name__ == "__main__":
     # Callbacks
     accumulator = GradientAccumulationScheduler(scheduling={0: args.gradient_accumulation_steps})
 
-    cb = [TQDMProgressBar(refresh_rate=10), accumulator]
     model_ckpt = ModelCheckpoint(
         dirpath=args.model_dict_save_dir,  # Directory to save checkpoints
         filename="best_model",  # Filename for the best model
         save_top_k=1,  # Only keep the best model
+        save_last=True,
         verbose=True,
         monitor="val_loss",  # Metric to monitor
         mode="min",  # Save model with the minimum validation loss
     )
-    cb.append(model_ckpt)
     
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
@@ -75,7 +74,6 @@ if __name__ == "__main__":
         verbose=True,
         mode="min",
     )
-    cb.append(early_stop_callback)
 
     trainer = Trainer(
         max_epochs=args.epoch_num,
@@ -83,8 +81,11 @@ if __name__ == "__main__":
         accelerator="gpu",
         sync_batchnorm=True,
         check_val_every_n_epoch=args.check_val_every_n_epoch,  # Perform validation every 2 epochs
-        callbacks=cb,
         logger=wandb_logger,
+        callbacks=[
+            TQDMProgressBar(refresh_rate=10), accumulator, 
+            model_ckpt, early_stop_callback
+        ],
     )
 
     print("-------Start Training-------")
