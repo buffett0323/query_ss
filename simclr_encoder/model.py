@@ -196,6 +196,8 @@ class SimCLR_pl(LightningModule):
 
     def training_step(self, batch, batch_idx):
         x_i, x_j = batch
+        if x_i.shape[0] != self.batch_size:
+            return None
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
@@ -205,6 +207,8 @@ class SimCLR_pl(LightningModule):
     
     def validation_step(self, batch, batch_idx):
         x_i, x_j = batch
+        if x_i.shape[0] != self.batch_size:
+            return None
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
@@ -214,6 +218,8 @@ class SimCLR_pl(LightningModule):
     
     def test_step(self, batch, batch_idx):
         x_i, x_j = batch
+        if x_i.shape[0] != self.batch_size:
+            return None
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
