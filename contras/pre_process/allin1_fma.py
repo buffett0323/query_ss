@@ -66,7 +66,7 @@ if __name__ == "__main__":
     input_path = "/mnt/gestalt/database/FMA/fma_track/audio" #"/mnt/gestalt/database/beatport/audio/audio"
     output_path = "/mnt/gestalt/home/ddmanddman/fma_analyze" #"/mnt/gestalt/home/ddmanddman/beatport_analyze"
     target = 'chorus'
-    devices = [2, 3]
+    devices = [1, 2]
     
     # Open folders
     os.makedirs(output_path, exist_ok=True)
