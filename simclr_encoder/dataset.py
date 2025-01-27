@@ -74,13 +74,13 @@ class NSynthDataModule(LightningDataModule):
             self.train_ds = NSynthDataset(
                 data_dir=self.data_dir,
                 split="train",
-                need_transform=self.args.need_transform,
+                need_transform=self.args.need_clar_transform,
             )
             
             self.val_ds = NSynthDataset(
                 data_dir=self.data_dir,
                 split="valid",
-                need_transform=self.args.need_transform,
+                need_transform=self.args.need_clar_transform,
             )
         
         # Assign test dataset for use in dataloader(s)
@@ -88,7 +88,7 @@ class NSynthDataModule(LightningDataModule):
             self.test_ds = NSynthDataset(
                 data_dir=self.data_dir,
                 split="test",
-                need_transform=self.args.need_transform,
+                need_transform=self.args.need_clar_transform,
             )
             
             
@@ -96,19 +96,22 @@ class NSynthDataModule(LightningDataModule):
         """The train dataloader."""
         return self._data_loader(
             self.train_ds,
-            shuffle=True)
+            shuffle=True
+        )
 
     def val_dataloader(self):
         """The val dataloader."""
         return self._data_loader(
             self.val_ds,
-            shuffle=False)
+            shuffle=False
+        )
 
     def test_dataloader(self):
         """The test dataloader."""
         return self._data_loader(
             self.test_ds,
-            shuffle=False)
+            shuffle=False
+        )
         
     
     def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:

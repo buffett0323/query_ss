@@ -38,7 +38,7 @@ if __name__ == "__main__":
     
     if args.log_wandb: 
         project = "SimCLR_0109"
-        name = "SimCLR_NSynth"
+        name = args.wandb_name
         save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
         wandb_logger = WandbLogger(
             project=project, 
@@ -92,7 +92,9 @@ if __name__ == "__main__":
     trainer.fit(model, dm)
     
     print("-------Start Testing-------")
-    trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
+    best_model = SimCLR_pl.from_config(model_ckpt.best_model_path, args, device)
+    trainer.test(best_model, datamodule=dm)
+    # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
     
     # # if load best model    
     # cl.load_model(checkpoint_name="best_model.ckpt")

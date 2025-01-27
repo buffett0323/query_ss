@@ -4,13 +4,16 @@ segment_second: 5
 sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
+wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30"
 need_transform: False #Wavegram will transform for us
+need_clar_transform: True
 
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
 device: "cuda:3"
 gpu_ids: [3]
+number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 num_workers: 24
@@ -22,11 +25,13 @@ num_workers: 24
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
 batch_size: 256 #512 
+gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200
 check_val_every_n_epoch: 4
-early_stop_patience: 5
-lr: 0.03 #0.0003
+early_stop_patience: 10
+lr: 0.001 # 0.03  # 0.0003
+warmup_epochs: 30
 
 # dataset options
 max_length: 64
@@ -38,12 +43,6 @@ n_mels: 64 #128
 fmin: 20
 fmax: 8000 # 16000/2
 
-# transform options
-tm_param: 30
-fm_param: 15
-crop_size: 128
-noise_level: 0.05 #0.005
-
 # model options
 # resnet: "resnet18"
 encoder_name: "Wavegram_Logmel_Cnn14" # "GatedCNN"
@@ -54,12 +53,9 @@ model_dict_save_dir: "./model_dict"
 
 # loss options
 optimizer: "Adam" # or LARS (experimental)
-weight_decay: 1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
-temperature: 0.5 # see appendix B.7.: Optimal temperature under different batch sizes
-lr_decay_factor: 0.01
-gradient_accumulation_steps: 4
-number_of_gpus: 1
-# Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
+weight_decay: 1.0e-3 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+temperature: 0.1 #0.5 # see appendix B.7.: Optimal temperature under different batch sizes
+lr_decay_factor: 0.05 #0.01
 
 
 # reload options

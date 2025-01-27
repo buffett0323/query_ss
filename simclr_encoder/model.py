@@ -239,12 +239,38 @@ class SimCLR_pl(LightningModule):
              f'Effective batch size {self.args.batch_size * self.args.gradient_accumulation_steps}')
 
        scheduler_warmup = LinearWarmupCosineAnnealingLR(
-           optimizer, warmup_epochs=10, 
-           max_epochs=max_epochs, warmup_start_lr=0.0
+           optimizer, 
+           warmup_epochs=self.args.warmup_epochs, 
+           max_epochs=max_epochs, 
+           warmup_start_lr=0.0
         )
 
        return [optimizer], [scheduler_warmup]
 
+        
+    def save_model(self, checkpoint_name="simclr.pth"):
+        """Save model state dictionary."""
+        save_path = os.path.join(self.save_dir, checkpoint_name)
+        torch.save(self.model.state_dict(), save_path)
+        print(f"Model state saved to {save_path}")
+
+
+    def load_model(self, checkpoint_name="simclr.pth"):
+        """Load model state dictionary to continue training."""
+        load_path = os.path.join(self.save_dir, checkpoint_name)
+        if os.path.exists(load_path):
+            self.model.load_state_dict(torch.load(load_path))
+            print(f"Model state loaded from {load_path}")
+        else:
+            print(f"Checkpoint file not found at {load_path}")
+            
+    @classmethod
+    def from_config(cls, checkpoint_path, args, device):
+        model = cls(args, device)
+        model.load_state_dict(torch.load(checkpoint_path)["state_dict"])
+        return model
+    
+    
     # def configure_optimizers(self):
     #     scheduler = None
     #     if self.args.optimizer == "Adam":
@@ -287,20 +313,3 @@ class SimCLR_pl(LightningModule):
     #         return {"optimizer": optimizer, "lr_scheduler": scheduler}
     #     else:
     #         return {"optimizer": optimizer}
-
-        
-    def save_model(self, checkpoint_name="simclr.pth"):
-        """Save model state dictionary."""
-        save_path = os.path.join(self.save_dir, checkpoint_name)
-        torch.save(self.model.state_dict(), save_path)
-        print(f"Model state saved to {save_path}")
-
-
-    def load_model(self, checkpoint_name="simclr.pth"):
-        """Load model state dictionary to continue training."""
-        load_path = os.path.join(self.save_dir, checkpoint_name)
-        if os.path.exists(load_path):
-            self.model.load_state_dict(torch.load(load_path))
-            print(f"Model state loaded from {load_path}")
-        else:
-            print(f"Checkpoint file not found at {load_path}")
