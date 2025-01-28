@@ -188,16 +188,17 @@ class SimCLR_pl(LightningModule):
         )
             
 
-    def forward(self, x):
+    def forward(self, x, return_embedding=False):
         if self.args.need_transform:
             x = self.mel_transform(x).unsqueeze(1)
-        return self.model(x) # SimCLR Model
+        return self.model(x, return_embedding) # SimCLR Model
 
 
     def training_step(self, batch, batch_idx):
         x_i, x_j = batch
         if x_i.shape[0] != self.batch_size:
             return None
+        
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
@@ -209,6 +210,7 @@ class SimCLR_pl(LightningModule):
         x_i, x_j = batch
         if x_i.shape[0] != self.batch_size:
             return None
+        
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
@@ -220,6 +222,7 @@ class SimCLR_pl(LightningModule):
         x_i, x_j = batch
         if x_i.shape[0] != self.batch_size:
             return None
+        
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
 
@@ -229,23 +232,23 @@ class SimCLR_pl(LightningModule):
     
 
     def configure_optimizers(self):
-       max_epochs = int(self.args.epochs)
-       param_groups = define_param_groups(self.model, self.args.weight_decay, 'adam')
-       lr = self.args.lr
-       optimizer = Adam(param_groups, lr=lr, weight_decay=self.args.weight_decay)
+        max_epochs = int(self.args.max_epochs)
+        param_groups = define_param_groups(self.model, self.args.weight_decay, 'adam')
+        lr = self.args.lr
+        optimizer = Adam(param_groups, lr=lr, weight_decay=self.args.weight_decay)
 
-       print(f'Optimizer Adam, '
-             f'Learning Rate {lr}, '
-             f'Effective batch size {self.args.batch_size * self.args.gradient_accumulation_steps}')
+        print(f'Optimizer Adam, '
+                f'Learning Rate {lr}, '
+                f'Effective batch size {self.args.batch_size * self.args.gradient_accumulation_steps}')
 
-       scheduler_warmup = LinearWarmupCosineAnnealingLR(
-           optimizer, 
-           warmup_epochs=self.args.warmup_epochs, 
-           max_epochs=max_epochs, 
-           warmup_start_lr=0.0
-        )
+        scheduler_warmup = LinearWarmupCosineAnnealingLR(
+            optimizer, 
+            warmup_epochs=self.args.warmup_epochs, 
+            max_epochs=max_epochs, 
+            warmup_start_lr=0.0
+            )
 
-       return [optimizer], [scheduler_warmup]
+        return [optimizer], [scheduler_warmup]
 
         
     def save_model(self, checkpoint_name="simclr.pth"):
@@ -299,9 +302,6 @@ class SimCLR_pl(LightningModule):
     #             weight_decay=self.args.weight_decay,
     #             trust_coef=0.001,
     #         )
-
-
-
     #         # Use a cosine annealing learning rate scheduler
     #         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     #             optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1

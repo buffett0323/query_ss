@@ -76,15 +76,17 @@ if __name__ == "__main__":
     )
 
     trainer = Trainer(
-        max_epochs=args.epoch_num,
+        max_epochs=args.max_epochs,
         devices=args.gpu_ids,
         accelerator="gpu",
         sync_batchnorm=True,
         check_val_every_n_epoch=args.check_val_every_n_epoch,  # Perform validation every 2 epochs
         logger=wandb_logger,
         callbacks=[
-            TQDMProgressBar(refresh_rate=10), accumulator, 
-            model_ckpt, early_stop_callback
+            TQDMProgressBar(refresh_rate=10), 
+            accumulator, 
+            model_ckpt, 
+            early_stop_callback,
         ],
     )
 
@@ -97,4 +99,4 @@ if __name__ == "__main__":
     # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
     
     # # if load best model    
-    # cl.load_model(checkpoint_name="best_model.ckpt")
+    # model.load_model(checkpoint_name="best_model.ckpt")
