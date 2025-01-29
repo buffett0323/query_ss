@@ -19,7 +19,7 @@ from models.e2e.querier.passt import Passt
 from models.types import InputType, OperationMode, SimpleishNamespace
 
 
-from conditioning import FiLM, FiLM_3D
+from query_ss.qbss.conditioning import FiLM, FiLM_3D
 from transformer import TransformerPredictor
 
 from demucs.transformer import CrossTransformerEncoder

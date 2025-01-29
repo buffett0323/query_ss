@@ -17,10 +17,10 @@ from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 
 
-from enrollment_model import MyModel
-from loss import L1SNR_Recons_Loss, L1SNRDecibelMatchLoss
+from query_ss.qbss.enrollment_model import MyModel
+from query_ss.qbss.loss import L1SNR_Recons_Loss, L1SNRDecibelMatchLoss
 from utils import _load_config
-from metrics import (
+from query_ss.qbss.metrics import (
     AverageMeter, cal_metrics, safe_signal_noise_ratio, MetricHandler
 )
 

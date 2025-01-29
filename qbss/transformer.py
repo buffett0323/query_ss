@@ -7,7 +7,7 @@ from torch import nn
 from torch import Tensor
 from torch.nn import functional as F
 
-from detectron_conv2d import Conv2d
+from query_ss.qbss.detectron_conv2d import Conv2d
 
 import math
 

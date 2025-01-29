@@ -17,10 +17,10 @@ from sklearn.model_selection import train_test_split
 
 
 
-from htdemucs_qss import Query_HTDemucs
-from loss import L1SNR_Recons_Loss, Banquet_L1SNRLoss
+from query_ss.qbss.htdemucs_qss import Query_HTDemucs
+from query_ss.qbss.loss import L1SNR_Recons_Loss, Banquet_L1SNRLoss
 from utils import _load_config
-from metrics import (
+from query_ss.qbss.metrics import (
     AverageMeter, cal_metrics, safe_signal_noise_ratio, MetricHandler
 )
 

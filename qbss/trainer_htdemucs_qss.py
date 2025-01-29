@@ -13,11 +13,11 @@ from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
 from typing import Optional
-from htdemucs_qss import Query_HTDemucs
+from query_ss.qbss.htdemucs_qss import Query_HTDemucs
 
-from loss import L1SNR_Recons_Loss
+from query_ss.qbss.loss import L1SNR_Recons_Loss
 from utils import _load_config
-from metrics import MetricHandler
+from query_ss.qbss.metrics import MetricHandler
 from models.types import InputType, OperationMode, SimpleishNamespace
 from data.moisesdb.datamodule import (
     MoisesTestDataModule,

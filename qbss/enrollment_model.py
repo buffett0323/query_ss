@@ -20,7 +20,7 @@ from models.types import InputType, OperationMode, SimpleishNamespace
 from beats.BEATs import BEATs, BEATsConfig
 
 from unet import UnetTranspose2D
-from conditioning import FiLM, Hyper_FiLM, FiLMHyperNetwork
+from query_ss.qbss.conditioning import FiLM, Hyper_FiLM, FiLMHyperNetwork
 from transformer import TransformerPredictor
 
 
