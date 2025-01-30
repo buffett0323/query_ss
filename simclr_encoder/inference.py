@@ -55,7 +55,6 @@ if __name__ == "__main__":
     all_outputs = []
     with torch.no_grad():
         for batch in dm.test_dataloader():
-            
             if isinstance(batch, (tuple, list)):
                 inputs = batch[0]
             else:

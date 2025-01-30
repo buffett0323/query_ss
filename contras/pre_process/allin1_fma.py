@@ -27,7 +27,11 @@ def process_folders(file_names, input_path, output_path, device_id):
     device = torch.device(f'cuda:{device_id}')
     
     for file_name in tqdm(file_names, desc=f"Device {device_id}"):
-        file_path = [os.path.join(input_path, f) for f in file_name]
+        file_path = [
+            os.path.join(input_path, f) 
+            for f in file_name
+                if f.endswith(('.wav', '.mp3'))
+        ]
       
         # Analyze by allin1
         results = allin1.analyze(
@@ -40,9 +44,9 @@ def process_folders(file_names, input_path, output_path, device_id):
         )
             
 
-def load_data_and_process(input_path, output_path, devices=[1, 2, 3], chunk_size=2500):
+def load_data_and_process(input_path, output_path, devices=[2, 3], chunk_size=1000):
     # Split folder names for each GPU
-    folder_names = os.listdir(input_path) # sel_list
+    folder_names = os.listdir(input_path)[:10000] # sel_list
     new_folder_names = [folder_names[i:i + chunk_size] for i in range(0, len(folder_names), chunk_size)]
 
     num_folders = len(new_folder_names)
@@ -69,7 +73,7 @@ if __name__ == "__main__":
     target = 'chorus'
     chunk_size = 5
     device = torch.device('cuda:1' if torch.cuda.is_available() else "cpu")
-    devices = [1, 2]
+    devices = [2, 3]
     
     # Open folders
     os.makedirs(output_path, exist_ok=True)
