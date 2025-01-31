@@ -4,12 +4,15 @@ Use conda env: allin1
 """
 import os
 import allin1
+import shutil
 import torch
 import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count, Process
 from pydub import AudioSegment
 import warnings
+
+from utils import detect_large_file
 
 np.int = int
 np.float = float
@@ -32,8 +35,10 @@ def process_batch(file_names, input_path, output_path, device_id):
         file_path = [
             os.path.join(input_path, f) 
             for f in file_name
-            if f.endswith(('.wav', '.mp3'))
+            if f.endswith(('.wav', '.mp3')) and \
+                detect_large_file(os.path.join(input_path, f)) == True
         ]
+            
       
         # Process in small chunks to prevent overloading GPU memory
         results = allin1.analyze(
@@ -46,18 +51,42 @@ def process_batch(file_names, input_path, output_path, device_id):
         )
         print(f"Result Done at {device}")
         
-        torch.cuda.synchronize(device)
-        torch.cuda.empty_cache()
+        # torch.cuda.synchronize(device)
+        # torch.cuda.empty_cache()
 
 
-
-def load_data_and_process(input_path, output_path, devices=[2, 3], chunk_size=10):
-    """
-    Distribute file processing across multiple GPUs while ensuring all processes run to completion.
-    """
-    folder_names = os.listdir(input_path)  # List of files in input_path
+def load_data_and_process(input_path, output_path, devices, chunk_size=5):
+    # Distribute file processing across multiple GPUs while ensuring all processes run to completion.
+    
+    htdemucs_folder = os.listdir("/mnt/gestalt/home/ddmanddman/fma_analyze/htdemucs")
+    json_folder = [js.split('.json')[0] for js in os.listdir("/mnt/gestalt/home/ddmanddman/fma_analyze/json")]
+    spec_folder = [sp.split('.npy')[0] for sp in os.listdir("/mnt/gestalt/home/ddmanddman/fma_analyze/spec")]
+    
+    # Remove htdemucs folder if json file not exists
+    for ht in htdemucs_folder:
+        if ht not in json_folder:
+            ht_pth = os.path.join("/mnt/gestalt/home/ddmanddman/fma_analyze/htdemucs", ht)#f"'{ht}'")
+            if os.path.exists(ht_pth):
+                shutil.rmtree(ht_pth)
+                print("Remove HT")
+                
+    
+    for sp in spec_folder:
+        if sp not in json_folder:
+            sp_pth = os.path.join("/mnt/gestalt/home/ddmanddman/fma_analyze/spec", f"{sp}.npy")
+            if os.path.exists(sp_pth):
+                os.remove(sp_pth)
+                print("Remove Spec")
+                
+                
+    # Remove already done tracks
+    mp3_files = [mp.split('.mp3')[0] for mp in os.listdir(input_path)]  # List of files in input_path
+    print("MP3:", len(mp3_files))
+    
+    folder_names = [f"{mp3}.mp3" for mp3 in mp3_files if mp3 not in json_folder]
+    print("Filter:", len(folder_names))
+    
     new_folder_names = [folder_names[i:i + chunk_size] for i in range(0, len(folder_names), chunk_size)]
-
     num_devices = len(devices)
     processes = []
 
@@ -77,7 +106,7 @@ if __name__ == "__main__":
     input_path = "/mnt/gestalt/database/FMA/fma_track/audio"
     output_path = "/mnt/gestalt/home/ddmanddman/fma_analyze"
     target = 'chorus'
-    devices = [2, 3]  # Available GPUs
+    devices = [1, 3]  # Available GPUs
 
     # Create output directories
     os.makedirs(output_path, exist_ok=True)
