@@ -8,6 +8,7 @@ from tqdm import tqdm
 from multiprocessing import Process
 from pydub import AudioSegment
 import warnings
+import traceback 
 
 np.int = int
 np.float = float
@@ -19,6 +20,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Global Vars
 sep_model_name = 'htdemucs'
 sources = ['bass', 'drums', 'other', 'vocals']
+error_log_path = "error_log.txt"  # Define error log file path
 
 
 def process_folders(folder_names, input_path, output_path, device_id):
@@ -34,15 +36,25 @@ def process_folders(folder_names, input_path, output_path, device_id):
                     if file_name.endswith(('.wav', '.mp3'))
             ]
 
-            # Analyze by allin1
-            results = allin1.analyze(
-                audio_files,
-                out_dir=os.path.join(output_path, "json"),
-                demix_dir=output_path, 
-                spec_dir=os.path.join(output_path, "spec"),
-                device=device, 
-                keep_byproducts=True
-            )
+            try:
+                # Analyze using allin1
+                results = allin1.analyze(
+                    audio_files,
+                    out_dir=os.path.join(output_path, "json"),
+                    demix_dir=output_path, 
+                    spec_dir=os.path.join(output_path, "spec"),
+                    device=device, 
+                    keep_byproducts=True
+                )
+
+            except Exception as e:
+                error_message = f"Error in folder: {folder_name} on GPU {device_id}\n"
+                error_message += traceback.format_exc()  # Capture full error traceback
+                print(error_message)
+
+                # Append error message to a log file
+                with open(error_log_path, "a") as log_file:
+                    log_file.write(error_message + "\n")
             
 
 def load_data_and_process(sel_list, input_path, output_path, devices=[1, 2, 3]):
@@ -69,7 +81,7 @@ if __name__ == "__main__":
     input_path = "/mnt/gestalt/database/beatport/audio/audio"
     output_path = "/mnt/gestalt/home/ddmanddman/beatport_analyze"
     target = 'chorus'
-    devices = [2, 3]
+    devices = [1, 3]
     
     # Open folders
     os.makedirs(output_path, exist_ok=True)
@@ -90,8 +102,9 @@ if __name__ == "__main__":
     #         sel_list.append(i)
     # print("Selected List:", sel_list)
     
-    ### TODO: 'progressive-house', 'electro-big-room', 'house', 'trap-future-bass'
-    sel_list = ['psy-trance', 'reggae-dancehall-dub']
+    ### TODO: ['electro-big-room', 'house', 'trap-future-bass', 'progressive-house', 'psy-trance']
+    # 'electro-big-room' --> corrupt
+    sel_list = ['house', 'trap-future-bass']
     
     load_data_and_process(sel_list, input_path, output_path, devices)
     print("---All Well Done---")
