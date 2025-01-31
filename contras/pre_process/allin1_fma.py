@@ -12,7 +12,7 @@ from multiprocessing import Pool, cpu_count, Process
 from pydub import AudioSegment
 import warnings
 
-from utils import detect_large_file
+from utils import detect_large_file, get_size
 
 np.int = int
 np.float = float
@@ -35,10 +35,8 @@ def process_batch(file_names, input_path, output_path, device_id):
         file_path = [
             os.path.join(input_path, f) 
             for f in file_name
-            if f.endswith(('.wav', '.mp3')) and \
-                detect_large_file(os.path.join(input_path, f)) == True
+            if f.endswith(('.wav', '.mp3'))
         ]
-            
       
         # Process in small chunks to prevent overloading GPU memory
         results = allin1.analyze(
@@ -79,27 +77,30 @@ def load_data_and_process(input_path, output_path, devices, chunk_size=5):
                 print("Remove Spec")
                 
                 
-    # Remove already done tracks
-    mp3_files = [mp.split('.mp3')[0] for mp in os.listdir(input_path)]  # List of files in input_path
+    # Remove already done tracks and large files
+    mp3_files = [mp.split('.mp3')[0] 
+                 for mp in tqdm(os.listdir(input_path))
+                    if detect_large_file(file_path = os.path.join(input_path, mp)) == True
+    ] 
     print("MP3:", len(mp3_files))
     
     folder_names = [f"{mp3}.mp3" for mp3 in mp3_files if mp3 not in json_folder]
     print("Filter:", len(folder_names))
     
-    new_folder_names = [folder_names[i:i + chunk_size] for i in range(0, len(folder_names), chunk_size)]
-    num_devices = len(devices)
-    processes = []
+    # new_folder_names = [folder_names[i:i + chunk_size] for i in range(0, len(folder_names), chunk_size)]
+    # num_devices = len(devices)
+    # processes = []
 
-    # Create processes instead of using Pool to avoid daemon-related issues
-    for i, device_id in enumerate(devices):
-        folder_subset = new_folder_names[i::num_devices]  # Distribute evenly
-        process = Process(target=process_batch, args=(folder_subset, input_path, output_path, device_id))
-        process.start()
-        processes.append(process)
+    # # Create processes instead of using Pool to avoid daemon-related issues
+    # for i, device_id in enumerate(devices):
+    #     folder_subset = new_folder_names[i::num_devices]  # Distribute evenly
+    #     process = Process(target=process_batch, args=(folder_subset, input_path, output_path, device_id))
+    #     process.start()
+    #     processes.append(process)
 
-    # Wait for all processes to complete
-    for process in processes:
-        process.join()
+    # # Wait for all processes to complete
+    # for process in processes:
+    #     process.join()
 
 
 if __name__ == "__main__":
