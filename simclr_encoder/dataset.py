@@ -132,6 +132,120 @@ class NSynthDataModule(LightningDataModule):
 
 
 
+class BPDataset(Dataset):
+    def __init__(
+        self, 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy",
+        split="train",
+        need_transform=True,
+    ):
+        self.data_path_list = [
+            os.path.join(data_dir, f"nsynth-{split}", "npy", i)
+            for i in os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
+        ]
+        self.transform = CLARTransform()
+        self.need_transform = need_transform
+        self.split = split
+        
+        
+    def get_spec_features(self, x, sr=16000):
+        # Convert audio to mel-spectrogram
+        mel_spec = librosa.feature.melspectrogram(y=x, sr=sr, hop_length=128)
+        return librosa.power_to_db(mel_spec)
+
+
+    def __len__(self):
+        return len(self.data_path_list)
+
+    def __getitem__(self, idx):
+        path = self.data_path_list[idx]
+        x = np.load(path).squeeze(0)
+        x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
+        
+        if self.need_transform:
+            x_i, x_j = self.transform(x_i, x_j)
+            
+        if self.split == "test":
+            return torch.tensor(x, dtype=torch.float32), path
+        return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
+
+
+class NSynthDataModule(LightningDataModule):
+    def __init__(
+        self,
+        args,
+        data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/", 
+    ):
+        super(NSynthDataModule, self).__init__()
+        self.args = args
+        self.data_dir = data_dir
+        self.pin_memory = True
+        self.drop_last = False
+        
+    def setup(self, stage: Optional[str] = None):
+        # Assign train/val datasets for use in dataloaders
+        if stage == "fit" or stage is None:
+            self.train_ds = NSynthDataset(
+                data_dir=self.data_dir,
+                split="train",
+                need_transform=self.args.need_clar_transform,
+            )
+            
+            self.val_ds = NSynthDataset(
+                data_dir=self.data_dir,
+                split="valid",
+                need_transform=self.args.need_clar_transform,
+            )
+        
+        # Assign test dataset for use in dataloader(s)
+        if stage == "test" or stage is None:
+            self.test_ds = NSynthDataset(
+                data_dir=self.data_dir,
+                split="test",
+                need_transform=self.args.need_clar_transform,
+            )
+            
+            
+    def train_dataloader(self):
+        """The train dataloader."""
+        return self._data_loader(
+            self.train_ds,
+            shuffle=True
+        )
+
+    def val_dataloader(self):
+        """The val dataloader."""
+        return self._data_loader(
+            self.val_ds,
+            shuffle=False
+        )
+
+    def test_dataloader(self):
+        """The test dataloader."""
+        return self._data_loader(
+            self.test_ds,
+            shuffle=False
+        )
+        
+    
+    def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
+        return DataLoader(
+            dataset,
+            batch_size=self.args.batch_size,
+            shuffle=shuffle,
+            num_workers=self.args.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory,
+        )
+    
+    @property
+    def num_samples(self) -> int:
+        self.setup(stage = 'fit')
+        return len(self.train_ds)
+
+
+
+
 class CLARTransform(nn.Module):
     def __init__(self, sample_rate=16000):
         super(CLARTransform, self).__init__()

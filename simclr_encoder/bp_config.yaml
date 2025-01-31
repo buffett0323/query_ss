@@ -3,16 +3,16 @@ segment_thres: 3
 segment_second: 5
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
-wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
+log_wandb: True #False
+wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
 
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:1"
-gpu_ids: [1]
+device: "cuda:3"
+gpu_ids: [3]
 number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
@@ -45,7 +45,7 @@ fmax: 8000 # 16000/2
 
 # model options
 # resnet: "resnet18"
-encoder_name: "Wavegram_Logmel128_Cnn14" #"Wavegram_Logmel_Cnn14" # "GatedCNN"
+encoder_name: "Wavegram_Logmel_Cnn14" # "GatedCNN"
 channels: 1
 encoder_output_dim: 512
 projection_dim: 128
