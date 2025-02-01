@@ -3,7 +3,7 @@ segment_thres: 3
 segment_second: 5
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
+log_wandb: True #False
 wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
@@ -11,8 +11,8 @@ need_clar_transform: True
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:1"
-gpu_ids: [1]
+device: "cuda:2"
+gpu_ids: [2]
 number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
@@ -24,8 +24,8 @@ num_workers: 24
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #512 
-gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
+batch_size: 128 # 256
+gradient_accumulation_steps: 16 # 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 max_epochs: 2000 # 200
 check_val_every_n_epoch: 4
