@@ -22,7 +22,8 @@ sep_model_name = 'htdemucs'
 sources = ['bass', 'drums', 'other', 'vocals']
 error_log_path = "error_log.txt"  # Define error log file path
 
-problem_list = ["b36be413-daa5-484b-b3cc-78f3a6acfe85.mp3", "c5f8d324-2bdb-4456-b76d-0c12fc8682e1.mp3"]
+problem_list = ["b36be413-daa5-484b-b3cc-78f3a6acfe85.mp3", "c5f8d324-2bdb-4456-b76d-0c12fc8682e1.mp3", 
+                "7ac465df-dbee-4e51-9102-6d1c3afb66bc.mp3", "b8a01c12-a84c-4c06-8afa-8158145bacfd.mp3"]
 
 def process_folders(folder_names, input_path, output_path, device_id):
     device = torch.device(f'cuda:{device_id}')
@@ -82,7 +83,7 @@ if __name__ == "__main__":
     input_path = "/mnt/gestalt/database/beatport/audio/audio"
     output_path = "/mnt/gestalt/home/ddmanddman/beatport_analyze"
     target = 'chorus'
-    devices = [1]
+    devices = [2]
     
     # Open folders
     os.makedirs(output_path, exist_ok=True)
@@ -106,8 +107,7 @@ if __name__ == "__main__":
     ### TODO: ['electro-big-room', 'house', 'progressive-house', 'psy-trance']
     # 'electro-big-room' --> corrupt
     # 'house' --> corrupt
-    # 'progressive-house' --> corrupt
-    sel_list = ['progressive-house'] #['psy-trance']
+    sel_list = ['house'] #['progressive-house'] #['psy-trance']
     
     load_data_and_process(sel_list, input_path, output_path, devices)
     print("---All Well Done---")
