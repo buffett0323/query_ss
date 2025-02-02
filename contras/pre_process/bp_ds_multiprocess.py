@@ -47,7 +47,7 @@ def process_json(json_path):
                 end_sample = int(segment["end"] * sr)
 
                 # Slice the waveform
-                mix_seg = y[start_sample:end_sample]
+                mix_seg = y[:, start_sample:end_sample]
 
                 # Create folder for the segment
                 segment_folder = os.path.join(output_path, f"{name}_{counter}")
@@ -61,7 +61,7 @@ def process_json(json_path):
                     stem_path = os.path.join(htdemucs_folder, name, f"{stem}.wav")
                     if os.path.exists(stem_path):  # Ensure the stem file exists
                         ht_stem, _ = torchaudio.load(stem_path)
-                        stem_seg = ht_stem[start_sample:end_sample]
+                        stem_seg = ht_stem[:, start_sample:end_sample]
                         np.save(f"{segment_folder}/{stem}.npy", stem_seg)
 
         return f"Processed: {json_path}"

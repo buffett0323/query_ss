@@ -396,6 +396,5 @@ if __name__ == "__main__":
     # for i in range(3):
     #     x, y = ds[i]
     #     print(x.shape, y.shape)
-    y,_ = torchaudio.load("/mnt/gestalt/database/beatport/audio/audio/house/743ae85e-d8bd-4103-a9ca-7caab7affb33.mp3")
-    y1,_ = librosa.load("/mnt/gestalt/database/beatport/audio/audio/house/743ae85e-d8bd-4103-a9ca-7caab7affb33.mp3", sr=44100)
-    print(y.shape, y1.shape)
+    y,_ = np.load("/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy/0051f8af-bcd3-4271-93c7-c6aff02643c9_1/mix.npy")
+    print(y.shape)

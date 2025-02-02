@@ -7,7 +7,8 @@ from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Init settings
-path = "/home/buffett/NAS_NTU" #path = "/mnt/gestalt/home/ddmanddman"
+# path = "/home/buffett/NAS_NTU" #
+path = "/mnt/gestalt/home/ddmanddman"
 output_path = f"{path}/beatport_analyze/chorus_audio_npy"
 json_folder = f"{path}/beatport_analyze/json"
 htdemucs_folder = f"{path}/beatport_analyze/htdemucs"
@@ -24,8 +25,9 @@ for js in tqdm(os.listdir(json_folder)):
     # print(json.dumps(data))#, indent=4)) 
 
     data_path = data["path"]
-    data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
-    y, _ = torchaudio.load(data_path)
+    # data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
+    y, sr = torchaudio.load(data_path)
+    print(y.shape, sr)
 
     # Process segments labeled "chorus"
     counter = 0
@@ -37,7 +39,7 @@ for js in tqdm(os.listdir(json_folder)):
             end_sample = int(segment["end"] * sr)
 
             # Slice the waveform
-            mix_seg = y[start_sample:end_sample]
+            mix_seg = y[:, start_sample:end_sample]
 
             # Save as .npy file
             segment_folder = os.path.join(output_path, f"{name}_{counter}")
@@ -48,7 +50,7 @@ for js in tqdm(os.listdir(json_folder)):
             
             for stem in ["drums", "bass", "other", "vocals"]:
                 ht_stem, _ = torchaudio.load(os.path.join(htdemucs_folder, name, f"{stem}.wav"))#, sr=sr)
-                stem_seg = ht_stem[start_sample:end_sample]
+                stem_seg = ht_stem[:, start_sample:end_sample]
                 np.save(f"{segment_folder}/{stem}.npy", stem_seg)
 
 
