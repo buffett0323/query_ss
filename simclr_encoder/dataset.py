@@ -52,7 +52,7 @@ class NSynthDataset(Dataset):
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
             
-        if self.split == "test":
+        if self.split == "inference":
             return torch.tensor(x, dtype=torch.float32), path
         return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
 
@@ -170,13 +170,13 @@ class BPDataset(Dataset):
         return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
 
 
-class NSynthDataModule(LightningDataModule):
+class BPDataModule(LightningDataModule):
     def __init__(
         self,
         args,
         data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/", 
     ):
-        super(NSynthDataModule, self).__init__()
+        super(BPDataModule, self).__init__()
         self.args = args
         self.data_dir = data_dir
         self.pin_memory = True

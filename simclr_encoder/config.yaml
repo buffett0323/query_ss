@@ -1,6 +1,6 @@
 # Pre-process
-segment_thres: 3
-segment_second: 5
+segment_thres: 2
+segment_second: 4
 sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
