@@ -24,3 +24,6 @@ __pycache__/
 pitch_store.pkl        
 stem_store.pkl       
 timbre_store.pkl
+
+dddm/logs/
+dddm/__pycache__/
