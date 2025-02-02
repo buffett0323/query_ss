@@ -1,6 +1,5 @@
 # Pre-process
-segment_thres: 2
-segment_second: 4
+segment_second: 4 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
@@ -42,6 +41,8 @@ window_size: 1024 #512
 n_mels: 64 #128
 fmin: 20
 fmax: 8000 # 16000/2
+pin_memory: True
+drop_last: False
 
 # model options
 # resnet: "resnet18"

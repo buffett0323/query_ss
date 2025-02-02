@@ -1,12 +1,12 @@
 # Pre-process
-segment_thres: 3
-segment_second: 6
+segment_second: 6 # half in 3 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
 wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
+random_slice: False
 
 # distributed training
 nodes: 1
@@ -42,6 +42,8 @@ window_size: 1024 #512
 n_mels: 64 #128
 fmin: 20
 fmax: 8000 # 16000/2
+pin_memory: True
+drop_last: False
 
 # model options
 # resnet: "resnet18"

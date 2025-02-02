@@ -19,9 +19,13 @@ from tqdm import tqdm
 from torchaudio.functional import pitch_shift
 from utils import yaml_config_hook
 
+
+# NSynthDataset
 class NSynthDataset(Dataset):
     def __init__(
-        self, 
+        self,
+        sample_rate,
+        duration,
         data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/",
         split="train",
         need_transform=True,
@@ -30,16 +34,14 @@ class NSynthDataset(Dataset):
             os.path.join(data_dir, f"nsynth-{split}", "npy", i)
             for i in os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
         ]
-        self.transform = CLARTransform()
+        self.transform = CLARTransform(
+            sample_rate=sample_rate,
+            duration=int(duration/2),
+        )
+        self.sample_rate = sample_rate
+        self.duration = duration
         self.need_transform = need_transform
         self.split = split
-        
-        
-    def get_spec_features(self, x, sr=16000):
-        # Convert audio to mel-spectrogram
-        mel_spec = librosa.feature.melspectrogram(y=x, sr=sr, hop_length=128)
-        return librosa.power_to_db(mel_spec)
-
 
     def __len__(self):
         return len(self.data_path_list)
@@ -73,12 +75,16 @@ class NSynthDataModule(LightningDataModule):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
             self.train_ds = NSynthDataset(
+                sample_rate=self.args.sample_rate,
+                duration=self.args.segment_second,
                 data_dir=self.data_dir,
                 split="train",
                 need_transform=self.args.need_clar_transform,
             )
             
             self.val_ds = NSynthDataset(
+                sample_rate=self.args.sample_rate,
+                duration=self.args.segment_second,
                 data_dir=self.data_dir,
                 split="valid",
                 need_transform=self.args.need_clar_transform,
@@ -87,6 +93,8 @@ class NSynthDataModule(LightningDataModule):
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             self.test_ds = NSynthDataset(
+                sample_rate=self.args.sample_rate,
+                duration=self.args.segment_second,
                 data_dir=self.data_dir,
                 split="test",
                 need_transform=self.args.need_clar_transform,
@@ -131,7 +139,7 @@ class NSynthDataModule(LightningDataModule):
         return len(self.train_ds)
 
 
-
+# Beatport Dataset
 class BPDataset(Dataset):
     def __init__(
         self,
@@ -139,9 +147,9 @@ class BPDataset(Dataset):
         duration,
         data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy",
         split="train",
-        stems=["drums", "bass", "other", "vocals"],
         need_transform=True,
         random_slice=False,
+        stems=["drums", "bass", "other", "vocals"],
     ):
         self.data_path_list = [
             os.path.join(data_dir, folder, f"{stem}.npy")
@@ -150,7 +158,7 @@ class BPDataset(Dataset):
         ]
         self.transform = CLARTransform(
             sample_rate=sample_rate,
-            duration=duration,
+            duration=int(duration/2),
         )
         self.sample_rate = sample_rate
         self.duration = duration
@@ -193,35 +201,44 @@ class BPDataModule(LightningDataModule):
     def __init__(
         self,
         args,
-        data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/", 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy", 
     ):
         super(BPDataModule, self).__init__()
         self.args = args
         self.data_dir = data_dir
-        self.pin_memory = True
-        self.drop_last = False
+        self.pin_memory = args.pin_memory
+        self.drop_last = args.drop_last
         
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
-            self.train_ds = NSynthDataset(
+            self.train_ds = BPDataset(
+                sample_rate=self.args.sample_rate,
+                duration=self.args.segment_second,
                 data_dir=self.data_dir,
                 split="train",
                 need_transform=self.args.need_clar_transform,
+                random_slice=self.args.random_slice,
             )
             
-            self.val_ds = NSynthDataset(
+            self.val_ds = BPDataset(
+                sample_rate=self.args.sample_rate,
+                duration=self.args.segment_second,
                 data_dir=self.data_dir,
                 split="valid",
                 need_transform=self.args.need_clar_transform,
+                random_slice=self.args.random_slice,
             )
         
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
-            self.test_ds = NSynthDataset(
+            self.test_ds = BPDataset(
+                sample_rate=self.args.sample_rate,
+                duration=self.args.segment_second,
                 data_dir=self.data_dir,
                 split="test",
                 need_transform=self.args.need_clar_transform,
+                random_slice=self.args.random_slice,
             )
             
             
@@ -361,7 +378,7 @@ class CLARTransform(nn.Module):
         x = librosa.resample(x, orig_sr=x.shape[0] / self.duration, target_sr=self.sample_rate)
         if x.shape[0] > (self.sample_rate * self.duration):
             return x[:(self.sample_rate * self.duration)]
-        return np.pad(x, [0, (self.sample_rate * self.lengdurationth) - x.shape[0]])
+        return np.pad(x, [0, (self.sample_rate * self.duration) - x.shape[0]])
 
 
     def __call__(self, x1, x2):        
@@ -387,7 +404,10 @@ if __name__ == "__main__":
     # )
     # dm.setup()
     
-    # ds = NSynthDataset()
+    # ds = NSynthDataset(
+    #     sample_rate=args.sample_rate,
+    #     duration=args.segment_second,
+    # )
     # for i in range(30):
     #     x, y = ds[i]
     #     print(x.shape, y.shape)
@@ -401,10 +421,17 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
+    
+    dm = BPDataModule(
+        args=args,
+    )
+    dm.setup()
+    
     ds = BPDataset(
         sample_rate=args.sample_rate,
-        duration=args.segment_thres,
+        duration=args.segment_second,
+        random_slice=True,
     )
-    for i in range(3):
+    for i in range(30):
         x, y = ds[i]
         print(x.shape, y.shape)
