@@ -5,7 +5,8 @@ import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
-path = "/mnt/gestalt/home/ddmanddman"
+# Init settings
+path = "/home/buffett/NAS_NTU" # "/mnt/gestalt/home/ddmanddman"
 output_path = f"{path}/beatport_analyze/chorus_audio_npy"
 json_folder = f"{path}/beatport_analyze/json"
 htdemucs_folder = f"{path}/beatport_analyze/htdemucs"
@@ -13,6 +14,8 @@ os.makedirs(output_path, exist_ok=True)
 thres = 6
 sr = 44100
 num_workers = max(1, cpu_count() - 2)  # Use available CPU cores minus 2 to avoid system freeze
+print("Num workers:", num_workers)
+
 
 # Get list of JSON files
 json_files = [os.path.join(json_folder, js) for js in os.listdir(json_folder)]
@@ -28,10 +31,12 @@ def process_json(json_path):
             data = json.load(file)
 
         # Load the original audio
-        y, _ = librosa.load(data["path"], sr=sr)
+        data_path = data["path"]
+        data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
+        y, _ = librosa.load(data_path, sr=sr)
 
         # Extract name from path
-        name = os.path.basename(data["path"]).replace(".mp3", "")
+        name = os.path.basename(data_path).replace(".mp3", "")
 
         counter = 0
         for segment in data["segments"]:

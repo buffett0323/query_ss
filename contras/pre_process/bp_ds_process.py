@@ -5,14 +5,14 @@ import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
-path = "/mnt/gestalt/home/ddmanddman"
+# Init settings
+path = "/home/buffett/NAS_NTU" # "/mnt/gestalt/home/ddmanddman"
 output_path = f"{path}/beatport_analyze/chorus_audio_npy"
 json_folder = f"{path}/beatport_analyze/json"
 htdemucs_folder = f"{path}/beatport_analyze/htdemucs"
 os.makedirs(output_path, exist_ok=True)
 thres = 6
 sr = 44100
-
 
 for js in tqdm(os.listdir(json_folder)):
     
@@ -22,12 +22,13 @@ for js in tqdm(os.listdir(json_folder)):
     # Print the JSON content
     # print(json.dumps(data))#, indent=4)) 
 
-    
-    y, _ = librosa.load(data["path"], sr=sr)
+    data_path = data["path"]
+    data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
+    y, _ = librosa.load(data_path, sr=sr)
 
     # Process segments labeled "chorus"
     counter = 0
-    name = data["path"].split("/")[-1].split(".mp3")[0]
+    name = os.path.basename(data_path).replace(".mp3", "")
     for segment in data["segments"]:
         if segment["label"] == "chorus" and (segment["end"] - segment["start"]) > thres:
             counter += 1
