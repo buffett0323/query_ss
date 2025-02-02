@@ -1,6 +1,6 @@
 # Pre-process
 segment_thres: 3
-segment_second: 5
+segment_second: 6
 sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
@@ -37,7 +37,7 @@ warmup_epochs: 30
 max_length: 64
 n_fft: 2048
 hop_length: 320  #512 #1024
-sample_rate: 16000 #44100 
+sample_rate: 44100 
 window_size: 1024 #512
 n_mels: 64 #128
 fmin: 20

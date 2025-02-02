@@ -1,12 +1,13 @@
 import os
 import json
 import librosa
+import torchaudio
 import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Init settings
-path = "/home/buffett/NAS_NTU" # "/mnt/gestalt/home/ddmanddman"
+path = "/home/buffett/NAS_NTU" #path = "/mnt/gestalt/home/ddmanddman"
 output_path = f"{path}/beatport_analyze/chorus_audio_npy"
 json_folder = f"{path}/beatport_analyze/json"
 htdemucs_folder = f"{path}/beatport_analyze/htdemucs"
@@ -24,7 +25,7 @@ for js in tqdm(os.listdir(json_folder)):
 
     data_path = data["path"]
     data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
-    y, _ = librosa.load(data_path, sr=sr)
+    y, _ = torchaudio.load(data_path)
 
     # Process segments labeled "chorus"
     counter = 0
@@ -46,7 +47,7 @@ for js in tqdm(os.listdir(json_folder)):
             np.save(f"{segment_folder}/mix.npy", mix_seg)
             
             for stem in ["drums", "bass", "other", "vocals"]:
-                ht_stem, _ = librosa.load(os.path.join(htdemucs_folder, name, f"{stem}.wav"), sr=sr)
+                ht_stem, _ = torchaudio.load(os.path.join(htdemucs_folder, name, f"{stem}.wav"))#, sr=sr)
                 stem_seg = ht_stem[start_sample:end_sample]
                 np.save(f"{segment_folder}/{stem}.npy", stem_seg)
 

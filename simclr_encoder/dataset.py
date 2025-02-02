@@ -134,38 +134,45 @@ class NSynthDataModule(LightningDataModule):
 
 class BPDataset(Dataset):
     def __init__(
-        self, 
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy",
+        self,
+        sample_rate,
+        length,
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy",
         split="train",
+        stems=["drums", "bass", "other", "vocals"],
         need_transform=True,
     ):
         self.data_path_list = [
-            os.path.join(data_dir, f"nsynth-{split}", "npy", i)
-            for i in os.listdir(os.path.join(data_dir, f"nsynth-{split}", "npy"))
+            os.path.join(data_dir, folder, f"{stem}.npy")
+            for folder in os.listdir(data_dir)
+                for stem in stems
         ]
-        self.transform = CLARTransform()
+        self.transform = CLARTransform(
+            sample_rate=sample_rate,
+            length=length,
+        )
         self.need_transform = need_transform
         self.split = split
-        
-        
-    def get_spec_features(self, x, sr=16000):
-        # Convert audio to mel-spectrogram
-        mel_spec = librosa.feature.melspectrogram(y=x, sr=sr, hop_length=128)
-        return librosa.power_to_db(mel_spec)
+        self.sample_rate = sample_rate
+        self.length = length
 
 
     def __len__(self):
         return len(self.data_path_list)
+    
+    def segment_length(self, ):
+        return
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        x = np.load(path).squeeze(0)
+        x = np.load(path)#.squeeze(0)
+        print("x", x.shape, path)
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
             
-        if self.split == "test":
+        if self.split == "inference":
             return torch.tensor(x, dtype=torch.float32), path
         return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
 
@@ -247,10 +254,14 @@ class BPDataModule(LightningDataModule):
 
 
 class CLARTransform(nn.Module):
-    def __init__(self, sample_rate=16000):
+    def __init__(
+        self, 
+        sample_rate=16000,
+        length=2,
+    ):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
-        self.length = 2
+        self.length = length
         self.transforms = [
             self.pitch_shift_transform,
             self.add_fade_transform,
@@ -352,19 +363,39 @@ class CLARTransform(nn.Module):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SimCLR")
+    # parser = argparse.ArgumentParser(description="SimCLR")
 
-    config = yaml_config_hook("config.yaml")
-    for k, v in config.items():
-        parser.add_argument(f"--{k}", default=v, type=type(v))
+    # config = yaml_config_hook("config.yaml")
+    # for k, v in config.items():
+    #     parser.add_argument(f"--{k}", default=v, type=type(v))
 
-    args = parser.parse_args()
-    dm = NSynthDataModule(
-        args=args,
-    )
-    dm.setup()
+    # args = parser.parse_args()
+    # dm = NSynthDataModule(
+    #     args=args,
+    # )
+    # dm.setup()
     
-    ds = NSynthDataset()
-    for i in range(30):
-        x, y = ds[i]
-        print(x.shape, y.shape)
+    # ds = NSynthDataset()
+    # for i in range(30):
+    #     x, y = ds[i]
+    #     print(x.shape, y.shape)
+    
+    
+    
+    # parser = argparse.ArgumentParser(description="SimCLR")
+
+    # config = yaml_config_hook("bp_config.yaml")
+    # for k, v in config.items():
+    #     parser.add_argument(f"--{k}", default=v, type=type(v))
+
+    # args = parser.parse_args()
+    # ds = BPDataset(
+    #     sample_rate=args.sample_rate,
+    #     length=args.segment_thres,
+    # )
+    # for i in range(3):
+    #     x, y = ds[i]
+    #     print(x.shape, y.shape)
+    y,_ = torchaudio.load("/mnt/gestalt/database/beatport/audio/audio/house/743ae85e-d8bd-4103-a9ca-7caab7affb33.mp3")
+    y1,_ = librosa.load("/mnt/gestalt/database/beatport/audio/audio/house/743ae85e-d8bd-4103-a9ca-7caab7affb33.mp3", sr=44100)
+    print(y.shape, y1.shape)

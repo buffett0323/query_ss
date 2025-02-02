@@ -1,6 +1,7 @@
 import os
 import json
 import librosa
+import torchaudio
 import numpy as np
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
@@ -33,7 +34,7 @@ def process_json(json_path):
         # Load the original audio
         data_path = data["path"]
         data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
-        y, _ = librosa.load(data_path, sr=sr)
+        y, _ = torchaudio.load(data_path)#, sr=sr)
 
         # Extract name from path
         name = os.path.basename(data_path).replace(".mp3", "")
@@ -59,7 +60,7 @@ def process_json(json_path):
                 for stem in ["drums", "bass", "other", "vocals"]:
                     stem_path = os.path.join(htdemucs_folder, name, f"{stem}.wav")
                     if os.path.exists(stem_path):  # Ensure the stem file exists
-                        ht_stem, _ = librosa.load(stem_path, sr=sr)
+                        ht_stem, _ = torchaudio.load(stem_path)
                         stem_seg = ht_stem[start_sample:end_sample]
                         np.save(f"{segment_folder}/{stem}.npy", stem_seg)
 
