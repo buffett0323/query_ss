@@ -27,7 +27,6 @@ for js in tqdm(os.listdir(json_folder)):
     data_path = data["path"]
     # data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
     y, sr = torchaudio.load(data_path)
-    print(y.shape, sr)
 
     # Process segments labeled "chorus"
     counter = 0

@@ -136,11 +136,12 @@ class BPDataset(Dataset):
     def __init__(
         self,
         sample_rate,
-        length,
+        duration,
         data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy",
         split="train",
         stems=["drums", "bass", "other", "vocals"],
         need_transform=True,
+        random_slice=False,
     ):
         self.data_path_list = [
             os.path.join(data_dir, folder, f"{stem}.npy")
@@ -149,24 +150,35 @@ class BPDataset(Dataset):
         ]
         self.transform = CLARTransform(
             sample_rate=sample_rate,
-            length=length,
+            duration=duration,
         )
-        self.need_transform = need_transform
-        self.split = split
         self.sample_rate = sample_rate
-        self.length = length
-
+        self.duration = duration
+        self.slice_duration = sample_rate * duration
+        self.split = split
+        self.need_transform = need_transform
+        self.random_slice = random_slice
+        
 
     def __len__(self):
         return len(self.data_path_list)
     
-    def segment_length(self, ):
-        return
+    
+    def segment_length(self, x):
+        # TODO: Slice 3 seconds on downbeat
+        if self.random_slice:
+            max_start_index = x.shape[1] - self.slice_duration
+            start_idx = np.random.randint(0, max_start_index)
+            end_idx = start_idx + self.slice_duration
+            return x[:, start_idx:end_idx]
+            
+        return x[:, :self.slice_duration]
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        x = np.load(path)#.squeeze(0)
-        print("x", x.shape, path)
+        x = self.segment_length(np.load(path))
+        x = np.mean(x, axis=0, keepdims=False) # To mono
+
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
@@ -257,11 +269,11 @@ class CLARTransform(nn.Module):
     def __init__(
         self, 
         sample_rate=16000,
-        length=2,
+        duration=2,
     ):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
-        self.length = length
+        self.duration = duration
         self.transforms = [
             self.pitch_shift_transform,
             self.add_fade_transform,
@@ -346,10 +358,10 @@ class CLARTransform(nn.Module):
 
     def time_stretch_transform(self, x):
         x = effects.time_stretch(x, rate=random.uniform(0.5, 1.5))
-        x = librosa.resample(x, orig_sr=x.shape[0] / self.length, target_sr=self.sample_rate)
-        if x.shape[0] > (self.sample_rate * self.length):
-            return x[:(self.sample_rate * self.length)]
-        return np.pad(x, [0, (self.sample_rate * self.length) - x.shape[0]])
+        x = librosa.resample(x, orig_sr=x.shape[0] / self.duration, target_sr=self.sample_rate)
+        if x.shape[0] > (self.sample_rate * self.duration):
+            return x[:(self.sample_rate * self.duration)]
+        return np.pad(x, [0, (self.sample_rate * self.lengdurationth) - x.shape[0]])
 
 
     def __call__(self, x1, x2):        
@@ -382,19 +394,17 @@ if __name__ == "__main__":
     
     
     
-    # parser = argparse.ArgumentParser(description="SimCLR")
+    parser = argparse.ArgumentParser(description="SimCLR")
 
-    # config = yaml_config_hook("bp_config.yaml")
-    # for k, v in config.items():
-    #     parser.add_argument(f"--{k}", default=v, type=type(v))
+    config = yaml_config_hook("bp_config.yaml")
+    for k, v in config.items():
+        parser.add_argument(f"--{k}", default=v, type=type(v))
 
-    # args = parser.parse_args()
-    # ds = BPDataset(
-    #     sample_rate=args.sample_rate,
-    #     length=args.segment_thres,
-    # )
-    # for i in range(3):
-    #     x, y = ds[i]
-    #     print(x.shape, y.shape)
-    y,_ = np.load("/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy/0051f8af-bcd3-4271-93c7-c6aff02643c9_1/mix.npy")
-    print(y.shape)
+    args = parser.parse_args()
+    ds = BPDataset(
+        sample_rate=args.sample_rate,
+        duration=args.segment_thres,
+    )
+    for i in range(3):
+        x, y = ds[i]
+        print(x.shape, y.shape)
