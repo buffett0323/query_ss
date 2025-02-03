@@ -12,7 +12,7 @@ coco_path = f"{base}/cocochorales_output/main_dataset/{split}"
 # Get all WAV files
 def get_wav_files():
     file_list = []
-    for track in os.listdir(coco_path):
+    for track in tqdm(os.listdir(coco_path)):
         track_path = os.path.join(coco_path, track, "stems_audio")
         if os.path.exists(track_path):  # Ensure folder exists
             for stem in os.listdir(track_path):
