@@ -97,7 +97,7 @@ class Diffusion(BaseModule):
     def __init__(self, n_feats, dim_unet, dim_spk, beta_min, beta_max):
         super(Diffusion, self).__init__()
         self.estimator_src = GradLogPEstimator(dim_unet, dim_spk)
-        self.estimator_ftr = GradLogPEstimator(dim_unet, dim_spk)
+        # self.estimator_ftr = GradLogPEstimator(dim_unet, dim_spk)
 
         self.n_feats = n_feats
         self.dim_unet = dim_unet

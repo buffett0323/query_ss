@@ -103,8 +103,8 @@ class SynthesizerTrn(nn.Module):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.segment_size = segment_size
 
-        self.emb_c = nn.Conv1d(1024, encoder_hidden_size, 1)
-        self.emb_f0 = nn.Embedding(20, encoder_hidden_size)
+        # self.emb_c = nn.Conv1d(1024, encoder_hidden_size, 1)
+        # self.emb_f0 = nn.Embedding(20, encoder_hidden_size)
 
         # Speaker Representation -- Timbre Encoder
         self.emb_g = StyleEncoder(
@@ -121,28 +121,27 @@ class SynthesizerTrn(nn.Module):
             out_dim=128,
         )
 
-        # D_F, D_S
-        # self.dec_f = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256)
+        # Decoder
         self.dec_s = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256) 
 
     def forward(self, x_mel, length, mixup=False):
         x_mask = torch.unsqueeze(commons.sequence_mask(length, x_mel.size(2)), 1).to(x_mel.dtype)
         
+        # Timbre & Pitch Encoders
         g = self.emb_g(x_mel, x_mask).unsqueeze(-1)
         f0, _ = self.emb_p(x_mel, x_mask)#.unsqueeze(-1)
-        # print("BF", x_mask.shape, g.shape, f0.shape)
-        
+
+        # Mix-up Training
         if mixup is True:
             g_mixup = torch.cat([g, g[torch.randperm(g.size()[0])]], dim=0)
             x_mask = torch.cat([x_mask, x_mask], dim=0)
             f0 = torch.cat([f0, f0], dim=0)
-            # print("G + F0 + X_Mask:", g_mixup.shape, f0.shape, x_mask.shape)
-            
+                        
             y_s = self.dec_s(f0, x_mask, g=g_mixup)
         else:
             y_s = self.dec_s(f0, x_mask, g=g)
 
-        return g, y_s #, y_f
+        return g, y_s
         
     def voice_conversion(self, w2v, x_length, f0_code, x_mel, length):
         y_mask = torch.unsqueeze(commons.sequence_mask(x_length, w2v.size(2)), 1).to(w2v.dtype)
@@ -172,9 +171,11 @@ class DDDM(BaseModule):
         self.beta_min = beta_min
         self.beta_max = beta_max
 
-        self.encoder = SynthesizerTrn(hps.data.n_mel_channels,
-                                      hps.train.segment_size // hps.data.hop_length,
-                                      **hps.model)
+        self.encoder = SynthesizerTrn(
+            hps.data.n_mel_channels,
+            hps.train.segment_size // hps.data.hop_length,
+            **hps.model
+        )
         self.decoder = Diffusion(n_feats, dec_dim, spk_dim, beta_min, beta_max)
 
     @torch.no_grad() # For evaluation
@@ -245,9 +246,11 @@ class DDDM(BaseModule):
         return y[:, :, :max_length]
     
     def compute_loss(self, x, x_length): 
+        # Encoder
         x_mask = sequence_mask(x_length, x.size(2)).unsqueeze(1).to(x.dtype)
         spk, src_out = self.encoder(x, x_length, mixup=True)
 
+        # Mix-up
         mixup = torch.randint(0, 2, (x.size(0),1,1)).to(x.device)
         src_out_new = mixup*src_out[:x.size(0), :, :] + (1-mixup)*src_out[x.size(0):, :, :]
     
