@@ -46,10 +46,10 @@ def main():
     print(f"Found {len(wav_files)} WAV files. Processing...")
 
     # Use multiprocessing Pool
-    # num_workers = max(mp.cpu_count()-2, 24)
+    num_workers = max(mp.cpu_count()-2, 24)
     
-    # with mp.Pool(num_workers) as pool:
-    #     list(tqdm(pool.imap(process_wav, wav_files), total=len(wav_files)))
+    with mp.Pool(num_workers) as pool:
+        list(tqdm(pool.imap(process_wav, wav_files), total=len(wav_files)))
 
     print("✅ All WAV files converted to NPY!")
 
