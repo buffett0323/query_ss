@@ -107,10 +107,6 @@ def run(rank, n_gpus, hps):
         net_v.dec.remove_weight_norm()
     else:
         net_v = None
-    
-        
-    # w2v = Wav2vec2().cuda(rank)
-    # aug = Augment(hps).cuda(rank)
 
     model = DDDM(
         hps.data.n_mel_channels, hps.diffusion.spk_dim,
@@ -256,11 +252,8 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval):
             if batch_idx <= 4:
                 y_hat = net_v(mel_rec)
                 enc_hat = net_v(enc_output)
-                # src_hat = net_v(src_out)
-                # ftr_hat = net_v(ftr_out)
-
-                # plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
-                # plot_mel = plot_mel.clip(min=-10, max=10)
+                plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
+                plot_mel = plot_mel.clip(min=-10, max=10)
 
                 # image_dict.update({
                 #     "gen/mel_{}".format(batch_idx): utils.plot_spectrogram_to_numpy(plot_mel.squeeze().cpu().numpy())
@@ -268,8 +261,6 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval):
                 audio_dict.update({
                     "gen/audio_{}".format(batch_idx): y_hat.squeeze(),
                     "gen/enc_audio_{}".format(batch_idx): enc_hat.squeeze(),
-                    # "gen/src_audio_{}".format(batch_idx): src_hat.squeeze(),
-                    # "gen/ftr_audio_{}".format(batch_idx): ftr_hat.squeeze(),
                 })
                 if global_step == 0:
                     audio_dict.update({"gt/audio_{}".format(batch_idx): y.squeeze()})
