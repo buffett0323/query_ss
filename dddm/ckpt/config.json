@@ -10,7 +10,7 @@
     "learning_rate": 5e-5,
     "betas": [0.8, 0.99],
     "eps": 1e-9,
-    "batch_size": 16,
+    "batch_size": 32,
     "fp16_run": true,
     "lr_decay": 0.999875,
     "segment_size": 64000,
@@ -25,7 +25,6 @@
   "data": {
     "filelist_path": "/mnt/gestalt/home/ddmanddman/cocochorales_output/main_dataset/",
     "txt_path": "info/",
-    "max_wav_value": 32768.0,
     "sampling_rate": 16000,
     "filter_length": 1280,
     "hop_length": 320,
