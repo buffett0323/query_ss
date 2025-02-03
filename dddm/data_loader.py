@@ -82,6 +82,7 @@ class CocoChorale_Simple_DS(Dataset):
 
     
     def __getitem__(self, idx):
+        # TODO: npy faster load
         audio_path = self.filelist_path[idx]
         audio, _ = torchaudio.load(audio_path)
         audio = audio.squeeze()
@@ -89,7 +90,7 @@ class CocoChorale_Simple_DS(Dataset):
         if not self.training:  
             return audio
         
-        # TODO: audio start wrong
+        # TODO: CSV file
         if audio.shape[-1] > self.segment_length:
             audio_start = np.random.randint(0, audio.shape[-1] - self.segment_length + 1)
             audio_segment = audio[audio_start:audio_start + self.segment_length]

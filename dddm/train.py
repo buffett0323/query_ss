@@ -78,11 +78,24 @@ def run(rank, n_gpus, hps):
         drop_last=True, 
         persistent_workers=True, 
         pin_memory=True,
+        shuffle=True,
+    )
+    valid_dataset = CocoChorale_Simple_DS(hps, split="valid", training=False)
+    valid_sampler = DistributedSampler(valid_dataset) if n_gpus > 1 else None
+    valid_loader = DataLoader(
+        valid_dataset, 
+        batch_size=hps.train.batch_size, 
+        num_workers=hps.train.num_workers,
+        sampler=valid_sampler, 
+        drop_last=True, 
+        persistent_workers=True, 
+        pin_memory=True,
+        shuffle=True,
     )
 
     if rank == 0:
-        test_dataset = CocoChorale_Simple_DS(hps, training=False)
-        eval_loader = DataLoader(test_dataset, batch_size=1)
+        test_dataset = CocoChorale_Simple_DS(hps, split="test", training=False)
+        test_loader = DataLoader(test_dataset, batch_size=1)
 
         net_v = HiFi(
             hps.data.n_mel_channels,
@@ -110,10 +123,8 @@ def run(rank, n_gpus, hps):
     # f0_quantizer.eval() 
      
     if rank == 0:
-        num_param = get_param_num(model.encoder)
-        print('[Encoder] number of Parameters:', num_param)
-        num_param = get_param_num(model.decoder)
-        print('[Decoder] number of Parameters:', num_param)
+        print('[Encoder] number of Parameters:', get_param_num(model.encoder))
+        print('[Decoder] number of Parameters:', get_param_num(model.decoder))
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -133,16 +144,21 @@ def run(rank, n_gpus, hps):
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=hps.train.lr_decay, last_epoch=epoch_str - 2)
     scaler = GradScaler("cuda", enabled=hps.train.fp16_run) # scaler = GradScaler(enabled=hps.train.fp16_run)
 
-    for epoch in range(epoch_str, hps.train.epochs + 1):
+    for epoch in tqdm(range(epoch_str, hps.train.epochs + 1)):
         if rank == 0:
             train_and_evaluate(rank, epoch, hps, [model, mel_fn, w2v, f0_quantizer, aug, net_v], optimizer,
-                               scheduler_g, scaler, [train_loader, eval_loader], logger, [writer, writer_eval], n_gpus)
+                               scheduler_g, scaler, [train_loader, valid_loader], 
+                               logger, [writer, writer_eval], n_gpus)
         else:
             train_and_evaluate(rank, epoch, hps, [model, mel_fn, w2v, f0_quantizer, aug, net_v], optimizer,
-                               scheduler_g, scaler, [train_loader, None], None, None, n_gpus)
-        print("Finish Epoch:", epoch)
+                               scheduler_g, scaler, [train_loader, None], 
+                               None, None, n_gpus)
         scheduler_g.step()
 
+    # Testing
+    print("Testing")
+    evaluate(hps, model, mel_fn, net_v, test_loader, writer_eval)
+    
     # At the end of run(), destroy the process group to avoid NCCL errors
     dist.destroy_process_group()
 
@@ -150,7 +166,7 @@ def run(rank, n_gpus, hps):
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers, n_gpus):
     model, mel_fn, w2v, f0_quantizer, aug, net_v = nets
     optimizer = optims
-    train_loader, eval_loader = loaders
+    train_loader, valid_loader = loaders
 
     if writers is not None:
         writer, writer_eval = writers
@@ -159,6 +175,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     if n_gpus > 1:
         train_loader.sampler.set_epoch(epoch)
     
+    # Training
     model.train()
     for batch_idx, (x, length) in enumerate(tqdm(train_loader)):
         x = x.cuda(rank, non_blocking=True)
@@ -198,14 +215,16 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                     global_step=global_step,
                     scalars=scalar_dict)
             
-            # EVAL
+            # Evaluation
             if global_step % hps.train.eval_interval == 0: # EVAL: 10000
                 torch.cuda.empty_cache()
-                evaluate(hps, model, mel_fn, w2v, f0_quantizer, net_v, eval_loader, writer_eval)
+                evaluate(hps, model, mel_fn, net_v, valid_loader, writer_eval)
 
                 if global_step % hps.train.save_interval == 0:
-                    utils.save_checkpoint(model, optimizer, hps.train.learning_rate, epoch,
-                                          os.path.join(hps.model_dir, "G_{}.pth".format(global_step)))
+                    utils.save_checkpoint(
+                        model, optimizer, hps.train.learning_rate, epoch,
+                        os.path.join(hps.model_dir, "G_{}.pth".format(global_step))
+                    )
 
         global_step += 1
 
@@ -213,14 +232,14 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         logger.info('====> Epoch: {}'.format(epoch))
 
 
-def evaluate(hps, model, mel_fn, w2v, f0_quantizer, net_v, eval_loader, writer_eval):
+def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval):
     model.eval()
     image_dict = {}
     audio_dict = {}
     mel_loss = 0
     enc_loss = 0
     with torch.no_grad():
-        for batch_idx, y in enumerate(eval_loader):
+        for batch_idx, y in enumerate(tqdm(eval_loader)):
             y = y.cuda(0)
             # y_f0 = y_f0.cuda(0)
 
@@ -244,8 +263,8 @@ def evaluate(hps, model, mel_fn, w2v, f0_quantizer, net_v, eval_loader, writer_e
                 # src_hat = net_v(src_out)
                 # ftr_hat = net_v(ftr_out)
 
-                plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
-                plot_mel = plot_mel.clip(min=-10, max=10)
+                # plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
+                # plot_mel = plot_mel.clip(min=-10, max=10)
 
                 # image_dict.update({
                 #     "gen/mel_{}".format(batch_idx): utils.plot_spectrogram_to_numpy(plot_mel.squeeze().cpu().numpy())
