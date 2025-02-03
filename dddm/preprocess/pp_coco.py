@@ -11,13 +11,24 @@ coco_path = f"{base}/cocochorales_output/main_dataset/{split}"
 
 # Get all WAV files
 def get_wav_files():
-    file_list = []
-    for track in tqdm(os.listdir(coco_path)):
-        track_path = os.path.join(coco_path, track, "stems_audio")
-        if os.path.exists(track_path):  # Ensure folder exists
-            for stem in os.listdir(track_path):
-                if stem.endswith(".wav"):
-                    file_list.append(os.path.join(track_path, stem))
+    
+    txt_file = f"../info/{split}_list.txt"
+    if os.path.exists(txt_file):
+        with open(txt_file, "r") as f:
+            file_list = [line.strip() for line in f] 
+    else:
+        file_list = []
+        for track in tqdm(os.listdir(coco_path)):
+            track_path = os.path.join(coco_path, track, "stems_audio")
+            if os.path.exists(track_path):  # Ensure folder exists
+                for stem in os.listdir(track_path):
+                    if stem.endswith(".wav"):
+                        file_list.append(os.path.join(track_path, stem))
+                        
+        with open(txt_file, "w") as f:
+            for path in file_list:
+                f.write(path + "\n")
+                
     return file_list
 
 # Convert WAV to NPY
