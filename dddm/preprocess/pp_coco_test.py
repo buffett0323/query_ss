@@ -5,7 +5,7 @@ import multiprocessing as mp
 from tqdm import tqdm
 
 # Define dataset split
-split = "valid" # "test"
+split = "test"
 base = "/home/buffett/NAS_NTU"
 coco_path = f"{base}/cocochorales_output/main_dataset/{split}"
 
