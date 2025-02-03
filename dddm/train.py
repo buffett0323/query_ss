@@ -5,9 +5,9 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 import torch.distributed as dist
 import torch.multiprocessing as mp
-# from torch.cuda.amp import autocast, GradScaler
-from torch.amp import GradScaler
 
+from tqdm import tqdm
+from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data.distributed import DistributedSampler
@@ -33,7 +33,7 @@ def get_param_num(model):
 def main():
     """Assume Single Node Multi GPUs Training Only"""
     assert torch.cuda.is_available(), "CPU training is not allowed."
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1" # No space
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0" # No space
 
     n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
     port = 50000 + random.randint(0, 100)
@@ -150,7 +150,6 @@ def run(rank, n_gpus, hps):
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers, n_gpus):
     model, mel_fn, w2v, f0_quantizer, aug, net_v = nets
     optimizer = optims
-    scheduler_g = schedulers
     train_loader, eval_loader = loaders
 
     if writers is not None:
@@ -161,17 +160,14 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         train_loader.sampler.set_epoch(epoch)
     
     model.train()
-    for batch_idx, (x, length) in enumerate(train_loader):
+    for batch_idx, (x, length) in enumerate(tqdm(train_loader)):
         x = x.cuda(rank, non_blocking=True)
         length = length.cuda(rank, non_blocking=True).squeeze()
 
-        mel_x = mel_fn(x)
+        mel_x = mel_fn(x) # torch.Size([BS, 80, 200])
         optimizer.zero_grad()
-        print("mel x", mel_x.shape) # torch.Size([BS, 80, 200])
-        
+
         loss_diff, loss_mel = model.module.compute_loss(mel_x, length)#, hps.model.mixup_ratio)
-        continue
-    
         loss_gen_all = loss_diff + loss_mel*hps.train.c_mel
 
         if hps.train.fp16_run:
@@ -186,7 +182,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
             optimizer.step()
 
         if rank == 0:
-            if global_step % hps.train.log_interval == 0:
+            if global_step % hps.train.log_interval == 0: # 500
                 lr = optimizer.param_groups[0]['lr']
                 losses = [loss_diff]
                 logger.info('Train Epoch: {} [{:.0f}%]'.format(
@@ -201,8 +197,9 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                     writer=writer,
                     global_step=global_step,
                     scalars=scalar_dict)
-
-            if global_step % hps.train.eval_interval == 0:
+            
+            # EVAL
+            if global_step % hps.train.eval_interval == 0: # EVAL: 10000
                 torch.cuda.empty_cache()
                 evaluate(hps, model, mel_fn, w2v, f0_quantizer, net_v, eval_loader, writer_eval)
 
@@ -223,18 +220,18 @@ def evaluate(hps, model, mel_fn, w2v, f0_quantizer, net_v, eval_loader, writer_e
     mel_loss = 0
     enc_loss = 0
     with torch.no_grad():
-        for batch_idx, (y, y_f0) in enumerate(eval_loader):
+        for batch_idx, y in enumerate(eval_loader):
             y = y.cuda(0)
-            y_f0 = y_f0.cuda(0)
+            # y_f0 = y_f0.cuda(0)
 
             mel_y = mel_fn(y)
-            f0_y = f0_quantizer.code_extraction(y_f0)
+            # f0_y = None #f0_quantizer.code_extraction(y_f0)
             length = torch.LongTensor([mel_y.size(2)]).cuda(0)
 
-            y_pad = F.pad(y, (40, 40), "reflect")
-            w2v_y = w2v(y_pad)
+            # y_pad = F.pad(y, (40, 40), "reflect")
+            # w2v_y = w2v(y_pad)
 
-            enc_output, src_out, ftr_out, mel_rec = model(mel_y, w2v_y, f0_y, length, n_timesteps=6, mode='ml')
+            enc_output, mel_rec = model(mel_y, length, n_timesteps=6, mode='ml')
 
             mel_loss += F.l1_loss(mel_y, mel_rec).item()
             enc_loss += F.l1_loss(mel_y, enc_output).item()
@@ -244,20 +241,20 @@ def evaluate(hps, model, mel_fn, w2v, f0_quantizer, net_v, eval_loader, writer_e
             if batch_idx <= 4:
                 y_hat = net_v(mel_rec)
                 enc_hat = net_v(enc_output)
-                src_hat = net_v(src_out)
-                ftr_hat = net_v(ftr_out)
+                # src_hat = net_v(src_out)
+                # ftr_hat = net_v(ftr_out)
 
-                plot_mel = torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
+                plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
                 plot_mel = plot_mel.clip(min=-10, max=10)
 
-                image_dict.update({
-                    "gen/mel_{}".format(batch_idx): utils.plot_spectrogram_to_numpy(plot_mel.squeeze().cpu().numpy())
-                })
+                # image_dict.update({
+                #     "gen/mel_{}".format(batch_idx): utils.plot_spectrogram_to_numpy(plot_mel.squeeze().cpu().numpy())
+                # })
                 audio_dict.update({
                     "gen/audio_{}".format(batch_idx): y_hat.squeeze(),
                     "gen/enc_audio_{}".format(batch_idx): enc_hat.squeeze(),
-                    "gen/src_audio_{}".format(batch_idx): src_hat.squeeze(),
-                    "gen/ftr_audio_{}".format(batch_idx): ftr_hat.squeeze(),
+                    # "gen/src_audio_{}".format(batch_idx): src_hat.squeeze(),
+                    # "gen/ftr_audio_{}".format(batch_idx): ftr_hat.squeeze(),
                 })
                 if global_step == 0:
                     audio_dict.update({"gt/audio_{}".format(batch_idx): y.squeeze()})

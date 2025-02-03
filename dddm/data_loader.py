@@ -86,6 +86,9 @@ class CocoChorale_Simple_DS(Dataset):
         audio, _ = torchaudio.load(audio_path)
         audio = audio.squeeze()
         
+        if not self.training:  
+            return audio
+        
         # TODO: audio start wrong
         if audio.shape[-1] > self.segment_length:
             audio_start = np.random.randint(0, audio.shape[-1] - self.segment_length + 1)
