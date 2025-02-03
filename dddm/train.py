@@ -18,7 +18,7 @@ import utils
 
 from augmentation.aug import Augment
 from model_f0_vqvae import Quantizer
-from model.vc_dddm_mixup import Wav2vec2, DDDM
+from model.simple_dddm_mixup import Wav2vec2, DDDM
 from data_loader import CocoChorale_Simple_DS, MelSpectrogramFixed
 from vocoder.hifigan import HiFi
 from torch.utils.data import DataLoader
@@ -163,21 +163,13 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     model.train()
     for batch_idx, (x, length) in enumerate(train_loader):
         x = x.cuda(rank, non_blocking=True)
-        # x_f0 = None #x_f0.cuda(rank, non_blocking=True)
         length = length.cuda(rank, non_blocking=True).squeeze()
 
         mel_x = mel_fn(x)
-        aug_x = aug(x)
-        nan_x = torch.isnan(aug_x).any()
-        x = x if nan_x else aug_x
-        x_pad = F.pad(x, (40, 40), "reflect")
-        
-        w2v_x = w2v(x_pad)
-        f0_x = None #f0_quantizer.code_extraction(x_f0)
-
         optimizer.zero_grad()
+        print("mel x", mel_x.shape) # torch.Size([BS, 80, 200])
         
-        loss_diff, loss_mel = model.module.compute_loss(mel_x, w2v_x, f0_x, length)#, hps.model.mixup_ratio)
+        loss_diff, loss_mel = model.module.compute_loss(mel_x, length)#, hps.model.mixup_ratio)
         continue
     
         loss_gen_all = loss_diff + loss_mel*hps.train.c_mel
