@@ -137,27 +137,23 @@ class Diffusion(BaseModule):
         return math.sqrt(a * b / c)
 
     def compute_diffused_mean(self, x0, mask, src_out, t, use_torch=False):
-
         x0_weight = self.get_gamma(0, t, use_torch=use_torch)  
         mean_weight = 1.0 - x0_weight
         xt_src = x0 * x0_weight + src_out * mean_weight
-        # xt_ftr = x0 * x0_weight + ftr_out * mean_weight
-        return xt_src * mask #, xt_ftr * mask
+        return xt_src * mask
 
     def forward_diffusion(self, x0, mask, src_out, t):
         xt_src = self.compute_diffused_mean(x0, mask, src_out, t, use_torch=True)
         variance = 1.0 - self.get_gamma(0, t, p=2.0, use_torch=True)
         z = torch.randn(x0.shape, dtype=x0.dtype, device=x0.device, requires_grad=False)
         xt_src = xt_src + z * torch.sqrt(variance)
-        # xt_ftr = xt_ftr + z * torch.sqrt(variance)
-
-        return xt_src * mask, z * mask # xt_ftr * mask, z * mask
+        return xt_src * mask, z * mask
 
     @torch.no_grad()
     def reverse_diffusion(self, z_src, mask, src_out, spk, n_timesteps, mode):
         h = 1.0 / n_timesteps
         xt_src = z_src * mask
-        # xt_ftr = z_ftr * mask
+        
         for i in range(n_timesteps):
             t = 1.0 - i * h
             time = t * torch.ones(z_src.shape[0], dtype=z_src.dtype, device=z_src.device)
@@ -178,22 +174,14 @@ class Diffusion(BaseModule):
                 sigma = math.sqrt(beta_t * h)
 
             dxt_src = (src_out - xt_src) * (0.5 * beta_t * h + omega)
-            # dxt_ftr = (ftr_out - xt_ftr) * (0.5 * beta_t * h + omega)
-
             estimated_score = self.estimator_src(xt_src, mask, src_out, spk, time) * (1.0 + kappa) * (beta_t * h) 
-                            #    + self.estimator_ftr(xt_ftr, mask, ftr_out, spk, time)) \
-                            #   * (1.0 + kappa) * (beta_t * h)     
             dxt_src -= estimated_score
-            # dxt_ftr -= estimated_score
             
             sigma_n = torch.randn_like(z_src, device=z_src.device) * sigma
             dxt_src += sigma_n
-            # dxt_ftr += sigma_n
-
             xt_src = (xt_src - dxt_src) * mask
-            # xt_ftr = (xt_ftr - dxt_ftr) * mask
 
-        return xt_src#, xt_ftr
+        return xt_src
 
     @torch.no_grad()
     def forward(self, z_src, mask, src_out, spk, n_timesteps, mode):
@@ -207,8 +195,6 @@ class Diffusion(BaseModule):
         xt_src, z = self.forward_diffusion(x0, mask, src_out, t)
 
         z_estimation = self.estimator_src(xt_src, mask, src_out, spk, t)
-        # z_estimation += self.estimator_ftr(xt_ftr, mask, ftr_out, spk, t)
-
         z_estimation *= torch.sqrt(1.0 - self.get_gamma(0, t, p=2.0, use_torch=True))
         loss = torch.sum((z_estimation + z) ** 2) / (torch.sum(mask) * self.n_feats)
 

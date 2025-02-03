@@ -189,24 +189,15 @@ class DDDM(BaseModule):
         max_length_new = fix_len_compatibility(max_length)
         x_mask_new = sequence_mask(x_lengths, max_length_new).unsqueeze(1).to(x.dtype)
         src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
-        # ftr_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
         src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
-        # ftr_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
 
         for i in range(b):
             src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
-            # ftr_new[i, :, :x_lengths[i]] = ftr_out[i, :, :x_lengths[i]]
             src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
-            # ftr_x_new[i, :, :x_lengths[i]] = ftr_mean_x[i, :, :x_lengths[i]]
 
         z_src = src_x_new
-        # z_ftr = ftr_x_new
-        start_n = torch.randn_like(src_x_new, device=src_x_new.device)
-        z_src += start_n
-        # z_ftr += start_n
+        z_src += torch.randn_like(src_x_new, device=src_x_new.device)
 
-        # y_src, y_ftr = self.decoder(z_src, z_ftr, x_mask_new, src_new, ftr_new, spk, n_timesteps, mode)
-        # y = (y_src + y_ftr)/2
         y = self.decoder(z_src, x_mask_new, src_new, spk, n_timesteps, mode)
         enc_out = src_out # + ftr_out
         
