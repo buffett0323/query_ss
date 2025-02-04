@@ -30,3 +30,4 @@ dddm/__pycache__/
 dddm/info/
 dddm/checkpoints/
 dddm/examples/
+dddm/pretrained_models/
