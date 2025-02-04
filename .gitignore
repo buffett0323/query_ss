@@ -28,3 +28,5 @@ timbre_store.pkl
 dddm/logs/
 dddm/__pycache__/
 dddm/info/
+dddm/checkpoints/
+dddm/examples/
