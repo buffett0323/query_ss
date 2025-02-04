@@ -266,6 +266,6 @@ if __name__ == "__main__":
         recon_y = net_v(y_mel).squeeze(1)
         print(recon_y.shape)
         
-        torchaudio.save("examples/orig_y.wav", y.cpu(), 16000)
-        torchaudio.save("examples/recon_y.wav", recon_y.cpu(), 16000)
+        torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
+        torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
         break

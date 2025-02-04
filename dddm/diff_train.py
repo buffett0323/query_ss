@@ -17,8 +17,7 @@ import commons
 import utils
 
 from augmentation.aug import Augment
-from model_f0_vqvae import Quantizer
-from model.simple_dddm_mixup import Wav2vec2, DDDM
+from model.simple_dddm_mixup import DDDM
 from data_loader import CocoChorale_Simple_DS, MelSpectrogramFixed
 from vocoder.hifigan import HiFi
 from torch.utils.data import DataLoader

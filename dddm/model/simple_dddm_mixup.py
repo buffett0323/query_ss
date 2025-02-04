@@ -103,9 +103,6 @@ class SynthesizerTrn(nn.Module):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.segment_size = segment_size
 
-        # self.emb_c = nn.Conv1d(1024, encoder_hidden_size, 1)
-        # self.emb_f0 = nn.Embedding(20, encoder_hidden_size)
-
         # Speaker Representation -- Timbre Encoder
         self.emb_g = StyleEncoder(
             in_dim=80, 
@@ -143,21 +140,20 @@ class SynthesizerTrn(nn.Module):
 
         return g, y_s
         
-    def voice_conversion(self, w2v, x_length, f0_code, x_mel, length):
-        y_mask = torch.unsqueeze(commons.sequence_mask(x_length, w2v.size(2)), 1).to(w2v.dtype)
+    
+    def voice_conversion(self, x_mel, x_length, y_mel, y_length):
+        # Get x's pitch (w2v, f0_code are x's features)
+        x_mask = torch.unsqueeze(commons.sequence_mask(x_length, x_mel.size(2)), 1).to(x_mel.dtype) # V
+        f0, _ = self.emb_p(x_mel, x_mask)#.unsqueeze(-1) # V
+        
+        # Get y's timbre
+        y_mask = torch.unsqueeze(commons.sequence_mask(y_length, y_mel.size(2)), 1).to(y_mel.dtype)
+        g_from_y = self.emb_g(y_mel, y_mask).unsqueeze(-1)
 
-        content = self.emb_c(w2v)
-        f0 = self.emb_f0(f0_code).transpose(1, 2)
-        f0 = F.interpolate(f0, content.shape[-1])
-
-        x_mask = torch.unsqueeze(commons.sequence_mask(length, x_mel.size(2)), 1).to(x_mel.dtype)
-        g = self.emb_g(x_mel, x_mask).unsqueeze(-1)
-
-        o_f = self.dec_f(F.relu(content), y_mask, g=g)
-        o_s = self.dec_s(f0, y_mask, g=g)
-        o = o_f + o_s
-
-        return o, g, o_s, o_f
+        # Decoder
+        o_s = self.dec_s(f0, x_mask, g=g_from_y)
+        
+        return g_from_y, o_s #spk, src_out
 
 
 
@@ -181,6 +177,7 @@ class DDDM(BaseModule):
     @torch.no_grad() # For evaluation
     def forward(self, x, x_lengths, n_timesteps, mode='ml'): 
         x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype) 
+        
         spk, src_out = self.encoder(x, x_lengths)
         src_mean_x = self.decoder.compute_diffused_mean(x, x_mask, src_out, 1.0)
 
@@ -203,36 +200,27 @@ class DDDM(BaseModule):
         
         return enc_out, y[:, :, :max_length]
     
-    def vc(self, x, w2v_x, f0_x, x_lengths, y, y_lengths, n_timesteps, mode='ml'): 
+    def vc(self, x, x_lengths, y, y_lengths, n_timesteps, mode='ml'): 
         x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype)
 
-        out_enc, spk, src_out, ftr_out = self.encoder.voice_conversion(w2v_x, x_lengths, f0_x, y, y_lengths)
-        src_mean_x, ftr_mean_x = self.decoder.compute_diffused_mean(x, x_mask, src_out, ftr_out, 1.0)
+        spk, src_out = self.encoder.voice_conversion(x, x_lengths, y, y_lengths)
+        src_mean_x = self.decoder.compute_diffused_mean(x, x_mask, src_out, 1.0)
 
         b = x.shape[0]
         max_length = int(x_lengths.max())
         max_length_new = fix_len_compatibility(max_length)
         x_mask_new = sequence_mask(x_lengths, max_length_new).unsqueeze(1).to(x.dtype)
-        
         src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
-        ftr_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
         src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
-        ftr_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
 
         for i in range(b):
             src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
-            ftr_new[i, :, :x_lengths[i]] = ftr_out[i, :, :x_lengths[i]]
             src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
-            ftr_x_new[i, :, :x_lengths[i]] = ftr_mean_x[i, :, :x_lengths[i]]
 
         z_src = src_x_new
-        z_ftr = ftr_x_new
-        start_n = torch.randn_like(src_x_new, device=src_x_new.device)
-        z_src += start_n
-        z_ftr += start_n
+        z_src += torch.randn_like(src_x_new, device=src_x_new.device)
 
-        y_src, y_ftr = self.decoder(z_src, z_ftr, x_mask_new, src_new, ftr_new, spk, n_timesteps, mode)
-        y = (y_src + y_ftr)/2
+        y = self.decoder(z_src, x_mask_new, src_new, spk, n_timesteps, mode)
 
         return y[:, :, :max_length]
     
