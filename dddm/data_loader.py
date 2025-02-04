@@ -215,6 +215,57 @@ class MelSpectrogramFixed(torch.nn.Module):
 
 if __name__ == "__main__":
     hps = utils.get_hparams()
-    CCSDS = CocoChorale_Simple_DS(hps, training=True)
-    a = CCSDS[0]
-    print(type(a), a.shape)
+    n_gpus = 1
+    
+    train_dataset = CocoChorale_Simple_DS(hps, split="train", training=True)
+    train_sampler = None
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=1, #hps.train.batch_size, 
+        num_workers=hps.train.num_workers,
+        sampler=train_sampler, 
+        drop_last=True, 
+        persistent_workers=True, 
+        pin_memory=True,
+        shuffle=True,
+    )
+    
+    mel_fn = MelSpectrogramFixed(
+        sample_rate=hps.data.sampling_rate,
+        n_fft=hps.data.filter_length,
+        win_length=hps.data.win_length,
+        hop_length=hps.data.hop_length,
+        f_min=hps.data.mel_fmin,
+        f_max=hps.data.mel_fmax,
+        n_mels=hps.data.n_mel_channels,
+        window_fn=torch.hann_window
+    )
+    
+    
+    # HIFIGAN TESTING
+    from vocoder.hifigan import HiFi
+    import utils
+    
+    hps = utils.get_hparams()
+    net_v = HiFi(
+        hps.data.n_mel_channels,
+        hps.train.segment_size // hps.data.hop_length,
+        **hps.model).cuda()
+    path_ckpt = 'checkpoints/voc_ckpt.pth'
+
+    utils.load_checkpoint(path_ckpt, net_v, None)
+    net_v.eval()
+    net_v.dec.remove_weight_norm()
+    
+    
+    
+    for (y, length) in train_loader:
+        y_mel = mel_fn(y).cuda()
+        print(y.shape, y_mel.shape)
+
+        recon_y = net_v(y_mel).squeeze(1)
+        print(recon_y.shape)
+        
+        torchaudio.save("examples/orig_y.wav", y.cpu(), 16000)
+        torchaudio.save("examples/recon_y.wav", recon_y.cpu(), 16000)
+        break

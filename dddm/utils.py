@@ -95,8 +95,14 @@ def plot_spectrogram_to_numpy(spectrogram):
     plt.tight_layout()
 
     fig.canvas.draw()
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    # data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    # data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    # plt.close()
+    # return data
+
+    # ✅ Corrected: Use buffer_rgba() instead of tostring_rgb()
+    data = np.asarray(fig.canvas.buffer_rgba())
+    data = data[:, :, :3]  # Remove alpha channel if necessary
     plt.close()
     return data
 

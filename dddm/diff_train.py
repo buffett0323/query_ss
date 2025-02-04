@@ -33,7 +33,7 @@ def get_param_num(model):
 def main():
     """Assume Single Node Multi GPUs Training Only"""
     assert torch.cuda.is_available(), "CPU training is not allowed."
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0" # No space
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
     n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
     port = 50000 + random.randint(0, 100)
@@ -80,29 +80,31 @@ def run(rank, n_gpus, hps):
         pin_memory=True,
         shuffle=True,
     )
-    valid_dataset = CocoChorale_Simple_DS(hps, split="valid", training=False)
-    valid_sampler = DistributedSampler(valid_dataset) if n_gpus > 1 else None
-    valid_loader = DataLoader(
-        valid_dataset, 
-        batch_size=hps.train.batch_size, 
-        num_workers=hps.train.num_workers,
-        sampler=valid_sampler, 
-        drop_last=True, 
-        persistent_workers=True, 
-        pin_memory=True,
-        shuffle=True,
-    )
+    # valid_dataset = CocoChorale_Simple_DS(hps, split="valid", training=True) # Set true to split same size
+    # valid_sampler = DistributedSampler(valid_dataset) if n_gpus > 1 else None
+    # valid_loader = DataLoader(
+    #     valid_dataset, 
+    #     batch_size=hps.train.batch_size, 
+    #     num_workers=hps.train.num_workers,
+    #     sampler=valid_sampler, 
+    #     drop_last=True, 
+    #     persistent_workers=True, 
+    #     pin_memory=True,
+    #     shuffle=True,
+    # )
 
     if rank == 0:
         test_dataset = CocoChorale_Simple_DS(hps, split="test", training=False)
-        test_loader = DataLoader(test_dataset, batch_size=1)
+        eval_loader = DataLoader(test_dataset, batch_size=1)
 
         net_v = HiFi(
             hps.data.n_mel_channels,
             hps.train.segment_size // hps.data.hop_length,
             **hps.model
         ).cuda()
+        path_ckpt = 'checkpoints/voc_ckpt.pth'
 
+        utils.load_checkpoint(path_ckpt, net_v, None)
         net_v.eval()
         net_v.dec.remove_weight_norm()
     else:
@@ -139,7 +141,7 @@ def run(rank, n_gpus, hps):
     for epoch in tqdm(range(epoch_str, hps.train.epochs + 1)):
         if rank == 0:
             train_and_evaluate(rank, epoch, hps, [model, mel_fn, net_v], optimizer,
-                               scheduler_g, scaler, [train_loader, valid_loader], 
+                               scheduler_g, scaler, [train_loader, eval_loader], 
                                logger, [writer, writer_eval], n_gpus)
         else:
             train_and_evaluate(rank, epoch, hps, [model, mel_fn, net_v], optimizer,
@@ -147,9 +149,9 @@ def run(rank, n_gpus, hps):
                                None, None, n_gpus)
         scheduler_g.step()
 
-    # Testing
-    print("Testing")
-    evaluate(hps, model, mel_fn, net_v, test_loader, writer_eval)
+    # # Testing
+    # print("Testing")
+    # evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=False)
     
     # At the end of run(), destroy the process group to avoid NCCL errors
     dist.destroy_process_group()
@@ -224,7 +226,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         logger.info('====> Epoch: {}'.format(epoch))
 
 
-def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval):
+def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=True):
     model.eval()
     image_dict = {}
     audio_dict = {}
@@ -233,14 +235,8 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval):
     with torch.no_grad():
         for batch_idx, y in enumerate(tqdm(eval_loader)):
             y = y.cuda(0)
-            # y_f0 = y_f0.cuda(0)
-
             mel_y = mel_fn(y)
-            # f0_y = None #f0_quantizer.code_extraction(y_f0)
             length = torch.LongTensor([mel_y.size(2)]).cuda(0)
-
-            # y_pad = F.pad(y, (40, 40), "reflect")
-            # w2v_y = w2v(y_pad)
 
             enc_output, mel_rec = model(mel_y, length, n_timesteps=6, mode='ml')
 
@@ -252,9 +248,9 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval):
             if batch_idx <= 4:
                 y_hat = net_v(mel_rec)
                 enc_hat = net_v(enc_output)
-                plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
-                plot_mel = plot_mel.clip(min=-10, max=10)
-
+                
+                # plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
+                # plot_mel = plot_mel.clip(min=-10, max=10)
                 # image_dict.update({
                 #     "gen/mel_{}".format(batch_idx): utils.plot_spectrogram_to_numpy(plot_mel.squeeze().cpu().numpy())
                 # })
