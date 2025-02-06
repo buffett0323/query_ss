@@ -50,7 +50,10 @@ if __name__ == "__main__":
         wandb_logger = None
 
     
-    dm = BPDataModule(args=args)
+    dm = BPDataModule(
+        args=args,
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy", 
+    )
     model = SimCLR_pl(args, device)
     
 

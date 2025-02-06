@@ -6,6 +6,7 @@ import torch
 import torchaudio
 import librosa
 import argparse
+import scipy.signal
 import numpy as np
 import torch.nn as nn
 import torch.multiprocessing as mp
@@ -170,26 +171,29 @@ class BPDataset(Dataset):
         self.split = split
         self.need_transform = need_transform
         self.random_slice = random_slice
-        
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
     
     
     def segment_length(self, x):
+        orig_duration = self.duration * 44100
+        
         # TODO: Slice 3 seconds on downbeat
         if self.random_slice:
-            max_start_index = x.shape[1] - self.slice_duration
+            max_start_index = x.shape[1] - orig_duration  #self.slice_duration
             start_idx = np.random.randint(0, max_start_index)
-            end_idx = start_idx + self.slice_duration
+            end_idx = start_idx + orig_duration  #self.slice_duration
             return x[:, start_idx:end_idx]
             
-        return x[:, :self.slice_duration]
+        return x[:, :orig_duration]  # x[:, :self.slice_duration]
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        x = self.segment_length(np.load(path))
+        audio = np.load(path)
+        x = self.segment_length(audio)
         x = np.mean(x, axis=0, keepdims=False) # To mono
+        x = scipy.signal.resample_poly(x, self.sample_rate, 44100) # Transform to 16000
 
         # TODO:: Try having one second repeated
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
@@ -438,6 +442,6 @@ if __name__ == "__main__":
         random_slice=True,
     )
     print(len(ds))
-    for i in range(30):
+    for i in range(3):
         x, y = ds[i]
         print(x.shape, y.shape)

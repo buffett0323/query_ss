@@ -13,17 +13,17 @@ ckpt_name: "BP_WGL128_CNN14"
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:2"
-gpu_ids: [2]
+device: "cuda:1"
+gpu_ids: [1]
 number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
-num_workers: 24
+num_workers: 48 #24 
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 16 #256 #512 
+batch_size: 512 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 max_epochs: 2000 # 200
@@ -35,8 +35,8 @@ warmup_epochs: 30
 # dataset options
 max_length: 64
 n_fft: 2048 #2048
-hop_length: 322 #320 #512 #1024 #TODO: Check whether it's ok? # 321 for 3 seconds
-sample_rate: 44100 
+hop_length: 320 #320 #512 #1024 #TODO: Check whether it's ok? # 321 for 3 seconds, 322 for 2 seconds
+sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 2048 #512
 n_mels: 128 #128
 fmin: 20
