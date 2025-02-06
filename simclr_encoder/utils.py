@@ -1,6 +1,6 @@
 import os
 import yaml
-
+import random
 
 def yaml_config_hook(config_file):
     """
@@ -44,3 +44,35 @@ def define_param_groups(model, weight_decay, optimizer_name):
        },
    ]
    return param_groups
+
+
+def train_test_split_BPDataset(path="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy"):
+    path_file = os.listdir(path)
+    random.shuffle(path_file)
+
+    # Compute split sizes
+    total_files = len(path_file)
+    train_size = int(total_files * 9 / 10)
+    valid_size = int(total_files * 0.5 / 10)
+    test_size = total_files - train_size - valid_size  # Ensure all files are allocated
+
+    # Split dataset
+    train_files = path_file[:train_size]
+    valid_files = path_file[train_size:train_size + valid_size]
+    test_files = path_file[train_size + valid_size:]
+
+    # Save to text files
+    def save_to_txt(filename, data):
+        with open(filename, "w") as f:
+            for item in data:
+                f.write(f"{item}\n")
+
+    save_to_txt("info/train_bp.txt", train_files)
+    save_to_txt("info/valid_bp.txt", valid_files)
+    save_to_txt("info/test_bp.txt", test_files)
+    print(f"Dataset split complete: {train_size} train, {valid_size} valid, {test_size} test")
+
+
+def load_from_txt(filename):
+    with open(filename, "r") as f:
+        return [line.strip() for line in f.readlines()]

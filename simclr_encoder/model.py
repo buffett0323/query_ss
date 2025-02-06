@@ -29,60 +29,6 @@ from torch_models import Wavegram_Logmel_Cnn14, Wavegram_Logmel128_Cnn14
 
 
     
-    
-class GatedConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
-        """
-        A single block of Gated Convolutional Neural Network.
-        
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            kernel_size (int): Size of the convolutional kernel.
-            stride (int): Stride of the convolution.
-            padding (int): Padding for the convolution.
-        """
-        super(GatedConvBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.gate = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-
-    def forward(self, x):
-        conv_out = self.conv(x)
-        gate_out = torch.sigmoid(self.gate(x))
-        return conv_out * gate_out
-
-
-class GatedCNN(nn.Module):
-    def __init__(self, in_channels=2, num_classes=128):
-        """
-        Gated Convolutional Neural Network for feature extraction.
-
-        Args:
-            in_channels (int): Number of input channels.
-            num_classes (int): Number of output features.
-        """
-        super(GatedCNN, self).__init__()
-        self.block1 = GatedConvBlock(in_channels, 64, kernel_size=3, stride=1, padding=1)
-        self.block2 = GatedConvBlock(64, 128, kernel_size=3, stride=2, padding=1)
-        self.block3 = GatedConvBlock(128, 256, kernel_size=3, stride=2, padding=1)
-        self.block4 = GatedConvBlock(256, 512, kernel_size=3, stride=2, padding=1)
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Global average pooling
-        self.fc = nn.Linear(512, num_classes) # self.fc = nn.Linear(512, num_classes)
-        # TODO: Reparameterize
-
-    def forward(self, x):
-        x = F.relu(self.block1(x))
-        x = F.relu(self.block2(x))
-        x = F.relu(self.block3(x))
-        x = F.relu(self.block4(x))
-        x = self.global_pool(x)
-        x = torch.flatten(x, start_dim=1)
-        x = self.fc(x)
-        return x
-
-
-
-    
 
 class SimCLR(nn.Module):
     def __init__(
@@ -93,13 +39,7 @@ class SimCLR(nn.Module):
     ):
         super(SimCLR, self).__init__()
         self.args = args
-        if self.args.encoder_name == "GatedCNN":
-            self.encoder = GatedCNN(
-                in_channels=self.args.channels, 
-                num_classes=self.args.encoder_output_dim,
-            )
-            
-        elif self.args.encoder_name == "Wavegram_Logmel128_Cnn14": # Wavegram_Logmel128_Cnn14
+        if self.args.encoder_name == "Wavegram_Logmel128_Cnn14": # Wavegram_Logmel128_Cnn14
             self.encoder = Wavegram_Logmel128_Cnn14(
                 sample_rate=self.args.sample_rate, 
                 window_size=self.args.window_size, 
@@ -267,49 +207,10 @@ class SimCLR_pl(LightningModule):
         else:
             print(f"Checkpoint file not found at {load_path}")
             
+
+
     @classmethod
     def from_config(cls, checkpoint_path, args, device):
         model = cls(args, device)
         model.load_state_dict(torch.load(checkpoint_path)["state_dict"])
         return model
-    
-    
-    # def configure_optimizers(self):
-    #     scheduler = None
-    #     if self.args.optimizer == "Adam":
-    #         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
-        
-    #     elif self.args.optimizer == "LARS":
-    #         learning_rate = 0.3 * self.args.batch_size / 256
-
-    #         # # Base optimizer: SGD with momentum
-    #         # base_optimizer = optim.SGD(
-    #         #     self.model.parameters(),
-    #         #     lr=learning_rate,
-    #         #     momentum=0.9,
-    #         #     weight_decay=self.args.weight_decay,
-    #         # )
-
-    #         # optimizer = torch.optim.LARS(
-    #         #     base_optimizer,
-    #         #     eps=1e-8,  # Epsilon for numerical stability
-    #         #     trust_coef=0.001,  # Trust coefficient
-    #         # )
-    #         optimizer = LARS(
-    #             self.model.parameters(),
-    #             lr=learning_rate,
-    #             momentum=0.9,
-    #             weight_decay=self.args.weight_decay,
-    #             trust_coef=0.001,
-    #         )
-    #         # Use a cosine annealing learning rate scheduler
-    #         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    #             optimizer, T_max=self.args.epochs, eta_min=0, last_epoch=-1
-    #         )
-    #     else:
-    #         raise NotImplementedError(f"Optimizer {self.args.optimizer} is not implemented.")
-        
-    #     if scheduler:
-    #         return {"optimizer": optimizer, "lr_scheduler": scheduler}
-    #     else:
-    #         return {"optimizer": optimizer}

@@ -17,7 +17,7 @@ from typing import Optional
 from librosa import effects
 from tqdm import tqdm
 from torchaudio.functional import pitch_shift
-from utils import yaml_config_hook
+from utils import yaml_config_hook, train_test_split_BPDataset
 
 
 # NSynthDataset
@@ -148,12 +148,16 @@ class BPDataset(Dataset):
         data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy",
         split="train",
         need_transform=True,
-        random_slice=False,
+        random_slice=True,
         stems=["drums", "bass", "other", "vocals"],
     ):
+        # Load split files from txt file
+        with open(f"info/{split}_bp.txt", "r") as f:
+            bp_listdir = [line.strip() for line in f.readlines()]
+
         self.data_path_list = [
             os.path.join(data_dir, folder, f"{stem}.npy")
-            for folder in os.listdir(data_dir)
+            for folder in bp_listdir
                 for stem in stems
         ]
         self.transform = CLARTransform(
@@ -168,7 +172,7 @@ class BPDataset(Dataset):
         self.random_slice = random_slice
         
 
-    def __len__(self):
+    def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
     
     
@@ -187,6 +191,7 @@ class BPDataset(Dataset):
         x = self.segment_length(np.load(path))
         x = np.mean(x, axis=0, keepdims=False) # To mono
 
+        # TODO:: Try having one second repeated
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
@@ -285,8 +290,8 @@ class BPDataModule(LightningDataModule):
 class CLARTransform(nn.Module):
     def __init__(
         self, 
-        sample_rate=16000,
-        duration=2,
+        sample_rate,
+        duration,
     ):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
@@ -413,8 +418,7 @@ if __name__ == "__main__":
     #     print(x.shape, y.shape)
     
     
-    
-    parser = argparse.ArgumentParser(description="SimCLR")
+    parser = argparse.ArgumentParser(description="SimCLR_BP")
 
     config = yaml_config_hook("bp_config.yaml")
     for k, v in config.items():
@@ -430,8 +434,10 @@ if __name__ == "__main__":
     ds = BPDataset(
         sample_rate=args.sample_rate,
         duration=args.segment_second,
+        split="train",
         random_slice=True,
     )
+    print(len(ds))
     for i in range(30):
         x, y = ds[i]
         print(x.shape, y.shape)

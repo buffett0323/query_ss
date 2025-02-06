@@ -1,30 +1,29 @@
 # Pre-process
-segment_second: 6 # half in 3 seconds
+segment_second: 4 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: True #False
-wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000"
+log_wandb: False #False
+wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
-random_slice: False
+random_slice: True # Random slice enhance model's ability of capturing timbre
+ckpt_name: "BP_WGL128_CNN14"
+
 
 # distributed training
 nodes: 1
 gpus: 1 # I recommend always assigning 1 GPU to 1 node
-device: "cuda:3"
-gpu_ids: [3]
+device: "cuda:2"
+gpu_ids: [2]
 number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
 num_workers: 24
-# dataset_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/chorus" #"./datasets"
-# npy_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_npy"
-# pre_processed_dir: "/mnt/gestalt/home/ddmanddman/beatport_preprocess/pt"
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #512 
+batch_size: 16 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 max_epochs: 2000 # 200
@@ -35,11 +34,11 @@ warmup_epochs: 30
 
 # dataset options
 max_length: 64
-n_fft: 2048
-hop_length: 320  #512 #1024
+n_fft: 2048 #2048
+hop_length: 322 #320 #512 #1024 #TODO: Check whether it's ok? # 321 for 3 seconds
 sample_rate: 44100 
-window_size: 1024 #512
-n_mels: 64 #128
+window_size: 2048 #512
+n_mels: 128 #128
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True
@@ -47,7 +46,7 @@ drop_last: False
 
 # model options
 # resnet: "resnet18"
-encoder_name: "Wavegram_Logmel_Cnn14" # "GatedCNN"
+encoder_name: "Wavegram_Logmel128_Cnn14" # "GatedCNN"
 channels: 1
 encoder_output_dim: 512
 projection_dim: 128

@@ -2,7 +2,7 @@
 segment_second: 4 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: True #False
+log_wandb: False #False
 wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
@@ -23,7 +23,7 @@ num_workers: 24
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 # 256
+batch_size: 16 #128 # 256
 gradient_accumulation_steps: 16 # 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 max_epochs: 2000 # 200
