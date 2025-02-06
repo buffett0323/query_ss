@@ -176,19 +176,18 @@ class BPDataset(Dataset):
         return len(self.data_path_list)
     
     
-    def segment_length(self, x):
-        # TODO: Slice 3 seconds on downbeat
-        if self.random_slice:
-            max_start_index = x.shape[-1] - self.slice_duration
-            start_idx = np.random.randint(0, max_start_index)
-            end_idx = start_idx + self.slice_duration
-            return x[start_idx:end_idx]
+    # def segment_length(self, x):
+    #     if self.random_slice:
+    #         max_start_index = x.shape[-1] - self.slice_duration
+    #         start_idx = np.random.randint(0, max_start_index)
+    #         end_idx = start_idx + self.slice_duration
+    #         return x[start_idx:end_idx]
             
-        return x[:self.slice_duration]
+    #     return x[:self.slice_duration]
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        x = np.load(path)#.squeeze(0)
+        x = np.load(path)
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
