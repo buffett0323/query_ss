@@ -37,7 +37,7 @@ max_length: 64
 n_fft: 2048 #2048
 hop_length: 320 #320 #512 #1024 #TODO: Check whether it's ok? # 321 for 3 seconds, 322 for 2 seconds
 sample_rate: 16000 #44100 Temporarily transform to 16000
-window_size: 2048 #512
+window_size: 1024 #512
 n_mels: 128 #128
 fmin: 20
 fmax: 8000 # 16000/2
