@@ -146,7 +146,7 @@ class BPDataset(Dataset):
         self,
         sample_rate,
         duration,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy",
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy",
         split="train",
         need_transform=True,
         random_slice=True,
@@ -187,12 +187,8 @@ class BPDataset(Dataset):
         return x[:self.slice_duration]
 
     def __getitem__(self, idx):
-        path = self.data_path_list[idx] # Loading (SR=16000, 1)
-        return path
-
-        x = self.segment_length(x)
-
-        # TODO:: Try having one second repeated
+        path = self.data_path_list[idx]
+        x = np.load(path)#.squeeze(0)
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
@@ -207,7 +203,7 @@ class BPDataModule(LightningDataModule):
     def __init__(
         self,
         args,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy", 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy", 
     ):
         super(BPDataModule, self).__init__()
         self.args = args
