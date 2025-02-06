@@ -434,13 +434,17 @@ if __name__ == "__main__":
     )
     dm.setup()
     
-    ds = BPDataset(
-        sample_rate=args.sample_rate,
-        duration=args.segment_second,
-        split="train",
-        random_slice=True,
-    )
-    print(len(ds))
-    for i in range(3):
-        x, y = ds[i]
-        print(x.shape, y.shape)
+    
+    for tr in tqdm(dm.train_dataloader()):
+        pass; #print(tr[0].shape)
+
+    # ds = BPDataset(
+    #     sample_rate=args.sample_rate,
+    #     duration=args.segment_second,
+    #     split="train",
+    #     random_slice=True,
+    # )
+    # print(len(ds))
+    # for i in range(3):
+    #     x, y = ds[i]
+    #     print(x.shape, y.shape)
