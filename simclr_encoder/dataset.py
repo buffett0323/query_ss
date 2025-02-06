@@ -188,7 +188,9 @@ class BPDataset(Dataset):
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx] # Loading (SR=16000, 1)
-        x = self.segment_length(np.load(path))
+        return path
+
+        x = self.segment_length(x)
 
         # TODO:: Try having one second repeated
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
@@ -406,18 +408,17 @@ if __name__ == "__main__":
     #     parser.add_argument(f"--{k}", default=v, type=type(v))
 
     # args = parser.parse_args()
+    
+    # # ds1 = NSynthDataset(args.sample_rate, args.segment_second)
+    # # print(ds1[0])
+    
     # dm = NSynthDataModule(
     #     args=args,
     # )
     # dm.setup()
     
-    # ds = NSynthDataset(
-    #     sample_rate=args.sample_rate,
-    #     duration=args.segment_second,
-    # )
-    # for i in range(30):
-    #     x, y = ds[i]
-    #     print(x.shape, y.shape)
+    # for tr in tqdm(dm.train_dataloader()):
+    #     pass; #print(tr[0].shape)
     
     
     parser = argparse.ArgumentParser(description="SimCLR_BP")
@@ -428,6 +429,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
+    # ds = BPDataset(args.sample_rate, args.segment_second)
+    # print(ds[0])
+    
     dm = BPDataModule(
         args=args,
         data_dir=args.data_dir, 
@@ -437,14 +441,3 @@ if __name__ == "__main__":
     
     for tr in tqdm(dm.train_dataloader()):
         pass; #print(tr[0].shape)
-
-    # ds = BPDataset(
-    #     sample_rate=args.sample_rate,
-    #     duration=args.segment_second,
-    #     split="train",
-    #     random_slice=True,
-    # )
-    # print(len(ds))
-    # for i in range(3):
-    #     x, y = ds[i]
-    #     print(x.shape, y.shape)

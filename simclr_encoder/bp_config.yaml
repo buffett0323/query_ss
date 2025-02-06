@@ -6,7 +6,7 @@ log_wandb: False #False
 wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
-random_slice: True # Random slice enhance model's ability of capturing timbre
+random_slice: False # Random slice enhance model's ability of capturing timbre
 ckpt_name: "BP_WGL128_CNN14"
 
 
@@ -18,7 +18,7 @@ gpu_ids: [1]
 number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
-num_workers: 56 #24 
+num_workers: 24 #24 
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
 
 
