@@ -17,11 +17,12 @@ end = 44100 * 20
 audio = audio[start:end]
 
 
-
+# Predicting
 time, freq, activation, activation_map = pit.pred(audio, sr)
-print("Time:", time.shape)
-print("Freq:", freq.shape)
-print("Activation:", activation.shape)
-print("Activation map:", activation_map.shape)
+
+# Post-processing
+out_map = pit.postProcessing(activation_map)
+print(activation_map.shape, out_map.shape)
 
 plt.imsave("results/harmof0.png", activation_map.T[::-1])
+plt.imsave("results/harmof0_post.png", out_map.T[::-1])
