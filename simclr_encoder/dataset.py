@@ -146,7 +146,7 @@ class BPDataset(Dataset):
         self,
         sample_rate,
         duration,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy",
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy",
         split="train",
         need_transform=True,
         random_slice=True,
@@ -205,13 +205,14 @@ class BPDataModule(LightningDataModule):
     def __init__(
         self,
         args,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy", 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy", 
     ):
         super(BPDataModule, self).__init__()
         self.args = args
         self.data_dir = data_dir
         self.pin_memory = args.pin_memory
         self.drop_last = args.drop_last
+        self.num_workers = min(8, args.num_workers) 
         
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -273,9 +274,11 @@ class BPDataModule(LightningDataModule):
             dataset,
             batch_size=self.args.batch_size,
             shuffle=shuffle,
-            num_workers=self.args.num_workers,
+            num_workers=self.num_workers,
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
+            persistent_workers=True,  # Keep workers alive to reduce loading overhead
+            prefetch_factor=4 if self.num_workers > 0 else None,  # Prefetch data in advance
         )
     
     @property
@@ -427,6 +430,7 @@ if __name__ == "__main__":
     
     dm = BPDataModule(
         args=args,
+        data_dir=args.data_dir, 
     )
     dm.setup()
     

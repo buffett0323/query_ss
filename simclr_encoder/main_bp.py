@@ -52,7 +52,7 @@ if __name__ == "__main__":
     
     dm = BPDataModule(
         args=args,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy", 
+        data_dir=args.data_dir, 
     )
     model = SimCLR_pl(args, device)
     

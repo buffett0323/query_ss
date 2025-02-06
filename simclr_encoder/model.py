@@ -140,7 +140,7 @@ class SimCLR_pl(LightningModule):
             return None
         
         z_i, z_j = self(x_i), self(x_j)
-        loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
+        loss = self.criterion(z_i, z_j)
 
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
@@ -152,7 +152,7 @@ class SimCLR_pl(LightningModule):
             return None
         
         z_i, z_j = self(x_i), self(x_j)
-        loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
+        loss = self.criterion(z_i, z_j)
 
         self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
@@ -164,7 +164,7 @@ class SimCLR_pl(LightningModule):
             return None
         
         z_i, z_j = self(x_i), self(x_j)
-        loss = self.criterion(z_i, z_j) #self.criterion(z_i, z_j)
+        loss = self.criterion(z_i, z_j)
 
         self.log('test_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss

@@ -18,17 +18,18 @@ gpu_ids: [1]
 number_of_gpus: 1 
 nr: 0 # machine nr. in node (0 -- nodes - 1)
 dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
-num_workers: 48 #24 
+num_workers: 56 #24 
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 512 #512 
+batch_size: 256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 max_epochs: 2000 # 200
 check_val_every_n_epoch: 4
-early_stop_patience: 10
+early_stop_patience: 20 #10
 lr: 0.001 # 0.03  # 0.0003
 warmup_epochs: 30
 
