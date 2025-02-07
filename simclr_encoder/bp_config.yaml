@@ -2,7 +2,7 @@
 segment_second: 4 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
+log_wandb: True #False
 wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
