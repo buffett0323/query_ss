@@ -1,0 +1,67 @@
+# Pre-process
+segment_second: 4 # half in 2 seconds
+sep_model_name: "htdemucs"
+target: "chorus"
+log_wandb: True #False
+wandb_name: "lr 1e-3 + temp 0.1 + wd 1e-3 + warmup 30 + epochs 1000 + WGL128_CNN14"
+need_transform: False #Wavegram will transform for us
+need_clar_transform: True
+random_slice: False # Random slice enhance model's ability of capturing timbre
+ckpt_name: "BP_WGL128_CNN14"
+
+
+# distributed training
+nodes: 1
+gpus: 1 # I recommend always assigning 1 GPU to 1 node
+device: "cuda:1"
+gpu_ids: [1]
+number_of_gpus: 1 
+nr: 0 # machine nr. in node (0 -- nodes - 1)
+dataparallel: 0 # Use DataParallel instead of DistributedDataParallel
+num_workers: 24 #24 
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
+
+
+# train options
+seed: 42 # sacred handles automatic seeding when passed in the config
+batch_size: 256 #512 
+start_epoch: 0
+max_epochs: 200 # 100
+check_val_every_n_epoch: 4
+early_stop_patience: 20 #10
+lr: 0.05 #0.001 # 0.03  # 0.0003
+momentum: 0.9
+warmup_epochs: 30
+dim: 2048
+pred_dim: 512
+
+# dataset options
+max_length: 64
+n_fft: 2048 #2048
+hop_length: 320 #320 #512 #1024 #TODO: Check whether it's ok? # 321 for 3 seconds, 322 for 2 seconds
+sample_rate: 16000 #44100 Temporarily transform to 16000
+window_size: 1024 #512
+n_mels: 128 #128
+fmin: 20
+fmax: 8000 # 16000/2
+pin_memory: True
+drop_last: False
+
+# model options
+# resnet: "resnet18"
+encoder_name: "Wavegram_Logmel128_Cnn14" # "GatedCNN"
+channels: 1
+encoder_output_dim: 512
+projection_dim: 128
+model_dict_save_dir: "./model_dict"
+
+# loss options
+optimizer: "Adam" # or LARS (experimental)
+weight_decay: 1.0e-4 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+temperature: 0.1 #0.5 # see appendix B.7.: Optimal temperature under different batch sizes
+lr_decay_factor: 0.05 #0.01
+
+
+# reload options
+model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+reload: False
