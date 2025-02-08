@@ -6,6 +6,7 @@ import random
 import shutil
 import time
 import warnings
+import wandb
 
 import torch
 import torch.nn as nn
@@ -15,11 +16,6 @@ import torch.distributed as dist
 import torch.optim
 import torch.multiprocessing as mp
 import torch.utils.data
-
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, GradientAccumulationScheduler
-from pytorch_lightning.callbacks.progress import TQDMProgressBar
-from pytorch_lightning.loggers import WandbLogger
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
 from model import SimSiam
@@ -49,18 +45,13 @@ def main():
     args = parser.parse_args()
 
     # Loading Wandb logger
-    wandb_logger = None
     if args.log_wandb:
-        wandb_logger = WandbLogger(
+        wandb.init(
             project=args.wandb_project_name,
-            name=args.wandb_name, 
-            save_dir='/data/buffett' if os.path.exists('/data/buffett') else '.', 
-            log_model=False,  # Avoid logging full model files to WandB
+            name=args.wandb_name,
+            config=args,
         )
-        wandb_logger.experiment.config.update(vars(args))  # Log args to WandB
-
-    args.wandb_logger = wandb_logger  # Store logger in args for easy access
-
+        
     # Initial settings
     if args.seed is not None:
         random.seed(args.seed)
@@ -95,7 +86,7 @@ def main():
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
         
-    
+    wandb.finish()
     
     
 def main_worker(gpu, ngpus_per_node, args):
@@ -216,16 +207,16 @@ def main_worker(gpu, ngpus_per_node, args):
         # Train for one epoch
         train_loss = train(dm.train_dataloader(), model, criterion, optimizer, epoch, args)
 
-        if args.wandb_logger:
-            args.wandb_logger.log_metrics({"train_loss_epoch": train_loss, "epoch": epoch})
+        if args.log_wandb:
+            wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
 
         # Validation
         is_best = False
         if epoch % args.check_val_every_n_epoch == 0:
             val_loss = evaluate(dm.val_dataloader(), model, criterion, optimizer, epoch, args)
-            if args.wandb_logger:
-                args.wandb_logger.log_metrics({"val_loss_epoch": val_loss, "epoch": epoch})
-        
+            if args.log_wandb:
+                wandb.log({"val_loss_epoch": val_loss, "epoch": epoch})
+            
             # Early stopping
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -251,11 +242,6 @@ def main_worker(gpu, ngpus_per_node, args):
                 save_dir=save_dir,
             )
         
-        # Validation
-        if epoch % args.check_val_every_n_epoch == 0:
-            val_loss = evaluate(dm.val_dataloader(), model, criterion, optimizer, epoch, args)
-            if args.wandb_logger:
-                args.wandb_logger.log_metrics({"val_loss_epoch": val_loss, "epoch": epoch})
     
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -294,12 +280,14 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
         
-        if args.wandb_logger and i % 10 == 0:
-            args.wandb_logger.log_metrics({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
 
         if i % args.print_freq == 0:
             progress.display(i)
             
+            if args.log_wandb:
+                wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
+
+
     return losses.avg
 
 
