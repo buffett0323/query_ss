@@ -81,7 +81,7 @@ class BPDataModule(LightningDataModule):
         self.data_dir = data_dir
         self.pin_memory = args.pin_memory
         self.drop_last = args.drop_last
-        self.num_workers = min(8, args.num_workers) 
+        self.num_workers = args.workers #args.num_workers
         
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
@@ -94,6 +94,11 @@ class BPDataModule(LightningDataModule):
                 need_transform=self.args.need_clar_transform,
                 random_slice=self.args.random_slice,
             )
+            if self.args.distributed:
+                self.train_sampler = torch.utils.data.distributed.DistributedSampler(self.train_ds)
+            else:
+                self.train_sampler = None
+                
             
             self.val_ds = BPDataset(
                 sample_rate=self.args.sample_rate,
@@ -120,7 +125,7 @@ class BPDataModule(LightningDataModule):
         """The train dataloader."""
         return self._data_loader(
             self.train_ds,
-            shuffle=True
+            shuffle=(self.train_sampler is None),
         )
 
     def val_dataloader(self):
@@ -146,7 +151,7 @@ class BPDataModule(LightningDataModule):
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
-            persistent_workers=True,  # Keep workers alive to reduce loading overhead
+            persistent_workers=self.args.persistent_workers,  # Keep workers alive to reduce loading overhead
             prefetch_factor=4 if self.num_workers > 0 else None,  # Prefetch data in advance
         )
     

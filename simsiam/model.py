@@ -21,7 +21,6 @@ class SimSiam(nn.Module):
         self.args = args
         # create the encoder
         # num_classes is the output fc dimension, zero-initialize last BNs
-        # self.encoder = base_encoder(num_classes=dim, zero_init_residual=True)
         self.encoder = Wavegram_Logmel128_Cnn14(
             sample_rate=self.args.sample_rate, 
             window_size=self.args.window_size, 
@@ -30,7 +29,7 @@ class SimSiam(nn.Module):
             fmin=self.args.fmin,
             fmax=self.args.fmax,
             classes_num=dim, #n_features,
-        )
+        ) # base_encoder(num_classes=dim, zero_init_residual=True)
         
 
         # build a 3-layer projector
