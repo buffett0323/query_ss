@@ -49,18 +49,17 @@ def main():
     args = parser.parse_args()
 
     # Loading Wandb logger
-    if args.log_wandb: 
-        project = "SimSiam_BP"
-        name = args.wandb_name
-        save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
+    wandb_logger = None
+    if args.log_wandb:
         wandb_logger = WandbLogger(
-            project=project, 
-            name=name, 
-            save_dir=save_dir, 
+            project=args.wandb_project_name,
+            name=args.wandb_name, 
+            save_dir='/data/buffett' if os.path.exists('/data/buffett') else '.', 
             log_model=False,  # Avoid logging full model files to WandB
         )
-    else:
-        wandb_logger = None
+        wandb_logger.experiment.config.update(vars(args))  # Log args to WandB
+
+    args.wandb_logger = wandb_logger  # Store logger in args for easy access
 
     # Initial settings
     if args.seed is not None:
@@ -160,17 +159,12 @@ def main_worker(gpu, ngpus_per_node, args):
     elif args.gpu is not None:
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
-        # comment out the following line for debugging
         raise NotImplementedError("Only DistributedDataParallel is supported.")
-    
     else:
-        # AllGather implementation (batch shuffle, queue update, etc.) in
-        # this code only supports DistributedDataParallel.
         raise NotImplementedError("Only DistributedDataParallel is supported.")
-    # print(model) # print model after SyncBatchNorm
 
     
-    # define loss function (criterion) and optimizer
+    # Loss function (criterion) and optimizer
     criterion = nn.CosineSimilarity(dim=1).cuda(args.gpu)
 
     if args.fix_pred_lr:
@@ -184,6 +178,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                 weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
+    args.resume = os.path.join(args.model_dict_save_dir, args.resume)
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
@@ -208,6 +203,9 @@ def main_worker(gpu, ngpus_per_node, args):
     dm.setup()
     
     
+    # Validation
+    best_val_loss = 999999.0
+    patience = 0
     
     # Training loops
     for epoch in range(args.start_epoch, args.epochs):
@@ -216,22 +214,48 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # Train for one epoch
-        train(dm.train_dataloader(), model, criterion, optimizer, epoch, args)
+        train_loss = train(dm.train_dataloader(), model, criterion, optimizer, epoch, args)
 
+        if args.wandb_logger:
+            args.wandb_logger.log_metrics({"train_loss_epoch": train_loss, "epoch": epoch})
+
+        # Validation
+        is_best = False
+        if epoch % args.check_val_every_n_epoch == 0:
+            val_loss = evaluate(dm.val_dataloader(), model, criterion, optimizer, epoch, args)
+            if args.wandb_logger:
+                args.wandb_logger.log_metrics({"val_loss_epoch": val_loss, "epoch": epoch})
+        
+            # Early stopping
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience = 0
+                is_best = True
+            else:
+                patience += 1
+                if patience >= args.early_stop_patience:
+                    break
+            
+        # Save checkpoints
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
+            save_dir = args.model_dict_save_dir
             save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'optimizer' : optimizer.state_dict(),
-            }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
+                    'epoch': epoch + 1,
+                    'arch': args.arch,
+                    'state_dict': model.state_dict(),
+                    'optimizer' : optimizer.state_dict(),
+                }, 
+                is_best=is_best, 
+                filename=f'{save_dir}/checkpoint_{epoch}.pth.tar',
+                save_dir=save_dir,
+            )
         
         # Validation
         if epoch % args.check_val_every_n_epoch == 0:
-            eval_loss = evaluate(dm.val_dataloader(), model, criterion, optimizer, epoch, args)
-            print("Eval Loss: ", eval_loss)
-        
+            val_loss = evaluate(dm.val_dataloader(), model, criterion, optimizer, epoch, args)
+            if args.wandb_logger:
+                args.wandb_logger.log_metrics({"val_loss_epoch": val_loss, "epoch": epoch})
     
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -269,9 +293,14 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
+        
+        if args.wandb_logger and i % 10 == 0:
+            args.wandb_logger.log_metrics({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
 
         if i % args.print_freq == 0:
             progress.display(i)
+            
+    return losses.avg
 
 
 
@@ -325,10 +354,10 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
             param_group['lr'] = cur_lr
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, filename, save_dir):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, 'model_best.pth.tar')       
+        shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))
     
     
 if __name__ == "__main__":

@@ -2,8 +2,9 @@
 segment_second: 4 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
-wandb_name: "SimSiam BP 1st test"
+log_wandb: True #False
+wandb_project_name: "SimSiam_BP"
+wandb_name: "SimSiam BP official params"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
@@ -28,7 +29,7 @@ gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU 
 start_epoch: 0
 epochs: 200 # 100
 check_val_every_n_epoch: 4
-early_stop_patience: 20 #10
+early_stop_patience: 5 #10
 lr: 0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
 warmup_epochs: 30
@@ -36,7 +37,7 @@ dim: 2048
 pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
-print_freq: 10
+print_freq: 20
 
 # dataset options
 max_length: 64
