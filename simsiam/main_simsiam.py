@@ -27,8 +27,8 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
-# import simsiam.loader
-# import simsiam.builder
+import simsiam.loader
+import simsiam.builder
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
