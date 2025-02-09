@@ -1,3 +1,8 @@
+"""
+This is the script revised from the official code -- main_simsiam_knn.py
+But it fails to visualize the training figures.
+"""
+
 import argparse
 import builtins
 import math

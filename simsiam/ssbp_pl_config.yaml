@@ -38,6 +38,8 @@ pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
 print_freq: 20
+knn_k: 200
+knn_t: 0.2
 
 # dataset options
 max_length: 64
