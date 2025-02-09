@@ -139,7 +139,7 @@ def main_worker(gpu, ngpus_per_node, args):
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, find_unused_parameters=True)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, find_unused_parameters=args.find_unused_parameters)
 
         else:
             model.cuda()
@@ -213,7 +213,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # Validation
         is_best = False
         if epoch % args.check_val_every_n_epoch == 0:
-            val_loss = evaluate(dm.val_dataloader(), model, criterion, optimizer, epoch, args)
+            val_loss = evaluate(dm.val_dataloader(), model, criterion, epoch, args)
             if args.log_wandb:
                 wandb.log({"val_loss_epoch": val_loss, "epoch": epoch})
             
@@ -233,7 +233,6 @@ def main_worker(gpu, ngpus_per_node, args):
             save_dir = args.model_dict_save_dir
             save_checkpoint({
                     'epoch': epoch + 1,
-                    'arch': args.arch,
                     'state_dict': model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
                 }, 
@@ -280,7 +279,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
         
-
         if i % args.print_freq == 0:
             progress.display(i)
             
@@ -350,63 +348,3 @@ def save_checkpoint(state, is_best, filename, save_dir):
     
 if __name__ == "__main__":
     main()
-
-
-    
-    # dm = BPDataModule(
-    #     args=args,
-    #     data_dir=args.data_dir, 
-    # )
-    # model = SimSiam(
-    #     args=args,
-    #     dim=args.dim,
-    #     pred_dim=args.pred_dim,
-    # )
-    
-
-    # # Callbacks
-    # accumulator = GradientAccumulationScheduler(scheduling={0: args.gradient_accumulation_steps})
-
-    # model_ckpt = ModelCheckpoint(
-    #     dirpath=args.model_dict_save_dir,  # Directory to save checkpoints
-    #     filename=args.ckpt_name,  # Filename for the best model
-    #     save_top_k=1,  # Only keep the best model
-    #     save_last=True,
-    #     verbose=True,
-    #     monitor="val_loss",  # Metric to monitor
-    #     mode="min",  # Save model with the minimum validation loss
-    # )
-    
-    # early_stop_callback = EarlyStopping(
-    #     monitor="val_loss",
-    #     min_delta=0.00,
-    #     patience=args.early_stop_patience,
-    #     verbose=True,
-    #     mode="min",
-    # )
-
-    # trainer = Trainer(
-    #     max_epochs=args.max_epochs,
-    #     devices=args.gpu_ids,
-    #     accelerator="gpu",
-    #     sync_batchnorm=True,
-    #     check_val_every_n_epoch=args.check_val_every_n_epoch,  # Perform validation every 2 epochs
-    #     logger=wandb_logger,
-    #     callbacks=[
-    #         TQDMProgressBar(refresh_rate=10), 
-    #         accumulator, 
-    #         model_ckpt, 
-    #         early_stop_callback,
-    #     ],
-    # )
-
-    # print("-------Start Training-------")
-    # trainer.fit(model, dm)
-    
-    # print("-------Start Testing-------")
-    # best_model = SimSiam.from_config(model_ckpt.best_model_path, args, device)
-    # trainer.test(best_model, datamodule=dm)
-    # trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
-    
-    # # if load best model    
-    # model.load_model(checkpoint_name="best_model.ckpt")

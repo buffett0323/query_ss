@@ -1,8 +1,152 @@
+import math
 import argparse
 import torch
 import torch.nn as nn
-from torch_models import Wavegram_Logmel_Cnn14, Wavegram_Logmel128_Cnn14
+import torch.optim as optim
+import pytorch_lightning as pl
+from torch.optim.lr_scheduler import LambdaLR
+from torch_models import Wavegram_Logmel128_Cnn14
 from utils import *
+
+
+class SimSiamPL(pl.LightningModule):
+    def __init__(
+        self, 
+        args,
+        dim=2048, 
+        pred_dim=512,
+    ):
+        """
+        PyTorch Lightning version of SimSiam.
+        """
+        super().__init__()
+        self.save_hyperparameters()  # Saves args automatically for checkpointing
+        self.args = args
+        
+        # Create the encoder
+        self.encoder = Wavegram_Logmel128_Cnn14(
+            sample_rate=self.args.sample_rate, 
+            window_size=self.args.window_size, 
+            hop_size=self.args.hop_length, 
+            mel_bins=128, #self.args.n_mels, 
+            fmin=self.args.fmin,
+            fmax=self.args.fmax,
+            classes_num=dim, #n_features,
+        )
+        
+       # build a 3-layer projector
+        prev_dim = self.encoder.fc1.weight.shape[1]
+        self.encoder.fc1 = nn.Sequential(
+            nn.Linear(prev_dim, prev_dim, bias=False),
+            nn.BatchNorm1d(prev_dim),
+            nn.ReLU(inplace=True), # first layer
+            nn.Linear(prev_dim, prev_dim, bias=False),
+            nn.BatchNorm1d(prev_dim),
+            nn.ReLU(inplace=True), # second layer
+            self.encoder.fc1, # self.fc1 = nn.Linear(2048, classes_num, bias=True)
+            nn.BatchNorm1d(dim, affine=False),
+        ) # output layer
+        self.encoder.fc1[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
+
+
+        # build a 2-layer predictor
+        self.predictor = nn.Sequential(
+            nn.Linear(dim, pred_dim, bias=False),
+            nn.BatchNorm1d(pred_dim),
+            nn.ReLU(inplace=True), # hidden layer
+            nn.Linear(pred_dim, dim),    
+        ) # output layer
+
+        self.criterion = nn.CosineSimilarity(dim=1)
+        
+        for param in self.parameters():
+            param.data = param.data.contiguous()
+
+
+    def forward(self, x1, x2):
+        z1 = self.encoder(x1)
+        z2 = self.encoder(x2)
+        p1 = self.predictor(z1)
+        p2 = self.predictor(z2)
+        return p1, p2, z1.detach(), z2.detach()
+
+
+    def training_step(self, batch, batch_idx):
+        x_i, x_j = batch
+        x_i, x_j = x_i.contiguous(), x_j.contiguous()
+
+        p1, p2, z1, z2 = self(x_i, x_j)
+        loss = -(self.criterion(p1, z2).mean() + self.criterion(p2, z1).mean()) * 0.5
+
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=self.args.batch_size, sync_dist=True)
+        
+        # Log learning rate (fetch from optimizer)
+        lr = self.optimizers().param_groups[0]["lr"]  # Get current learning rate
+        self.log("learning_rate", lr, on_epoch=True, prog_bar=True, logger=True, batch_size=self.args.batch_size, sync_dist=True)
+
+        return loss
+    
+    
+    def validation_step(self, batch, batch_idx):
+        x_i, x_j = batch
+        x_i, x_j = x_i.contiguous(), x_j.contiguous()
+
+        p1, p2, z1, z2 = self(x_i, x_j)
+        loss = -(self.criterion(p1, z2).mean() + self.criterion(p2, z1).mean()) * 0.5
+
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.args.batch_size, sync_dist=True)
+        return loss
+
+
+    def test_step(self, batch, batch_idx):
+        x_i, x_j = batch
+        x_i, x_j = x_i.contiguous(), x_j.contiguous()
+
+        p1, p2, z1, z2 = self(x_i, x_j)
+        loss = -(self.criterion(p1, z2).mean() + self.criterion(p2, z1).mean()) * 0.5
+
+        self.log("test_loss", loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.args.batch_size, sync_dist=True)
+        return loss
+
+
+    def inference(self, x):
+        return self.encoder(x)
+
+
+    def configure_optimizers(self):
+        """Configure optimizer and scheduler with cosine LR decay & fixed predictor LR"""
+        
+        # Define optimizer parameters: Fix predictor LR if needed
+        if self.args.fix_pred_lr:
+            optim_params = [
+                {'params': self.encoder.parameters(), 'fix_lr': False},
+                {'params': self.predictor.parameters(), 'fix_lr': True},  # Fixed LR for predictor
+            ]
+        else:
+            optim_params = self.parameters()
+        
+        # Define SGD optimizer
+        optimizer = optim.SGD(
+            optim_params, 
+            lr=self.args.lr, 
+            momentum=self.args.momentum, 
+            weight_decay=self.args.weight_decay,
+        )
+
+        # Define cosine annealing learning rate scheduler
+        def cosine_annealing(epoch):
+            """Lambda function for cosine decay learning rate"""
+            if epoch < self.args.warmup_epochs:
+                return (epoch + 1) / self.args.warmup_epochs  # Linear warm-up
+            else:
+                return 0.5 * (1.0 + math.cos(math.pi * (epoch - self.args.warmup_epochs) /
+                                             (self.args.epochs - self.args.warmup_epochs)))  # Cosine Decay
+
+        scheduler = LambdaLR(optimizer, lr_lambda=cosine_annealing)
+
+        return [optimizer], [{"scheduler": scheduler, "interval": "epoch", "monitor": "val_loss"}]
+
+
 
 
 # TODO: augmentation

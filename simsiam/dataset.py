@@ -11,7 +11,7 @@ import numpy as np
 import torch.nn as nn
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torchaudio.transforms import MelSpectrogram
 from pytorch_lightning import LightningDataModule
 from typing import Optional
@@ -85,69 +85,66 @@ class BPDataModule(LightningDataModule):
         
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
-        if stage == "fit" or stage is None:
-            self.train_ds = BPDataset(
-                sample_rate=self.args.sample_rate,
-                duration=self.args.segment_second,
-                data_dir=self.data_dir,
-                split="train",
-                need_transform=self.args.need_clar_transform,
-                random_slice=self.args.random_slice,
-            )
-            if self.args.distributed:
-                self.train_sampler = torch.utils.data.distributed.DistributedSampler(self.train_ds)
-            else:
-                self.train_sampler = None
-                
-            
-            self.val_ds = BPDataset(
-                sample_rate=self.args.sample_rate,
-                duration=self.args.segment_second,
-                data_dir=self.data_dir,
-                split="valid",
-                need_transform=self.args.need_clar_transform,
-                random_slice=self.args.random_slice,
-            )
-        
-        # Assign test dataset for use in dataloader(s)
-        if stage == "test" or stage is None:
-            self.test_ds = BPDataset(
-                sample_rate=self.args.sample_rate,
-                duration=self.args.segment_second,
-                data_dir=self.data_dir,
-                split="test",
-                need_transform=self.args.need_clar_transform,
-                random_slice=self.args.random_slice,
-            )
+        self.train_ds = BPDataset(
+            sample_rate=self.args.sample_rate,
+            duration=self.args.segment_second,
+            data_dir=self.data_dir,
+            split="train",
+            need_transform=self.args.need_clar_transform,
+            random_slice=self.args.random_slice,
+        )   
+        self.val_ds = BPDataset(
+            sample_rate=self.args.sample_rate,
+            duration=self.args.segment_second,
+            data_dir=self.data_dir,
+            split="valid",
+            need_transform=self.args.need_clar_transform,
+            random_slice=self.args.random_slice,
+        )
+        self.test_ds = BPDataset(
+            sample_rate=self.args.sample_rate,
+            duration=self.args.segment_second,
+            data_dir=self.data_dir,
+            split="test",
+            need_transform=self.args.need_clar_transform,
+            random_slice=self.args.random_slice,
+        )
             
             
     def train_dataloader(self):
-        """The train dataloader."""
-        return self._data_loader(
+        """Train DataLoader with Distributed Sampler for DDP"""
+        train_sampler = DistributedSampler(self.train_ds) if self.trainer.world_size > 1 else None
+        return DataLoader(
             self.train_ds,
-            shuffle=(self.train_sampler is None),
+            batch_size=self.args.batch_size,
+            sampler=train_sampler,  # Use DistributedSampler instead of shuffle
+            shuffle=(train_sampler is None),
+            num_workers=self.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory,
+            persistent_workers=self.args.persistent_workers,  # Keep workers alive to reduce loading overhead
+            prefetch_factor=4 if self.num_workers > 0 else None,  # Prefetch data in advance
         )
 
     def val_dataloader(self):
-        """The val dataloader."""
-        return self._data_loader(
+        """Validation DataLoader"""
+        return DataLoader(
             self.val_ds,
-            shuffle=False
+            batch_size=self.args.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=self.drop_last,
+            pin_memory=self.pin_memory,
+            persistent_workers=self.args.persistent_workers,  # Keep workers alive to reduce loading overhead
+            prefetch_factor=4 if self.num_workers > 0 else None,  # Prefetch data in advance
         )
 
     def test_dataloader(self):
-        """The test dataloader."""
-        return self._data_loader(
-            self.test_ds,
-            shuffle=False
-        )
-        
-    
-    def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
+        """Test DataLoader"""
         return DataLoader(
-            dataset,
+            self.test_ds,
             batch_size=self.args.batch_size,
-            shuffle=shuffle,
+            shuffle=False,
             num_workers=self.num_workers,
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
