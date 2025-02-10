@@ -1,7 +1,13 @@
-Drums
-Strings
-Piano
-Guitar
-Strings (continued)
 Bass
+Brass
+Chromatic Percussion
+Drums
+Guitar
+Organ
+Piano
+Pipe
 Reed
+Strings
+Strings (continued)
+Synth Lead
+Synth Pad
