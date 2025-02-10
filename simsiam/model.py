@@ -130,7 +130,7 @@ class SimSiamPL(pl.LightningModule):
         return loss
 
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         # kNN validation monitoring inside PyTorch Lightning
         model = self.encoder
         model.eval()
