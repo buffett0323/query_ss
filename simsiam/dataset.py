@@ -301,27 +301,7 @@ class CLARTransform(nn.Module):
 
 
 
-if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description="SimCLR")
-
-    # config = yaml_config_hook("config.yaml")
-    # for k, v in config.items():
-    #     parser.add_argument(f"--{k}", default=v, type=type(v))
-
-    # args = parser.parse_args()
-    
-    # # ds1 = NSynthDataset(args.sample_rate, args.segment_second)
-    # # print(ds1[0])
-    
-    # dm = NSynthDataModule(
-    #     args=args,
-    # )
-    # dm.setup()
-    
-    # for tr in tqdm(dm.train_dataloader()):
-    #     pass; #print(tr[0].shape)
-    
-    
+if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="SimCLR_BP")
 
     config = yaml_config_hook("ssbp_pl_config.yaml")
