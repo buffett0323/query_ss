@@ -3,10 +3,31 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import pytorch_lightning as pl
+
+from tqdm import tqdm
 from torch.optim.lr_scheduler import LambdaLR
 from torch_models import Wavegram_Logmel128_Cnn14
 from utils import *
+
+
+# knn monitor as in InstDisc http://arxiv.org/abs/1805.01978
+# implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR
+def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
+    # compute cos similarity between each feature vector and feature bank -> [B, N]
+    sim_matrix = torch.mm(feature, feature_bank) # [B, K]
+    sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1) # [B, K]
+    sim_labels = torch.gather(feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)
+    sim_weight = (sim_weight / knn_t).exp()
+
+    # Counts for each class
+    one_hot_label = torch.zeros(feature.size(0) * knn_k, classes, device=sim_labels.device) # [B*K, C]
+    one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0) # weighted score -> [B, C]
+    pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, classes) * sim_weight.unsqueeze(dim=-1), dim=1)
+    pred_labels = pred_scores.argsort(dim=-1, descending=True)
+    
+    return pred_labels
 
 
 class SimSiamPL(pl.LightningModule):
@@ -72,7 +93,7 @@ class SimSiamPL(pl.LightningModule):
 
 
     def training_step(self, batch, batch_idx):
-        x_i, x_j = batch
+        x_i, x_j, _ = batch
         x_i, x_j = x_i.contiguous(), x_j.contiguous()
 
         p1, p2, z1, z2 = self(x_i, x_j)
@@ -88,7 +109,7 @@ class SimSiamPL(pl.LightningModule):
     
     
     def validation_step(self, batch, batch_idx):
-        x_i, x_j = batch
+        x_i, x_j, _ = batch
         x_i, x_j = x_i.contiguous(), x_j.contiguous()
 
         p1, p2, z1, z2 = self(x_i, x_j)
@@ -99,7 +120,7 @@ class SimSiamPL(pl.LightningModule):
 
 
     def test_step(self, batch, batch_idx):
-        x_i, x_j = batch
+        x_i, x_j, _ = batch
         x_i, x_j = x_i.contiguous(), x_j.contiguous()
 
         p1, p2, z1, z2 = self(x_i, x_j)
@@ -109,6 +130,104 @@ class SimSiamPL(pl.LightningModule):
         return loss
 
 
+    def validation_epoch_end(self, outputs):
+        # kNN validation monitoring inside PyTorch Lightning
+        model = self.encoder
+        model.eval()
+        
+        # Get train (memory) and test (validation) data from datamodule
+        if self.trainer.world_size > 1:
+            memory_sampler = torch.utils.data.distributed.DistributedSampler(self.trainer.datamodule.memory_ds)
+        else:
+            memory_sampler = None
+            
+        memory_loader = torch.utils.data.DataLoader(
+            self.trainer.datamodule.memory_ds,
+            batch_size=self.args.batch_size,
+            shuffle=False,
+            sampler=memory_sampler,
+            num_workers=self.args.workers,
+            drop_last=self.args.drop_last,
+            pin_memory=self.args.pin_memory,
+        )
+        test_loader = self.trainer.datamodule.test_dataloader()
+        
+        
+        # Step 1: Extract feature bank
+        feature_bank, feature_labels = [], []
+        with torch.no_grad():
+            for data, _, target in tqdm(memory_loader, desc='Extracting Features'):
+                data = data.to(self.device, non_blocking=True)
+                target = target.to(self.device, non_blocking=True)
+
+                feature = model(data)
+                feature = F.normalize(feature, dim=1)
+
+                feature_bank.append(feature)
+                feature_labels.append(target)
+
+            feature_bank = torch.cat(feature_bank, dim=0)
+            feature_labels = torch.cat(feature_labels, dim=0)
+            
+            
+            # Handle Distributed Training (DDP)
+            if self.trainer.world_size > 1:
+                feature_bank_list = [torch.zeros_like(feature_bank) for _ in range(self.trainer.world_size)]
+                torch.distributed.all_gather(feature_bank_list, feature_bank)
+                feature_bank = torch.cat(feature_bank_list, dim=0)
+
+                feature_labels_list = [torch.zeros_like(feature_labels) for _ in range(self.trainer.world_size)]
+                torch.distributed.all_gather(feature_labels_list, feature_labels)
+                feature_labels = torch.cat(feature_labels_list, dim=0)
+
+            feature_bank = feature_bank.T.contiguous()  # [D, N]
+        
+        
+        # Step 2: kNN Classification on Validation Data
+        total_top1, total_num = 0.0, 0
+        for data, target in tqdm(test_loader, desc="Testing kNN"):
+            data = data.to(self.device, non_blocking=True)
+            target = target.to(self.device, non_blocking=True)
+
+            feature = model(data)
+            feature = F.normalize(feature, dim=1)
+
+            # kNN prediction
+            pred_labels = self.knn_predict(
+                feature, feature_bank, feature_labels,
+                classes=self.args.knn_classes,
+                knn_k=self.args.knn_k, 
+                knn_t=self.args.knn_t,
+            )
+
+            total_num += data.size(0)
+            total_top1 += (pred_labels[:, 0] == target).float().sum().item()
+
+        knn_acc = total_top1 / total_num * 100
+        self.log("knn_acc", knn_acc, on_epoch=True, prog_bar=True, logger=True,  batch_size=self.args.batch_size, sync_dist=True)
+
+
+    def knn_predict(self, feature, feature_bank, feature_labels, classes, knn_k, knn_t):
+        """
+        kNN classification to evaluate representation quality.
+        """
+        # Compute cosine similarity between features and feature bank
+        sim_matrix = torch.mm(feature, feature_bank)
+        sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1)
+
+        # Get corresponding labels
+        sim_labels = torch.gather(feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)
+        sim_weight = (sim_weight / knn_t).exp()
+
+        # Compute weighted class counts
+        one_hot_label = torch.zeros(feature.size(0) * knn_k, classes, device=sim_labels.device)
+        one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
+        pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, classes) * sim_weight.unsqueeze(dim=-1), dim=1)
+
+        pred_labels = pred_scores.argsort(dim=-1, descending=True)
+        return pred_labels
+    
+    
     def inference(self, x):
         return self.encoder(x)
 

@@ -3,7 +3,7 @@ import os
 import random
 import math
 import torch
-import torchaudio
+import json
 import librosa
 import argparse
 import scipy.signal
@@ -31,17 +31,30 @@ class BPDataset(Dataset):
         split="train",
         need_transform=True,
         random_slice=True,
-        stems=["drums", "bass", "other", "vocals"],
+        stems=["vocals", "bass", "drums", "other"], # VBDO
     ):
         # Load split files from txt file
         with open(f"info/{split}_bp.txt", "r") as f:
             bp_listdir = [line.strip() for line in f.readlines()]
+            
+        with open("info/labels.txt", "r") as f:
+            self.labels = [line.strip() for line in f.readlines()]
+            
+        with open("info/class_dict.json", "r", encoding="utf-8") as f:
+            self.class_dict = json.load(f)
 
+        self.stems = stems
         self.data_path_list = [
             os.path.join(data_dir, folder, f"{stem}.npy")
             for folder in bp_listdir
                 for stem in stems
         ]
+        self.label_list = [
+            self.get_label(folder, stem)
+            for folder in bp_listdir
+                for stem in stems
+        ]
+        
         self.transform = CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
@@ -53,6 +66,12 @@ class BPDataset(Dataset):
         self.need_transform = need_transform
         self.random_slice = random_slice
 
+    
+    def get_label(self, folder, stem):
+        style = self.class_dict[folder.split('_')[0]]
+        return self.labels.index(style) * len(self.stems) + self.stems.index(stem)
+
+    
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
     
@@ -60,14 +79,19 @@ class BPDataset(Dataset):
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
         x = np.load(path)
+        if self.split == "test":
+            return x[int(x.shape[0]/4) : int(x.shape[0]*3/4)], \
+                torch.tensor(self.label_list[idx], dtype=torch.int64)
+        
+        # Augmentation for training
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
-            
-        if self.split == "inference":
-            return torch.tensor(x, dtype=torch.float32), path
-        return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
+        
+        return torch.tensor(x_i, dtype=torch.float32), \
+                torch.tensor(x_j, dtype=torch.float32), \
+                torch.tensor(self.label_list[idx], dtype=torch.int64)
 
 
 class BPDataModule(LightningDataModule):
@@ -106,6 +130,14 @@ class BPDataModule(LightningDataModule):
             duration=self.args.segment_second,
             data_dir=self.data_dir,
             split="test",
+            need_transform=self.args.need_clar_transform,
+            random_slice=self.args.random_slice,
+        )
+        self.memory_ds = BPDataset(
+            sample_rate=self.args.sample_rate,
+            duration=self.args.segment_second,
+            data_dir=self.data_dir,
+            split="memory",
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
         )
@@ -292,21 +324,21 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="SimCLR_BP")
 
-    config = yaml_config_hook("bp_config.yaml")
+    config = yaml_config_hook("ssbp_pl_config.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
     
-    # ds = BPDataset(args.sample_rate, args.segment_second)
-    # print(ds[0])
+    ds = BPDataset(args.sample_rate, args.segment_second, split="memory")
+    print(ds[0])
     
-    dm = BPDataModule(
-        args=args,
-        data_dir=args.data_dir, 
-    )
-    dm.setup()
+    # dm = BPDataModule(
+    #     args=args,
+    #     data_dir=args.data_dir, 
+    # )
+    # dm.setup()
     
     
-    for tr in tqdm(dm.train_dataloader()):
-        pass; #print(tr[0].shape)
+    # for tr in tqdm(dm.train_dataloader()):
+    #     pass; #print(tr[0].shape)

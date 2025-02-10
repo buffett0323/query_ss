@@ -52,7 +52,6 @@ def main():
         args=args,
         data_dir=args.data_dir, 
     )
-    dm.setup()
 
     # Initialize Model
     args.lr = args.lr * args.batch_size / 256 # init lr
@@ -100,13 +99,14 @@ def main():
     # Train
     print("-------Start Training-------")
     trainer.fit(model, dm)
-
-    # Test best model
-    best_model_path = checkpoint_callback.best_model_path
-    print(f"Best Model Path: {best_model_path}")
-    model = SimSiamPL.load_from_checkpoint(best_model_path, args=args)
-    model.eval()
-    trainer.test(model, dm)
+    print("-------Finish Training-------")
+    
+    # # Test best model
+    # best_model_path = checkpoint_callback.best_model_path
+    # print(f"Best Model Path: {best_model_path}")
+    # model = SimSiamPL.load_from_checkpoint(best_model_path, args=args)
+    # model.eval()
+    # trainer.test(model, dm)
 
     # Finish WandB
     wandb.finish()

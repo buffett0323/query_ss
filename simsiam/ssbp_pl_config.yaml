@@ -4,7 +4,7 @@ sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
-wandb_name: "SimSiam BP official params"
+wandb_name: "SimSiam BP my params"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
@@ -24,22 +24,19 @@ gpu_ids: [0, 1] #[0, 1]
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #512 
+batch_size: 128 #128 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
 check_val_every_n_epoch: 4
-early_stop_patience: 10 #10
-lr: 0.05 #0.001 # 0.03  # 0.0003
+early_stop_patience: 20 #10
+lr: 0.001 #0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
 warmup_epochs: 10 #30
 dim: 2048
 pred_dim: 512
-resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
 print_freq: 20
-knn_k: 200
-knn_t: 0.2
 
 # dataset options
 max_length: 64
@@ -61,4 +58,9 @@ channels: 1
 model_dict_save_dir: "./model_dict"
 
 # loss options
-weight_decay: 1.0e-4 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+weight_decay: 1.0e-3 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+
+# knn options
+knn_classes: 120 # 30 styles * 4 sources
+knn_k: 200
+knn_t: 0.2
