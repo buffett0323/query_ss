@@ -9,8 +9,8 @@ import soundfile as sf
 from multiprocessing import Pool, cpu_count
 
 # Path
-input_path = "/mnt/gestalt/home/ddmanddman/slakh2100_flac_redux/validation"
-output_path = "/mnt/gestalt/home/ddmanddman/slakh2100_buffett/validation"
+input_path = "/mnt/gestalt/home/ddmanddman/slakh2100_flac_redux/test"
+output_path = "/mnt/gestalt/home/ddmanddman/slakh2100_buffett/test"
 os.makedirs(output_path, exist_ok=True)
 
 # Number of processes (use all available cores)
