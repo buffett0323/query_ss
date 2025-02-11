@@ -13,6 +13,8 @@ import random
 import shutil
 import time
 import warnings
+import librosa
+import torchlibrosa
 
 import torch
 import torch.nn as nn
@@ -27,7 +29,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
-import simsiam.loader
+# import simsiam.loader
 # import simsiam.builder
 
 # Added
@@ -42,7 +44,7 @@ model_names = sorted(name for name in models.__dict__
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--data-dir', metavar='DIR', 
-                    default='/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy',
+                    default='/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_4secs_npy',
                     help='path to dataset')
 # parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
 #                     choices=model_names,
@@ -96,7 +98,8 @@ parser.add_argument('--pred-dim', default=512, type=int,
                     help='hidden dimension of the predictor (default: 512)')
 parser.add_argument('--fix-pred-lr', action='store_true',
                     help='Fix learning rate for the predictor')
-# music specific configs:
+
+# # music specific configs:
 parser.add_argument('--sample-rate', default=16000, type=int,
                     help='Sample rate of audio')
 parser.add_argument('--segment-second', default=4, type=int,
@@ -168,11 +171,11 @@ def main_worker(gpu, ngpus_per_node, args):
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank)
+                                world_size=args.world_size, rank=args.rank,
+                                group_name="my_ddp_group") # Added group name
         torch.distributed.barrier()
     
     # create model
-    print("=> creating model '{}'".format(args.arch))
     model = SimSiam(
         args=args,
         dim=args.dim,
