@@ -190,7 +190,7 @@ def main_worker(gpu, ngpus_per_node, args):
     train_dataset = BPDataset(
         sample_rate=args.sample_rate, 
         duration=args.segment_second, 
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy",
+        data_dir=args.data_dir,
         split="train",
         random_slice=False,
         need_transform=True,
