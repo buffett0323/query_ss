@@ -4,7 +4,7 @@ sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
-wandb_name: "SimSiam BP my params"
+wandb_name: "SSBP no_VBD lr_0.05 wu_20 wd_1.0e-4"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
@@ -30,9 +30,10 @@ start_epoch: 0
 epochs: 200 # 100
 check_val_every_n_epoch: 4
 early_stop_patience: 20 #10
-lr: 0.001 #0.05 #0.001 # 0.03  # 0.0003
+lr: 0.05 #0.05 #0.001 # 0.03  # 0.0003
+weight_decay: 1.0e-4 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
 momentum: 0.9
-warmup_epochs: 10 #30
+warmup_epochs: 20 #30
 dim: 2048
 pred_dim: 512
 fix_pred_lr: True
@@ -48,7 +49,7 @@ n_mels: 128 #128
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True
-drop_last: True #False
+drop_last: False #True #False
 persistent_workers: True
 
 # model options
@@ -57,10 +58,7 @@ encoder_name: "Wavegram_Logmel128_Cnn14" # "GatedCNN"
 channels: 1
 model_dict_save_dir: "./model_dict"
 
-# loss options
-weight_decay: 1.0e-3 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
-
 # knn options
 knn_classes: 120 # 30 styles * 4 sources
-knn_k: 200
-knn_t: 0.2
+knn_k: 100 #200
+knn_t: 0.5 #0.2

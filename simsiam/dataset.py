@@ -188,7 +188,7 @@ class BPDataset(Dataset):
         split="train",
         need_transform=True,
         random_slice=True,
-        stems=["vocals", "bass", "drums", "other"], # VBDO
+        stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
     ):
         # Load split files from txt file
         with open(f"info/{split}_bp.txt", "r") as f:
