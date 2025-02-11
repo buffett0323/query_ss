@@ -11,7 +11,6 @@ import random
 import shutil
 import time
 import warnings
-import wandb
 
 import torch
 import torch.nn as nn
@@ -48,14 +47,6 @@ def main():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-
-    # Loading Wandb logger
-    if args.log_wandb:
-        wandb.init(
-            project=args.wandb_project_name,
-            name=args.wandb_name,
-            config=args,
-        )
         
     # Initial settings
     if args.seed is not None:
@@ -92,8 +83,6 @@ def main():
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
-        
-    wandb.finish()
     
     
 def main_worker(gpu, ngpus_per_node, args):
@@ -146,7 +135,8 @@ def main_worker(gpu, ngpus_per_node, args):
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, find_unused_parameters=args.find_unused_parameters)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, 
+                                                              find_unused_parameters=args.find_unused_parameters)
 
         else:
             model.cuda()
@@ -196,57 +186,49 @@ def main_worker(gpu, ngpus_per_node, args):
 
     cudnn.benchmark = True
     
-    # Data Module for loading dataset
-    dm = BPDataModule(args=args, data_dir=args.data_dir)
-    dm.setup()
+    # Loading dataset
+    train_dataset = BPDataset(
+        sample_rate=args.sample_rate, 
+        duration=args.segment_second, 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy",
+        split="train",
+        random_slice=False,
+        need_transform=True,
+        stems=['other'],
+    )
     
     
-    # Validation
-    best_val_loss = 999999.0
-    patience = 0
+    if args.distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+    else:
+        train_sampler = None
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+        num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+
+
     
     # Training loops
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
-            dm.train_sampler.set_epoch(epoch)
+            train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # Train for one epoch
-        train_loss = train(dm.train_dataloader(), model, criterion, optimizer, epoch, args)
+        train(train_loader, model, criterion, optimizer, epoch, args)
 
-        if args.log_wandb:
-            wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
 
-        # Validation
-        is_best = False
-        if epoch % args.check_val_every_n_epoch == 0:
-            val_loss = evaluate(dm.val_dataloader(), model, criterion, epoch, args)
-            if args.log_wandb:
-                wandb.log({"val_loss_epoch": val_loss, "epoch": epoch})
-            
-            # Early stopping
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                patience = 0
-                is_best = True
-            else:
-                patience += 1
-                if patience >= args.early_stop_patience:
-                    break
-            
         # Save checkpoints
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
-            save_dir = args.model_dict_save_dir
-            save_checkpoint({
+            if epoch % 10 == 0:
+                save_checkpoint({
                     'epoch': epoch + 1,
+                    'arch': args.arch,
                     'state_dict': model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
-                }, 
-                is_best=is_best, 
-                filename=f'{save_dir}/checkpoint_{epoch}.pth.tar',
-                save_dir=save_dir,
-            )
+                }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
         
     
 
@@ -263,7 +245,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j) in enumerate(train_loader):
+    for i, (x_i, x_j, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -289,52 +271,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         if i % args.print_freq == 0:
             progress.display(i)
             
-            if args.log_wandb:
-                wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
 
 
-    return losses.avg
-
-
-
-def evaluate(valid_loader, model, criterion, epoch, args):
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.4f')
-    progress = ProgressMeter(
-        len(valid_loader),
-        [batch_time, data_time, losses],
-        prefix="Epoch: [{}] (Validation)".format(epoch))
-
-    # switch to evaluation mode
-    model.eval()
-
-    end = time.time()
-    with torch.no_grad():  # Disable gradient computation for validation
-        for i, (x_i, x_j) in enumerate(valid_loader):
-            # measure data loading time
-            data_time.update(time.time() - end)
-
-            if args.gpu is not None:
-                x_i = x_i.cuda(args.gpu, non_blocking=True)
-                x_j = x_j.cuda(args.gpu, non_blocking=True)
-
-            # compute output and loss
-            p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
-            loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
-
-            losses.update(loss.item(), x_i.size(0))
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if i % args.print_freq == 0:
-                progress.display(i)
-
-    print(f"Validation Loss: {losses.avg:.4f}")
-
-    return losses.avg  # Return the average validation loss
 
 
 def adjust_learning_rate(optimizer, init_lr, epoch, args):
