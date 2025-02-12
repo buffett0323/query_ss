@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 from torch.optim.lr_scheduler import LambdaLR
 from torch_models import Wavegram_Logmel128_Cnn14
 from utils import *
-
+from ast_model import ASTModel
 
 # knn monitor as in InstDisc http://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR
@@ -274,29 +274,32 @@ class SimSiamPL(pl.LightningModule):
 
 
 
-# TODO: augmentation
+
 class SimSiam(nn.Module):
     """
     SimSiam model with Wavegram_Logmel128_Cnn14 as the encoder.
     """
-    def __init__(self, args, dim=2048, pred_dim=512):
+    def __init__(self, args, input_tdim=94, dim=2048, pred_dim=512):
         super(SimSiam, self).__init__()
         self.args = args
 
         # **Initialize Wavegram_Logmel128_Cnn14 as the encoder**
-        self.encoder = Wavegram_Logmel128_Cnn14(
-            sample_rate=self.args.sample_rate,
-            window_size=self.args.window_size,
-            hop_size=self.args.hop_length,
-            mel_bins=128,
-            fmin=self.args.fmin,
-            fmax=self.args.fmax,
-            classes_num=dim  # Output embedding dimension
-        )
+        # self.encoder = Wavegram_Logmel128_Cnn14(
+        #     sample_rate=self.args.sample_rate,
+        #     window_size=self.args.window_size,
+        #     hop_size=self.args.hop_length,
+        #     mel_bins=128,
+        #     fmin=self.args.fmin,
+        #     fmax=self.args.fmax,
+        #     classes_num=dim  # Output embedding dimension
+        # )
+        self.encoder = ASTModel(input_tdim=input_tdim) 
+        prev_dim = self.encoder.v.pos_embed.shape[2] # Extracting feature dimension # 768
 
         # **Remove the classification head to use raw feature embeddings**
-        prev_dim = self.encoder.fc1.weight.shape[1] # Extracting feature dimension
-        self.encoder.fc1 = nn.Identity()
+        # prev_dim = self.encoder.fc1.weight.shape[1] # Extracting feature dimension # 2048
+        # self.encoder.fc1 = nn.Identity() 
+        
 
         # **Build a separate 3-layer projector**
         self.projector = nn.Sequential(
@@ -337,7 +340,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="SimCLR Encoder")
 
-    config = yaml_config_hook("ssbp_pl_config.yaml")
+    config = yaml_config_hook("config/ssbp_6secs.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -347,6 +350,6 @@ if __name__ == "__main__":
     model = SimSiam(args)#.to(device)
 
     
-    x = torch.randn([16, 32000])#.to(device)
+    x = torch.randn([16, 128, 94])#.to(device)
     res = model(x, x)
     print(res[0].shape, res[2].shape)

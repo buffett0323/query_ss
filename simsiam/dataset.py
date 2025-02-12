@@ -214,7 +214,7 @@ class BPDataset(Dataset):
                 for stem in stems
         ]
         
-        self.transform = CLARTransform(
+        self.transform = AudioFXAugmentation( #CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
         )
@@ -663,16 +663,15 @@ if __name__ == "__main__":
     # for i in range(10):
     #     print(ds[i][2])
     
-    # dm = BPDataModule(
-    #     args=args,
-    #     data_dir=args.data_dir, 
-    # )
-    # dm.setup()
-    ds = BPDataset(args.sample_rate, args.segment_second, data_dir=args.data_dir, split="train")
-    print(len(ds))
     
-    for i in range(10):
-        print(ds[i][0].shape, ds[i][1].shape)
+    train_dataset = BPDataset(args.sample_rate, args.segment_second, data_dir=args.data_dir, split="train")
+    
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.workers, pin_memory=True, drop_last=True)
+    
+    for ds in train_loader:
+        print(ds[0].shape, ds[1].shape) # 256, 128, 94
     
     
     # for tr in tqdm(dm.train_dataloader()):

@@ -1,8 +1,8 @@
 # Pre-process
-segment_second: 4 # half in 2 seconds
+segment_second: 6 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: True #False
+log_wandb: False #False
 wandb_project_name: "SimSiam_BP"
 wandb_name: "SimSiam BP official params"
 need_transform: False #Wavegram will transform for us
@@ -26,7 +26,7 @@ gpu: [0] #[0,1,2,3]
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #512 
+batch_size: 16 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -56,7 +56,7 @@ persistent_workers: True
 
 # model options
 # resnet: "resnet18"
-encoder_name: "Wavegram_Logmel128_Cnn14" # "GatedCNN"
+encoder_name: "AST" # "GatedCNN"
 channels: 1
 encoder_output_dim: 512
 projection_dim: 128
