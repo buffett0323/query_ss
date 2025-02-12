@@ -4,7 +4,7 @@ sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
-wandb_name: "ast_6secs_TSPSEQ"
+wandb_name: "WGLM_6secs_Noise_TS"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
@@ -19,14 +19,14 @@ rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
 dist_backend: 'nccl'
 multiprocessing_distributed: True #True
-find_unused_parameters: True # False
+find_unused_parameters: False # False
 workers: 24 # 24 for terra, 56 for fatcat
-gpu: [0, 1, 2, 3, 4] #[0,1,2,3]
+gpu: [0, 1, 2, 3, 4, 5] #[0,1,2,3]
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #256 #512 
+batch_size: 128 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -56,7 +56,7 @@ persistent_workers: True
 
 # model options
 # resnet: "resnet18"
-encoder_name: "AST" # "GatedCNN"
+encoder_name: "Wavegram_Logmel128_Cnn14" # "GatedCNN"
 channels: 1
 encoder_output_dim: 512
 projection_dim: 128

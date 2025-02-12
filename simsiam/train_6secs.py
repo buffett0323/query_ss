@@ -15,6 +15,7 @@ import wandb
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
@@ -274,6 +275,13 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output and loss
         p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
         loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
+        
+        # Compute per-channel std of L2-normalized output
+        z1_normalized = F.normalize(z1, dim=1)
+        z2_normalized = F.normalize(z2, dim=1)
+        z1_std = z1_normalized.std(dim=0).mean()
+        z2_std = z2_normalized.std(dim=0).mean()
+        avg_std = (z1_std + z2_std) / 2
 
         losses.update(loss.item(), x_i.size(0))
 
@@ -292,6 +300,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             # Log training loss per step only from GPU 0
             if args.gpu == 0 and args.log_wandb:
                 wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
+                wandb.log({"avg_std_train": avg_std, "step": epoch * len(train_loader) + i})
 
     return losses.avg
 

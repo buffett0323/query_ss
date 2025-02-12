@@ -214,7 +214,7 @@ class BPDataset(Dataset):
                 for stem in stems
         ]
         
-        self.transform = AudioFXAugmentation( #CLARTransform(
+        self.transform = CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
         )
@@ -356,6 +356,7 @@ class CLARTransform(nn.Module):
         self, 
         sample_rate,
         duration,
+        n_mels=128,
     ):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
@@ -368,11 +369,38 @@ class CLARTransform(nn.Module):
             self.time_shift_transform,
             self.time_stretch_transform,
         ]
-        
+        self.n_mels = n_mels
         
     def pitch_shift_transform(self, x, n_steps=15):
         return effects.pitch_shift(x, sr=self.sample_rate, n_steps=torch.randint(low=-n_steps, high=n_steps, size=[1]).item())
+    
+    
+    def time_stretch_augmentation(self, x):
+        """
+        Apply Time Stretching (TS) Augmentation following the TSPS methodology.
+        
+        Steps:
+        1. Load an audio file and ensure it is at least `context_length` seconds long.
+        2. Randomly crop a 4.5s segment (if necessary).
+        3. Sample a time-stretch factor τ from the given probability distribution.
+        4. Apply time stretching using cubic spline interpolation.
+        5. Truncate the resulting signal to `target_length` seconds.
+        """
+        target_length = 3.0
+        
+        # Sample τ from the given probability distribution and apply Time Stretching (TS)
+        x = librosa.effects.time_stretch(x, rate=sample_tau())
 
+        # Truncate to `target_length` seconds
+        target_samples = int(self.sample_rate * target_length)
+        if len(x) > target_samples:
+            x = x[:target_samples]
+        else:
+            x = np.pad(x, (0, target_samples - len(x)), mode='constant')
+
+        return x #torch.tensor(x).float().unsqueeze(0)  # Add batch dimension
+    
+        
     def add_fade_transform(self, x, max_fade_size=.5):
         def _fade_in(fade_shape, waveform_length, fade_in_len):
             fade = np.linspace(0, 1, fade_in_len)
@@ -450,23 +478,43 @@ class CLARTransform(nn.Module):
         return np.pad(x, [0, (self.sample_rate * self.duration) - x.shape[0]])
 
 
-    def __call__(self, x1, x2):        
-        # Apply random augmentations
-        # transform1, transform2 = random.sample(self.transforms, 2)
-        # x1 = transform1(x1)
-        # x2 = transform2(x2)
-        
+    def __call__(self, x1, x2):
         # Apply augmentations
         x1 = self.add_noise_transform(x1)
-        x1 = self.time_stretch_transform(x1)
-        x1 = self.time_masking_transform(x1)
+        x1 = self.time_stretch_augmentation(x1)
         
         x2 = self.add_noise_transform(x2)
-        x2 = self.time_stretch_transform(x2)
-        x2 = self.time_masking_transform(x2)
-        
+        x2 = self.time_stretch_augmentation(x2)
         return x1, x2
 
+
+
+def sample_tau():
+    """
+    Sample τ from the given probability distribution: τ ∼ 1/(τ log(1.5/0.75))
+    within the range [0.75, 1.5].
+    """
+    def pdf(tau):
+        return 1 / (tau * np.log(1.5 / 0.75))
+    
+    tau_range = np.linspace(0.75, 1.5, 1000)
+    probs = pdf(tau_range)
+    probs /= probs.sum()  # Normalize to create a proper probability distribution
+    return np.random.choice(tau_range, p=probs)
+
+
+def sample_mu():
+    """
+    Sample μ from the given probability distribution: μ ∼ 1/(μ log(1.335/0.749))
+    within the range [0.749, 1.335].
+    """
+    def pdf(mu):
+        return 1 / (mu * np.log(1.335 / 0.749))
+    
+    mu_range = np.linspace(0.749, 1.335, 1000)
+    probs = pdf(mu_range)
+    probs /= probs.sum()  # Normalize to create a proper probability distribution
+    return np.random.choice(mu_range, p=probs)
 
 
 
@@ -481,19 +529,6 @@ class AudioFXAugmentation(nn.Module):
         self.sample_rate = sample_rate
         self.duration = duration
         self.n_mels = n_mels
-        
-    def sample_tau(self):
-        """
-        Sample τ from the given probability distribution: τ ∼ 1/(τ log(1.5/0.75))
-        within the range [0.75, 1.5].
-        """
-        def pdf(tau):
-            return 1 / (tau * np.log(1.5 / 0.75))
-        
-        tau_range = np.linspace(0.75, 1.5, 1000)
-        probs = pdf(tau_range)
-        probs /= probs.sum()  # Normalize to create a proper probability distribution
-        return np.random.choice(tau_range, p=probs)
     
 
     def time_stretch_augmentation(self, x):
@@ -510,8 +545,7 @@ class AudioFXAugmentation(nn.Module):
         target_length = 3.0
         
         # Sample τ from the given probability distribution and apply Time Stretching (TS)
-        tau = self.sample_tau()
-        x = librosa.effects.time_stretch(x, rate=tau)
+        x = librosa.effects.time_stretch(x, rate=sample_tau())
 
         # Truncate to `target_length` seconds
         target_samples = int(self.sample_rate * target_length)
@@ -521,20 +555,6 @@ class AudioFXAugmentation(nn.Module):
             x = np.pad(x, (0, target_samples - len(x)), mode='constant')
 
         return x #torch.tensor(x).float().unsqueeze(0)  # Add batch dimension
-
-    
-    def sample_mu(self):
-        """
-        Sample μ from the given probability distribution: μ ∼ 1/(μ log(1.335/0.749))
-        within the range [0.749, 1.335].
-        """
-        def pdf(mu):
-            return 1 / (mu * np.log(1.335 / 0.749))
-        
-        mu_range = np.linspace(0.749, 1.335, 1000)
-        probs = pdf(mu_range)
-        probs /= probs.sum()  # Normalize to create a proper probability distribution
-        return np.random.choice(mu_range, p=probs)
 
 
     def pitch_shift_augmentation(self, x):
@@ -557,7 +577,7 @@ class AudioFXAugmentation(nn.Module):
         mel_spectrogram_db = librosa.power_to_db(mel_spectrogram, ref=np.max)  # Convert to dB
 
         # Sample μ
-        mu = self.sample_mu()
+        mu = sample_mu()
 
         # Compute frequency bin warping
         U = self.n_mels
@@ -667,11 +687,12 @@ if __name__ == "__main__":
     train_dataset = BPDataset(args.sample_rate, args.segment_second, data_dir=args.data_dir, split="train")
     
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True,
+        train_dataset, batch_size=4, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
     
     for ds in train_loader:
         print(ds[0].shape, ds[1].shape) # 256, 128, 94
+        break
     
     
     # for tr in tqdm(dm.train_dataloader()):

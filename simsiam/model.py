@@ -284,21 +284,22 @@ class SimSiam(nn.Module):
         self.args = args
 
         # **Initialize Wavegram_Logmel128_Cnn14 as the encoder**
-        # self.encoder = Wavegram_Logmel128_Cnn14(
-        #     sample_rate=self.args.sample_rate,
-        #     window_size=self.args.window_size,
-        #     hop_size=self.args.hop_length,
-        #     mel_bins=128,
-        #     fmin=self.args.fmin,
-        #     fmax=self.args.fmax,
-        #     classes_num=dim  # Output embedding dimension
-        # )
-        self.encoder = ASTModel(input_tdim=input_tdim) 
-        prev_dim = self.encoder.v.pos_embed.shape[2] # Extracting feature dimension # 768
+        self.encoder = Wavegram_Logmel128_Cnn14(
+            sample_rate=self.args.sample_rate,
+            window_size=self.args.window_size,
+            hop_size=self.args.hop_length,
+            mel_bins=self.args.n_mels,
+            fmin=self.args.fmin,
+            fmax=self.args.fmax,
+            classes_num=dim  # Output embedding dimension
+        )
+        # self.encoder = ASTModel(input_tdim=input_tdim) 
+        # prev_dim = self.encoder.v.pos_embed.shape[2] # Extracting feature dimension # 768
 
         # **Remove the classification head to use raw feature embeddings**
-        # prev_dim = self.encoder.fc1.weight.shape[1] # Extracting feature dimension # 2048
-        # self.encoder.fc1 = nn.Identity() 
+        prev_dim = self.encoder.fc1.weight.shape[1] # Extracting feature dimension # 2048
+        print("PrevDim: ", prev_dim)
+        self.encoder.fc1 = nn.Identity() 
         
 
         # **Build a separate 3-layer projector**
@@ -350,6 +351,6 @@ if __name__ == "__main__":
     model = SimSiam(args)#.to(device)
 
     
-    x = torch.randn([16, 128, 94])#.to(device)
+    x = torch.randn([16, 48000])#.to(device)
     res = model(x, x)
     print(res[0].shape, res[2].shape)
