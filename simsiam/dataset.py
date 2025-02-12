@@ -186,7 +186,7 @@ class BPDataset(Dataset):
         self,
         sample_rate,
         duration,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy",
+        data_dir,
         split="train",
         need_transform=True,
         random_slice=True,
@@ -214,7 +214,7 @@ class BPDataset(Dataset):
                 for stem in stems
         ]
         
-        self.transform = CLARTransform(
+        self.transform = AudioFXAugmentation( #CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
         )
@@ -452,10 +452,22 @@ class CLARTransform(nn.Module):
 
     def __call__(self, x1, x2):        
         # Apply random augmentations
-        transform1, transform2 = random.sample(self.transforms, 2)
-        x1 = transform1(x1)
-        x2 = transform2(x2)
+        # transform1, transform2 = random.sample(self.transforms, 2)
+        # x1 = transform1(x1)
+        # x2 = transform2(x2)
+        
+        # Apply augmentations
+        x1 = self.add_noise_transform(x1)
+        x1 = self.time_stretch_transform(x1)
+        x1 = self.time_masking_transform(x1)
+        
+        x2 = self.add_noise_transform(x2)
+        x2 = self.time_stretch_transform(x2)
+        x2 = self.time_masking_transform(x2)
+        
         return x1, x2
+
+
 
 
 class AudioFXAugmentation(nn.Module):
@@ -469,11 +481,6 @@ class AudioFXAugmentation(nn.Module):
         self.sample_rate = sample_rate
         self.duration = duration
         self.n_mels = n_mels
-        self.transforms = [
-            self.time_stretch_augmentation,
-            self.pitch_shift_augmentation,
-        ]
-        
         
     def sample_tau(self):
         """
@@ -513,8 +520,7 @@ class AudioFXAugmentation(nn.Module):
         else:
             x = np.pad(x, (0, target_samples - len(x)), mode='constant')
 
-        # Convert to PyTorch tensor
-        return torch.tensor(x).float().unsqueeze(0)  # Add batch dimension
+        return x #torch.tensor(x).float().unsqueeze(0)  # Add batch dimension
 
     
     def sample_mu(self):
@@ -540,16 +546,14 @@ class AudioFXAugmentation(nn.Module):
         2. Sample a pitch shift factor μ.
         3. Apply cubic spline interpolation on the frequency axis.
         4. If μ < 1.0, zero out frequency bins above μ * max frequency.
-
-
-        Returns:
-            np.ndarray: Augmented spectrogram.
-            np.ndarray: Original spectrogram.
-            int: Sampling rate.
         """
 
         # Compute Mel spectrogram
-        mel_spectrogram = librosa.feature.melspectrogram(y=x, sr=self.sample_rate, n_mels=self.n_mels)
+        mel_spectrogram = librosa.feature.melspectrogram(
+            y=x, 
+            sr=self.sample_rate, 
+            n_mels=self.n_mels
+        )
         mel_spectrogram_db = librosa.power_to_db(mel_spectrogram, ref=np.max)  # Convert to dB
 
         # Sample μ
@@ -571,12 +575,77 @@ class AudioFXAugmentation(nn.Module):
             shifted_spectrogram[cutoff_bin:] = -80.0  # Set to silence (approximate dB floor)
 
         return shifted_spectrogram
+    
+    
+    def butterworth_filter(self, filter_type="low", cutoff_freq=None):
+        """
+        Apply a third-order Butterworth filter (lowpass/highpass).
+
+        Parameters:
+            sr (int): Sampling rate.
+            n_mels (int): Number of mel bins.
+            filter_type (str): "low" or "high".
+            cutoff_freq (float): Cutoff frequency in Hz.
+
+        Returns:
+            np.ndarray: Butterworth filter response.
+        """
+        nyquist = self.sample_rate / 2
+        normal_cutoff = cutoff_freq / nyquist  # Normalize w.r.t Nyquist frequency
+        b, a = scipy.signal.butter(N=3, Wn=normal_cutoff, btype=filter_type, analog=False)
+        return b, a
+
+
+    def apply_equalization_filter(self, x):
+        """
+        Apply Equalization Augmentation (EQ) using Butterworth filters.
+
+        Steps:
+        1. Randomly select a filter type (lowpass, highpass, or none).
+        2. Design a Butterworth filter based on sampled cutoff frequency.
+        3. Apply the filter to the spectrogram.
+        4. Add the log-scaled filter response to the original spectrogram.
+
+        Parameters:
+            mel_spectrogram (np.ndarray): Input mel spectrogram.
+            sr (int): Sampling rate.
+            n_mels (int): Number of mel bins.
+
+        Returns:
+            np.ndarray: Augmented spectrogram.
+            str: Applied filter type.
+            float: Chosen cutoff frequency.
+        """
+        # Choose filter type with equal probability
+        filter_choice = np.random.choice(["lowpass", "highpass", "none"], p=[1/3, 1/3, 1/3])
+
+        if filter_choice == "none":
+            return x
+
+        # Sample cutoff frequency
+        if filter_choice == "lowpass":
+            cutoff_freq = np.random.uniform(2200, 4000)  # Hz
+        else:  # Highpass
+            cutoff_freq = np.random.uniform(200, 1200)  # Hz
+
+        # Get Butterworth filter and Apply filter along the mel bins axis
+        b, a = self.butterworth_filter(filter_type=filter_choice, cutoff_freq=cutoff_freq)
+        filtered_spectrogram = scipy.signal.filtfilt(b, a, x, axis=0)
+
+        # Add the log-transformed filter response
+        return x + np.log10(np.abs(filtered_spectrogram) + 1e-6)
+
 
 
     def __call__(self, x1, x2):        
-        # Apply random augmentations
-        x1 = self.transforms(x1)
-        x2 = self.transforms(x2)
+        # Apply augmentations
+        x1 = self.time_stretch_augmentation(x1)
+        x1 = self.pitch_shift_augmentation(x1)
+        x1 = self.apply_equalization_filter(x1)
+        
+        x2 = self.time_stretch_augmentation(x2)
+        x2 = self.pitch_shift_augmentation(x2)
+        x2 = self.apply_equalization_filter(x2)
         return x1, x2
 
 
@@ -584,7 +653,7 @@ class AudioFXAugmentation(nn.Module):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="SimCLR_BP")
 
-    config = yaml_config_hook("ssbp_pl_config.yaml")
+    config = yaml_config_hook("config/ssbp_6secs.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -599,8 +668,11 @@ if __name__ == "__main__":
     #     data_dir=args.data_dir, 
     # )
     # dm.setup()
-    ds = BPDataset(args.sample_rate, args.segment_second, split="train")
+    ds = BPDataset(args.sample_rate, args.segment_second, data_dir=args.data_dir, split="train")
     print(len(ds))
+    
+    for i in range(10):
+        print(ds[i][0].shape, ds[i][1].shape)
     
     
     # for tr in tqdm(dm.train_dataloader()):

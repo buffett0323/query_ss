@@ -46,7 +46,7 @@ def define_param_groups(model, weight_decay, optimizer_name):
    return param_groups
 
 
-def train_test_split_BPDataset(path="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy"):
+def train_test_split_BPDataset(path="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_6secs_npy"):
     path_file = os.listdir(path)
     random.shuffle(path_file)
 
@@ -118,3 +118,7 @@ class ProgressMeter(object):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
+    
+    
+if __name__ == "__main__":
+    train_test_split_BPDataset()

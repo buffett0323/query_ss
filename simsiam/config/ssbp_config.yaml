@@ -1,0 +1,76 @@
+# Pre-process
+segment_second: 4 # half in 2 seconds
+sep_model_name: "htdemucs"
+target: "chorus"
+log_wandb: True #False
+wandb_project_name: "SimSiam_BP"
+wandb_name: "SimSiam BP official params"
+need_transform: False #Wavegram will transform for us
+need_clar_transform: True
+random_slice: False # Random slice enhance model's ability of capturing timbre
+ckpt_name: "BP_WGL128_CNN14"
+
+
+# distributed training
+# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
+data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_4secs_npy"
+world_size: 1 #-1
+rank: 0 # -1
+dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
+dist_backend: 'nccl'
+multiprocessing_distributed: True
+find_unused_parameters: False
+workers: 24 # 24 for terra, 56 for fatcat
+gpu: [0,1,2,3]
+
+
+# train options
+seed: 42 # sacred handles automatic seeding when passed in the config
+batch_size: 256 #512 
+gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
+start_epoch: 0
+epochs: 200 # 100
+check_val_every_n_epoch: 4
+early_stop_patience: 5 #10
+lr: 0.05 #0.001 # 0.03  # 0.0003
+momentum: 0.9
+warmup_epochs: 30
+dim: 2048
+pred_dim: 512
+resume: '' # path to latest checkpoint (default: none)
+fix_pred_lr: True
+print_freq: 20
+
+# dataset options
+max_length: 64
+n_fft: 2048 #2048
+hop_length: 320 #320 #512 #1024
+sample_rate: 16000 #44100 Temporarily transform to 16000
+window_size: 1024 #512
+n_mels: 128 #128
+fmin: 20
+fmax: 8000 # 16000/2
+pin_memory: True
+drop_last: True #False
+persistent_workers: True
+
+# model options
+# resnet: "resnet18"
+encoder_name: "Wavegram_Logmel128_Cnn14" # "GatedCNN"
+channels: 1
+encoder_output_dim: 512
+projection_dim: 128
+model_dict_save_dir: "./model_dict"
+
+# loss options
+optimizer: "Adam" # or LARS (experimental)
+weight_decay: 1.0e-4 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+temperature: 0.1 #0.5 # see appendix B.7.: Optimal temperature under different batch sizes
+lr_decay_factor: 0.05 #0.01
+
+
+# reload options
+model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+reload: False
+
+# other simsiam settings
