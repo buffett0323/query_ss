@@ -214,7 +214,7 @@ class BPDataset(Dataset):
                 for stem in stems
         ]
         
-        self.transform = AudioFXAugmentation( #CLARTransform(
+        self.transform = CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
         )
