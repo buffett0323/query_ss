@@ -3,10 +3,12 @@ import os
 import random
 import math
 import torch
+import torchaudio
 import json
 import librosa
 import argparse
-import scipy.signal
+import scipy.interpolate
+import scipy.stats
 import numpy as np
 import torch.nn as nn
 import torch.multiprocessing as mp
@@ -456,6 +458,127 @@ class CLARTransform(nn.Module):
         return x1, x2
 
 
+class AudioFXAugmentation(nn.Module):
+    def __init__(
+        self, 
+        sample_rate,
+        duration,
+        n_mels=128,
+    ):
+        super(AudioFXAugmentation, self).__init__()
+        self.sample_rate = sample_rate
+        self.duration = duration
+        self.n_mels = n_mels
+        self.transforms = [
+            self.time_stretch_augmentation,
+            self.pitch_shift_augmentation,
+        ]
+        
+        
+    def sample_tau(self):
+        """
+        Sample τ from the given probability distribution: τ ∼ 1/(τ log(1.5/0.75))
+        within the range [0.75, 1.5].
+        """
+        def pdf(tau):
+            return 1 / (tau * np.log(1.5 / 0.75))
+        
+        tau_range = np.linspace(0.75, 1.5, 1000)
+        probs = pdf(tau_range)
+        probs /= probs.sum()  # Normalize to create a proper probability distribution
+        return np.random.choice(tau_range, p=probs)
+    
+
+    def time_stretch_augmentation(self, x):
+        """
+        Apply Time Stretching (TS) Augmentation following the TSPS methodology.
+        
+        Steps:
+        1. Load an audio file and ensure it is at least `context_length` seconds long.
+        2. Randomly crop a 4.5s segment (if necessary).
+        3. Sample a time-stretch factor τ from the given probability distribution.
+        4. Apply time stretching using cubic spline interpolation.
+        5. Truncate the resulting signal to `target_length` seconds.
+        """
+        target_length = 3.0
+        
+        # Sample τ from the given probability distribution and apply Time Stretching (TS)
+        tau = self.sample_tau()
+        x = librosa.effects.time_stretch(x, rate=tau)
+
+        # Truncate to `target_length` seconds
+        target_samples = int(self.sample_rate * target_length)
+        if len(x) > target_samples:
+            x = x[:target_samples]
+        else:
+            x = np.pad(x, (0, target_samples - len(x)), mode='constant')
+
+        # Convert to PyTorch tensor
+        return torch.tensor(x).float().unsqueeze(0)  # Add batch dimension
+
+    
+    def sample_mu(self):
+        """
+        Sample μ from the given probability distribution: μ ∼ 1/(μ log(1.335/0.749))
+        within the range [0.749, 1.335].
+        """
+        def pdf(mu):
+            return 1 / (mu * np.log(1.335 / 0.749))
+        
+        mu_range = np.linspace(0.749, 1.335, 1000)
+        probs = pdf(mu_range)
+        probs /= probs.sum()  # Normalize to create a proper probability distribution
+        return np.random.choice(mu_range, p=probs)
+
+
+    def pitch_shift_augmentation(self, x):
+        """
+        Apply Pitch Shifting (PS) Augmentation following the TSPS methodology.
+
+        Steps:
+        1. Compute the mel spectrogram of the input audio.
+        2. Sample a pitch shift factor μ.
+        3. Apply cubic spline interpolation on the frequency axis.
+        4. If μ < 1.0, zero out frequency bins above μ * max frequency.
+
+
+        Returns:
+            np.ndarray: Augmented spectrogram.
+            np.ndarray: Original spectrogram.
+            int: Sampling rate.
+        """
+
+        # Compute Mel spectrogram
+        mel_spectrogram = librosa.feature.melspectrogram(y=x, sr=self.sample_rate, n_mels=self.n_mels)
+        mel_spectrogram_db = librosa.power_to_db(mel_spectrogram, ref=np.max)  # Convert to dB
+
+        # Sample μ
+        mu = self.sample_mu()
+
+        # Compute frequency bin warping
+        U = self.n_mels
+        SU = U / np.log10(1 + self.sample_rate / 700)  # Compute scaling factor
+        mel_bins = np.linspace(0, U - 1, U)  # Original mel bins
+        warped_bins = SU * np.log10(1 + mu * (10 ** (mel_bins / SU) - 1))  # Apply pitch shift transformation
+
+        # Apply cubic spline interpolation
+        interpolator = scipy.interpolate.interp1d(mel_bins, mel_spectrogram_db, axis=0, kind='cubic', fill_value="extrapolate")
+        shifted_spectrogram = interpolator(warped_bins)
+
+        # Zero out bins if μ < 1.0
+        if mu < 1.0:
+            cutoff_bin = int(mu * U)
+            shifted_spectrogram[cutoff_bin:] = -80.0  # Set to silence (approximate dB floor)
+
+        return shifted_spectrogram
+
+
+    def __call__(self, x1, x2):        
+        # Apply random augmentations
+        x1 = self.transforms(x1)
+        x2 = self.transforms(x2)
+        return x1, x2
+
 
 
 if __name__ == "__main__":    
@@ -467,15 +590,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    ds = SlakhDataset(args.sample_rate, args.segment_second, split="train")
-    for i in range(10):
-        print(ds[i][2])
+    # ds = SlakhDataset(args.sample_rate, args.segment_second, split="train")
+    # for i in range(10):
+    #     print(ds[i][2])
     
     # dm = BPDataModule(
     #     args=args,
     #     data_dir=args.data_dir, 
     # )
     # dm.setup()
+    ds = BPDataset(args.sample_rate, args.segment_second, split="train")
+    print(len(ds))
     
     
     # for tr in tqdm(dm.train_dataloader()):

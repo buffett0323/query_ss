@@ -5,13 +5,14 @@ from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Directory Paths
+seconds = 6
 input_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"  
-output_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"  
-sources = ["bass.npy", "drums.npy", "mix.npy", "other.npy", "vocals.npy"]
+output_dir = f"/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_{seconds}secs_npy"  
+sources = ["other.npy"] #["bass.npy", "drums.npy", "mix.npy", "other.npy", "vocals.npy"]
 
 # Ensure output directory exists
 os.makedirs(output_dir, exist_ok=True)
-slice_duration = 16000 * 4
+slice_duration = 16000 * seconds  # 6 seconds
 
 # # Resampling function
 # def resample_audio(audio, orig_sr=44100, target_sr=16000):
