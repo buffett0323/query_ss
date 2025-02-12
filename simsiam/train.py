@@ -11,6 +11,7 @@ import random
 import shutil
 import time
 import warnings
+import wandb
 
 import torch
 import torch.nn as nn
@@ -78,7 +79,7 @@ def main():
         # Use torch.multiprocessing.spawn to launch distributed processes: the
         # main_worker process function
         # mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
-        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args), join=True)
+        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
 
     else:
         # Simply call main_worker function
@@ -105,11 +106,20 @@ def main_worker(gpu, ngpus_per_node, args):
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank, 
-                                group_name="my_ddp_group") # Added group name
+                                world_size=args.world_size, rank=args.rank) 
+                                # group_name="my_ddp_group") # Added group name
         torch.distributed.barrier()
     
-    
+
+
+    # Only initialize WandB on the master process (rank 0)
+    if args.rank == 0 and args.log_wandb:
+        wandb.init(
+            project="SimSiam Training",
+            notes="SSBP Official Training",
+            config=vars(args),  # Store args
+        )
+        
     # create model
     print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
     model = SimSiam(
@@ -216,8 +226,11 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
 
         # Train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train_loss = train(train_loader, model, criterion, optimizer, epoch, args)
 
+        # Log only from master process
+        if args.gpu == 0 and args.log_wandb:
+            wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
 
         # Save checkpoints
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
@@ -229,6 +242,8 @@ def main_worker(gpu, ngpus_per_node, args):
                     'optimizer' : optimizer.state_dict(),
                 }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
         
+    if args.distributed:
+        dist.destroy_process_group()
     
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -270,6 +285,11 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         if i % args.print_freq == 0:
             progress.display(i)
             
+            # Log training loss per step only from GPU 0
+            if args.gpu == 0 and args.log_wandb:
+                wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
+
+    return losses.avg
 
 
 

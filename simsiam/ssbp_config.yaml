@@ -2,7 +2,7 @@
 segment_second: 4 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
+log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
 wandb_name: "SimSiam BP official params"
 need_transform: False #Wavegram will transform for us
