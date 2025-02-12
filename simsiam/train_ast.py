@@ -84,6 +84,7 @@ def main():
 
     else:
         # Simply call main_worker function
+        print("No Multiprocessing")
         main_worker(args.gpu, ngpus_per_node, args)
     
     
@@ -117,6 +118,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.rank == 0 and args.log_wandb:
         wandb.init(
             project="SimSiam Training",
+            name=args.wandb_name,
             notes="SSBP Official Training",
             config=vars(args),  # Store args
         )
@@ -139,6 +141,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # should always set the single device scope, otherwise,
         # DistributedDataParallel will use all available devices.
         if args.gpu is not None:
+            print("Setting GPU:", args.gpu)
             torch.cuda.set_device(args.gpu)
             model.cuda(args.gpu)
             # When using a single GPU per process and per

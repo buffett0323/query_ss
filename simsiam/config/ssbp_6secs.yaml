@@ -2,9 +2,9 @@
 segment_second: 6 # half in 2 seconds
 sep_model_name: "htdemucs"
 target: "chorus"
-log_wandb: False #False
+log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
-wandb_name: "SimSiam BP official params"
+wandb_name: "ast_6secs_TSPSEQ"
 need_transform: False #Wavegram will transform for us
 need_clar_transform: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
@@ -13,20 +13,20 @@ ckpt_name: "BP_WGL128_CNN14"
 
 # distributed training
 # data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_6secs_npy"
+data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
 dist_backend: 'nccl'
-multiprocessing_distributed: True
-find_unused_parameters: False
+multiprocessing_distributed: True #True
+find_unused_parameters: True # False
 workers: 24 # 24 for terra, 56 for fatcat
-gpu: [0] #[0,1,2,3]
+gpu: [0, 1, 2, 3, 4] #[0,1,2,3]
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 16 #256 #512 
+batch_size: 256 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
