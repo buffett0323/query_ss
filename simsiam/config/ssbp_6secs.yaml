@@ -4,7 +4,7 @@ sep_model_name: "htdemucs"
 target: "chorus"
 log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
-wandb_name: "SwinT_6secs_Noise_TS"
+wandb_name: "Resnet50_6secs_Clar+melspec"
 melspec_transform: True #Wavegram will transform for us
 data_augmentation: True
 random_slice: False # Random slice enhance model's ability of capturing timbre

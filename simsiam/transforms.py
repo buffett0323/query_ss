@@ -26,7 +26,6 @@ class CLARTransform(nn.Module):
         self, 
         sample_rate,
         duration,
-        n_mels=128,
     ):
         super(CLARTransform, self).__init__()
         self.sample_rate = sample_rate
@@ -39,7 +38,6 @@ class CLARTransform(nn.Module):
             self.time_shift_transform,
             self.time_stretch_transform,
         ]
-        self.n_mels = n_mels
         
     def pitch_shift_transform(self, x, n_steps=15):
         return effects.pitch_shift(x, sr=self.sample_rate, n_steps=torch.randint(low=-n_steps, high=n_steps, size=[1]).item())
@@ -152,9 +150,13 @@ class CLARTransform(nn.Module):
         # Apply augmentations
         x1 = self.add_noise_transform(x1)
         x1 = self.time_stretch_augmentation(x1)
+        # x1 = self.time_masking_transform(x1)
+        # x1 = self.time_shift_transform(x1)
         
         x2 = self.add_noise_transform(x2)
         x2 = self.time_stretch_augmentation(x2)
+        # x2 = self.time_masking_transform(x2)
+        # x2 = self.time_shift_transform(x2)
         return x1, x2
 
 

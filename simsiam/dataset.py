@@ -78,11 +78,12 @@ class BPDataset(Dataset):
 
     
     def mel_spec_transform(self, x):
-        return librosa.feature.melspectrogram(
+        mel_spec = librosa.feature.melspectrogram(
             y=x, sr=self.sample_rate, n_mels=self.n_mels, 
             n_fft=1024, hop_length=256, fmax=8000,
-        )
-        
+        )    
+        return librosa.power_to_db(mel_spec, ref=np.max)
+    
         
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)

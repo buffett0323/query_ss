@@ -147,7 +147,6 @@ def main_worker(gpu, ngpus_per_node, args):
         # should always set the single device scope, otherwise,
         # DistributedDataParallel will use all available devices.
         if args.gpu is not None:
-            print("Setting GPU:", args.gpu)
             torch.cuda.set_device(args.gpu)
             model.cuda(args.gpu)
             # When using a single GPU per process and per
@@ -214,7 +213,6 @@ def main_worker(gpu, ngpus_per_node, args):
         augment_func=CLARTransform(
             sample_rate=args.sample_rate,
             duration=int(args.segment_second/2),
-            n_mels=args.n_mels,
         ),
         n_mels=args.n_mels,
         split="train",
