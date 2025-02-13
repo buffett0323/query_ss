@@ -5,8 +5,8 @@ target: "chorus"
 log_wandb: True #False
 wandb_project_name: "SimSiam_BP"
 wandb_name: "SwinT_6secs_Noise_TS"
-need_transform: False #Wavegram will transform for us
-need_clar_transform: True
+melspec_transform: True #Wavegram will transform for us
+data_augmentation: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
 ckpt_name: "BP_WGL128_CNN14"
 
@@ -40,6 +40,7 @@ pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
 print_freq: 20
+arch: "resnet50"
 
 # dataset options
 max_length: 64

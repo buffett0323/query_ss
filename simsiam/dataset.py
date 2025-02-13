@@ -13,6 +13,7 @@ import numpy as np
 import torch.nn as nn
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
+import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torchaudio.transforms import MelSpectrogram
 from pytorch_lightning import LightningDataModule
@@ -21,8 +22,8 @@ from librosa import effects
 from tqdm import tqdm
 from torchaudio.functional import pitch_shift
 
-from utils import yaml_config_hook, train_test_split_BPDataset
 from transforms import CLARTransform, AudioFXAugmentation
+from utils import yaml_config_hook, train_test_split_BPDataset
 
 # Beatport Dataset
 class BPDataset(Dataset):
@@ -31,9 +32,11 @@ class BPDataset(Dataset):
         sample_rate,
         duration,
         data_dir,
+        augment_func,
         n_mels=128,
         split="train",
-        need_transform=True,
+        melspec_transform=False,
+        data_augmentation=True,
         random_slice=True,
         stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
     ):
@@ -59,44 +62,49 @@ class BPDataset(Dataset):
                 for stem in stems
         ]
         
-        self.transform = AudioFXAugmentation( #CLARTransform(
-            sample_rate=sample_rate,
-            duration=int(duration/2),
-            n_mels=n_mels,
-        )
+        self.augment_func = augment_func # CLARTransform
         self.sample_rate = sample_rate
         self.duration = duration
+        self.n_mels = n_mels
         self.slice_duration = sample_rate * duration
         self.split = split
-        self.need_transform = need_transform
+        self.melspec_transform = melspec_transform
+        self.data_augmentation = data_augmentation
         self.random_slice = random_slice
-
     
     def get_label(self, folder, stem):
         style = self.class_dict[folder.split('_')[0]]
         return self.labels.index(style) * len(self.stems) + self.stems.index(stem)
 
     
+    def mel_spec_transform(self, x):
+        return librosa.feature.melspectrogram(
+            y=x, sr=self.sample_rate, n_mels=self.n_mels, 
+            n_fft=1024, hop_length=256, fmax=8000,
+        )
+        
+        
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
     
-
+    
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
         x = np.load(path)
-        if self.split == "test":
-            return x[int(x.shape[0]/4) : int(x.shape[0]*3/4)], \
-                torch.tensor(self.label_list[idx], dtype=torch.int64)
         
-        # Augmentation for training
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
-        if self.need_transform:
-            x_i, x_j = self.transform(x_i, x_j)
+        # Augmentation for training
+        if self.data_augmentation:
+            x_i, x_j = self.augment_func(x_i, x_j)
+            
+        if self.melspec_transform:
+            x_i, x_j = self.mel_spec_transform(x_i), self.mel_spec_transform(x_j)
+            
+        x_i = torch.tensor(x_i, dtype=torch.float32)
+        x_j = torch.tensor(x_j, dtype=torch.float32)
         
-        return torch.tensor(x_i, dtype=torch.float32), \
-                torch.tensor(x_j, dtype=torch.float32), \
-                torch.tensor(self.label_list[idx], dtype=torch.int64)
+        return x_i, x_j, torch.tensor(self.label_list[idx], dtype=torch.int64)
 
 
 class BPDataModule(LightningDataModule):
@@ -211,7 +219,24 @@ if __name__ == "__main__":
     #     print(ds[i][2])
     
     
-    train_dataset = BPDataset(args.sample_rate, args.segment_second, data_dir=args.data_dir, split="train", n_mels=128)
+    train_dataset = BPDataset(
+        sample_rate=args.sample_rate, 
+        duration=args.segment_second, 
+        data_dir=args.data_dir,
+        augment_func=CLARTransform(
+            sample_rate=args.sample_rate,
+            duration=int(args.segment_second/2),
+            n_mels=args.n_mels,
+        ),
+        n_mels=args.n_mels,
+        split="train",
+        melspec_transform=args.melspec_transform,
+        data_augmentation=args.data_augmentation,
+        resize=True,
+        resize_target_size=224,
+        random_slice=False,
+        stems=['other'],
+    )
     ts = train_dataset[0]
     print(ts[0].shape, ts[1].shape, ts[2])
     # train_loader = torch.utils.data.DataLoader(

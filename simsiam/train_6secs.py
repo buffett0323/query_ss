@@ -22,22 +22,23 @@ import torch.distributed as dist
 import torch.optim
 import torch.multiprocessing as mp
 import torch.utils.data
+import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
 from model import SimSiam
-from dataset import BPDataModule, BPDataset
+from dataset import BPDataset, BPDataModule
+from transforms import CLARTransform, AudioFXAugmentation
+import simsiam.builder
 
+model_names = sorted(name for name in models.__dict__
+    if name.islower() and not name.startswith("__")
+    and callable(models.__dict__[name]))
 
 torch.set_float32_matmul_precision('high')
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings(
-    "ignore",
-    message="`training_step` returned `None`. If this was on purpose, ignore this warning...",
-    category=UserWarning,
-)
 
 
 def main():
@@ -125,12 +126,16 @@ def main_worker(gpu, ngpus_per_node, args):
         )
         
     # create model
-    print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
-    model = SimSiam(
-        args=args,
-        dim=args.dim,
-        pred_dim=args.pred_dim,
-    )
+    # print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
+    # model = SimSiam(
+    #     args=args,
+    #     dim=args.dim,
+    #     pred_dim=args.pred_dim,
+    # )
+    print("=> creating model '{}'".format(args.arch))
+    model = simsiam.builder.SimSiam(
+        models.__dict__[args.arch],
+        args.dim, args.pred_dim)
 
     # infer learning rate before changing batch size
     init_lr = args.lr * args.batch_size / 256
@@ -206,9 +211,16 @@ def main_worker(gpu, ngpus_per_node, args):
         sample_rate=args.sample_rate, 
         duration=args.segment_second, 
         data_dir=args.data_dir,
+        augment_func=CLARTransform(
+            sample_rate=args.sample_rate,
+            duration=int(args.segment_second/2),
+            n_mels=args.n_mels,
+        ),
+        n_mels=args.n_mels,
         split="train",
+        melspec_transform=args.melspec_transform,
+        data_augmentation=args.data_augmentation,
         random_slice=False,
-        need_transform=True,
         stems=['other'],
     )
     

@@ -6,7 +6,8 @@
 
 import torch
 import torch.nn as nn
-
+import torchvision.models as models
+import torchvision.transforms as transforms
 
 class SimSiam(nn.Module):
     """
@@ -22,6 +23,7 @@ class SimSiam(nn.Module):
         # create the encoder
         # num_classes is the output fc dimension, zero-initialize last BNs
         self.encoder = base_encoder(num_classes=dim, zero_init_residual=True)
+        self.encoder.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
         # build a 3-layer projector
         prev_dim = self.encoder.fc.weight.shape[1]
@@ -50,6 +52,10 @@ class SimSiam(nn.Module):
             p1, p2, z1, z2: predictors and targets of the network
             See Sec. 3 of https://arxiv.org/abs/2011.10566 for detailed notations
         """
+        transform_rs = transforms.Resize((224, 224))
+        x1 = transform_rs(x1.unsqueeze(1))
+        x2 = transform_rs(x2.unsqueeze(1))
+        
 
         # compute features for one view
         z1 = self.encoder(x1) # NxC
@@ -60,52 +66,11 @@ class SimSiam(nn.Module):
 
         return p1, p2, z1.detach(), z2.detach()
     
+if __name__ == "__main__":
     
-# class SimSiam(nn.Module):
-#     def __init__(
-#         self, 
-#         args,
-#         dim=2048, 
-#         pred_dim=512,
-#     ):
-#         """
-#         dim: feature dimension (default: 2048)
-#         pred_dim: hidden dimension of the predictor (default: 512)
-#         """
-#         super(SimSiam, self).__init__()
-#         self.args = args
-#         # create the encoder
-#         # num_classes is the output fc dimension, zero-initialize last BNs
-#         self.encoder = Wavegram_Logmel128_Cnn14(
-#             sample_rate=self.args.sample_rate, 
-#             window_size=self.args.window_size, 
-#             hop_size=self.args.hop_length, 
-#             mel_bins=128, #self.args.n_mels, 
-#             fmin=self.args.fmin,
-#             fmax=self.args.fmax,
-#             classes_num=dim, #n_features,
-#         ) # base_encoder(num_classes=dim, zero_init_residual=True)
-        
-
-#         # build a 3-layer projector
-#         prev_dim = self.encoder.fc1.weight.shape[1]
-#         self.encoder.fc1 = nn.Sequential(
-#             nn.Linear(prev_dim, prev_dim, bias=False),
-#             nn.BatchNorm1d(prev_dim),
-#             nn.ReLU(inplace=True), # first layer
-#             nn.Linear(prev_dim, prev_dim, bias=False),
-#             nn.BatchNorm1d(prev_dim),
-#             nn.ReLU(inplace=True), # second layer
-#             self.encoder.fc1, # self.fc1 = nn.Linear(2048, classes_num, bias=True)
-#             nn.BatchNorm1d(dim, affine=False),
-#         ) # output layer
-#         self.encoder.fc1[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
-
-
-#         # build a 2-layer predictor
-#         self.predictor = nn.Sequential(
-#             nn.Linear(dim, pred_dim, bias=False),
-#             nn.BatchNorm1d(pred_dim),
-#             nn.ReLU(inplace=True), # hidden layer
-#             nn.Linear(pred_dim, dim),    
-#         ) # output layer
+    model_names = sorted(name for name in models.__dict__
+        if name.islower() and not name.startswith("__")
+        and callable(models.__dict__[name]))
+    model = SimSiam( models.__dict__['resnet50'])
+    print(model.encoder)
+    

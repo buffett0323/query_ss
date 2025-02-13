@@ -21,8 +21,6 @@ from torchaudio.functional import pitch_shift
 from utils import yaml_config_hook
 
 
-
-
 class CLARTransform(nn.Module):
     def __init__(
         self, 
