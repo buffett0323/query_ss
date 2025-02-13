@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import torchvision.transforms as transforms
 import pytorch_lightning as pl
 
 from torch.optim.lr_scheduler import LambdaLR
@@ -326,6 +327,10 @@ class SimSiam(nn.Module):
         """
         Forward pass for SimSiam model.
         """
+        transform_rs = transforms.Resize((256, 256))
+        x1 = transform_rs(x1)
+        x2 = transform_rs(x2)
+        
         # Compute features for both views
         z1 = self.projector(self.encoder(x1))  # NxC
         z2 = self.projector(self.encoder(x2))  # NxC

@@ -20,49 +20,34 @@ from typing import Optional
 from librosa import effects
 from tqdm import tqdm
 from torchaudio.functional import pitch_shift
-
 from utils import yaml_config_hook, train_test_split_BPDataset
-from transforms import CLARTransform, AudioFXAugmentation
+
 
 # Beatport Dataset
-class BPDataset(Dataset):
+class SlakhDataset(Dataset):
     def __init__(
         self,
         sample_rate,
         duration,
-        data_dir,
-        n_mels=128,
+        data_dir="/mnt/gestalt/home/ddmanddman/slakh2100_buffett/",
         split="train",
         need_transform=True,
         random_slice=True,
-        stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
     ):
         # Load split files from txt file
-        with open(f"info/{split}_bp.txt", "r") as f:
-            bp_listdir = [line.strip() for line in f.readlines()]
-            
-        with open("info/labels.txt", "r") as f:
+        self.data_dir = os.path.join(data_dir, split)
+        self.data_path_list = [
+            os.path.join(self.data_dir, folder, file)
+            for folder in os.listdir(self.data_dir)
+                for file in os.listdir(os.path.join(self.data_dir, folder))
+                    if file.endswith(".npy")
+        ]
+        with open("info/slakh_label.txt", "r") as f:
             self.labels = [line.strip() for line in f.readlines()]
             
-        with open("info/class_dict.json", "r", encoding="utf-8") as f:
-            self.class_dict = json.load(f)
-
-        self.stems = stems
-        self.data_path_list = [
-            os.path.join(data_dir, folder, f"{stem}.npy")
-            for folder in bp_listdir
-                for stem in stems
-        ]
-        self.label_list = [
-            self.get_label(folder, stem)
-            for folder in bp_listdir
-                for stem in stems
-        ]
-        
-        self.transform = AudioFXAugmentation( #CLARTransform(
+        self.transform = CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
-            n_mels=n_mels,
         )
         self.sample_rate = sample_rate
         self.duration = duration
@@ -71,41 +56,39 @@ class BPDataset(Dataset):
         self.need_transform = need_transform
         self.random_slice = random_slice
 
-    
-    def get_label(self, folder, stem):
-        style = self.class_dict[folder.split('_')[0]]
-        return self.labels.index(style) * len(self.stems) + self.stems.index(stem)
 
-    
-    def __len__(self): #""" Total we got 175698 files * 4 tracks """
+    def __len__(self):
         return len(self.data_path_list)
     
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
+        label = self.labels.index(path.split('/')[-1].split('.npy')[0])
+        
         x = np.load(path)
+        
         if self.split == "test":
             return x[int(x.shape[0]/4) : int(x.shape[0]*3/4)], \
-                torch.tensor(self.label_list[idx], dtype=torch.int64)
+                torch.tensor(label, dtype=torch.int64)
         
         # Augmentation for training
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
         
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
-        
+
         return torch.tensor(x_i, dtype=torch.float32), \
                 torch.tensor(x_j, dtype=torch.float32), \
-                torch.tensor(self.label_list[idx], dtype=torch.int64)
+                torch.tensor(label, dtype=torch.int64)
 
 
-class BPDataModule(LightningDataModule):
+class SlakhDataModule(LightningDataModule):
     def __init__(
         self,
         args,
         data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy", 
     ):
-        super(BPDataModule, self).__init__()
+        super(SlakhDataModule, self).__init__()
         self.args = args
         self.data_dir = data_dir
         self.pin_memory = args.pin_memory
@@ -114,7 +97,7 @@ class BPDataModule(LightningDataModule):
         
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
-        self.train_ds = BPDataset(
+        self.train_ds = SlakhDataset(
             sample_rate=self.args.sample_rate,
             duration=self.args.segment_second,
             data_dir=self.data_dir,
@@ -122,15 +105,15 @@ class BPDataModule(LightningDataModule):
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
         )   
-        self.val_ds = BPDataset(
+        self.val_ds = SlakhDataset(
             sample_rate=self.args.sample_rate,
             duration=self.args.segment_second,
             data_dir=self.data_dir,
-            split="valid",
+            split="validation",
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
         )
-        self.test_ds = BPDataset(
+        self.test_ds = SlakhDataset(
             sample_rate=self.args.sample_rate,
             duration=self.args.segment_second,
             data_dir=self.data_dir,
@@ -138,11 +121,11 @@ class BPDataModule(LightningDataModule):
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
         )
-        self.memory_ds = BPDataset(
+        self.memory_ds = SlakhDataset(
             sample_rate=self.args.sample_rate,
             duration=self.args.segment_second,
             data_dir=self.data_dir,
-            split="memory",
+            split="train",
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
         )
@@ -193,35 +176,3 @@ class BPDataModule(LightningDataModule):
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
         return len(self.train_ds)
-
-
-
-
-if __name__ == "__main__":    
-    parser = argparse.ArgumentParser(description="SimCLR_BP")
-
-    config = yaml_config_hook("config/ssbp_6secs.yaml")
-    for k, v in config.items():
-        parser.add_argument(f"--{k}", default=v, type=type(v))
-
-    args = parser.parse_args()
-    
-    # ds = SlakhDataset(args.sample_rate, args.segment_second, split="train")
-    # for i in range(10):
-    #     print(ds[i][2])
-    
-    
-    train_dataset = BPDataset(args.sample_rate, args.segment_second, data_dir=args.data_dir, split="train", n_mels=128)
-    ts = train_dataset[0]
-    print(ts[0].shape, ts[1].shape, ts[2])
-    # train_loader = torch.utils.data.DataLoader(
-    #     train_dataset, batch_size=4, shuffle=True,
-    #     num_workers=args.workers, pin_memory=True, drop_last=True)
-    
-    # for ds in train_loader:
-    #     print(ds[0].shape, ds[1].shape) # 256, 128, 94
-    #     break
-    
-    
-    # for tr in tqdm(dm.train_dataloader()):
-    #     pass; #print(tr[0].shape)
