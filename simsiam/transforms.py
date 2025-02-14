@@ -149,12 +149,12 @@ class CLARTransform(nn.Module):
     def __call__(self, x1, x2):
         # Apply augmentations
         x1 = self.add_noise_transform(x1)
-        # x1 = self.time_stretch_augmentation(x1)
+        x1 = self.time_stretch_augmentation(x1)
         # x1 = self.time_masking_transform(x1)
         # x1 = self.time_shift_transform(x1)
         
         x2 = self.add_noise_transform(x2)
-        # x2 = self.time_stretch_augmentation(x2)
+        x2 = self.time_stretch_augmentation(x2)
         # x2 = self.time_masking_transform(x2)
         # x2 = self.time_shift_transform(x2)
         return x1, x2

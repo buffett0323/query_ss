@@ -45,7 +45,7 @@ def main():
     # Loading args
     parser = argparse.ArgumentParser(description="SimSiam")
 
-    config = yaml_config_hook("config/ssbp_6secs.yaml")
+    config = yaml_config_hook("config/ssbp_resnet50.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -119,9 +119,9 @@ def main_worker(gpu, ngpus_per_node, args):
     # Only initialize WandB on the master process (rank 0)
     if args.rank == 0 and args.log_wandb:
         wandb.init(
-            project="SimSiam Training",
+            project=args.wandb_project_name,
             name=args.wandb_name,
-            notes="SSBP Official Training",
+            notes=args.wandb_notes,
             config=vars(args),  # Store args
         )
         
@@ -134,7 +134,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # )
     print("=> creating model '{}'".format(args.arch))
     model = simsiam.builder.SimSiam(
-        models.__dict__[args.arch],
+        models.__dict__[args.arch], args,
         args.dim, args.pred_dim)
 
     # infer learning rate before changing batch size
@@ -208,17 +208,20 @@ def main_worker(gpu, ngpus_per_node, args):
     # Loading dataset
     train_dataset = BPDataset(
         sample_rate=args.sample_rate, 
-        duration=args.segment_second, 
+        segment_second=args.segment_second, 
+        piece_second=args.piece_second,
         data_dir=args.data_dir,
         augment_func=CLARTransform(
             sample_rate=args.sample_rate,
-            duration=int(args.segment_second/2),
+            duration=int(args.piece_second),
         ),
         n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
-        random_slice=False,
+        random_slice=args.random_slice,
         stems=['other'],
     )
     
@@ -274,7 +277,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j, _) in enumerate(train_loader):
+    for i, (x_i, x_j) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 

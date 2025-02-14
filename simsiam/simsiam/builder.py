@@ -8,17 +8,32 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 import torchvision.transforms as transforms
+import torchaudio.transforms as T
+
 
 class SimSiam(nn.Module):
     """
     Build a SimSiam model.
     """
-    def __init__(self, base_encoder, dim=2048, pred_dim=512):
+    def __init__(self, base_encoder, args, dim=2048, pred_dim=512):
         """
         dim: feature dimension (default: 2048)
         pred_dim: hidden dimension of the predictor (default: 512)
         """
         super(SimSiam, self).__init__()
+        self.args = args
+        
+        
+        # ** Melspec Transform **
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=self.args.sample_rate,
+            n_mels=self.args.n_mels,
+            n_fft=self.args.n_fft,
+            hop_length=self.args.hop_length,
+            f_max=self.args.fmax,
+        )
+        self.db_transform = T.AmplitudeToDB(stype="power")
+        
 
         # create the encoder
         # num_classes is the output fc dimension, zero-initialize last BNs
@@ -42,6 +57,13 @@ class SimSiam(nn.Module):
                                         nn.BatchNorm1d(pred_dim),
                                         nn.ReLU(inplace=True), # hidden layer
                                         nn.Linear(pred_dim, dim)) # output layer
+    
+    
+    def do_mel_transform(self, x):
+        # Convert waveform to mel spectrogram and apply dB scaling
+        mel_spec = self.mel_transform(x)
+        return self.db_transform(mel_spec)
+    
 
     def forward(self, x1, x2):
         """
@@ -52,10 +74,13 @@ class SimSiam(nn.Module):
             p1, p2, z1, z2: predictors and targets of the network
             See Sec. 3 of https://arxiv.org/abs/2011.10566 for detailed notations
         """
+        # Mel-transform the input waveforms
+        x1 = self.do_mel_transform(x1)
+        x2 = self.do_mel_transform(x2)
+        
         transform_rs = transforms.Resize((224, 224))
         x1 = transform_rs(x1.unsqueeze(1))
         x2 = transform_rs(x2.unsqueeze(1))
-        
 
         # compute features for one view
         z1 = self.encoder(x1) # NxC

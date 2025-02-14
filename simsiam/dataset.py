@@ -132,14 +132,12 @@ class BPDataset(Dataset):
         if self.data_augmentation:
             x_i, x_j = self.augment_func(x_i, x_j)
             
-        # Mel-spectrogram
+        # Mel-spectrogram and add channel
         if self.melspec_transform:
             x_i, x_j = self.mel_spec_transform(x_i), self.mel_spec_transform(x_j)
+            return torch.tensor(x_i, dtype=torch.float32).unsqueeze(0), torch.tensor(x_j, dtype=torch.float32).unsqueeze(0)
             
-        # Adding channel
-        x_i = torch.tensor(x_i, dtype=torch.float32).unsqueeze(0)
-        x_j = torch.tensor(x_j, dtype=torch.float32).unsqueeze(0)
-        return x_i, x_j #, label
+        return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
 
 
 class BPDataModule(LightningDataModule):
@@ -243,7 +241,7 @@ class BPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_swint.yaml")
+    config = yaml_config_hook("config/ssbp_resnet50.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -281,6 +279,7 @@ if __name__ == "__main__":
         num_workers=args.workers, pin_memory=True, drop_last=True)
     
     for ds in tqdm(train_loader):
+        print(ds[0].shape, ds[1].shape)
         pass
     
     
