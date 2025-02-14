@@ -5,7 +5,7 @@ from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Directory Paths
-seconds = 6
+seconds = 8
 input_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"  
 output_dir = f"/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_{seconds}secs_npy"  
 sources = ["other.npy"] #["bass.npy", "drums.npy", "mix.npy", "other.npy", "vocals.npy"]
