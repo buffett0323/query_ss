@@ -209,7 +209,7 @@ class BPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="SimCLR_BP")
 
-    config = yaml_config_hook("config/ssbp_6secs.yaml")
+    config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -227,14 +227,11 @@ if __name__ == "__main__":
         augment_func=CLARTransform(
             sample_rate=args.sample_rate,
             duration=int(args.segment_second/2),
-            n_mels=args.n_mels,
         ),
         n_mels=args.n_mels,
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
-        resize=True,
-        resize_target_size=224,
         random_slice=False,
         stems=['other'],
     )

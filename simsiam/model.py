@@ -35,7 +35,7 @@ class SimSiam(nn.Module):
             self.encoder.fc1 = nn.Identity() 
         
         elif self.args.encoder_name == "SwinTransformer":
-            self.encoder = SwinTransformer(img_size=256, window_size=8, in_chans=1, num_classes=0)
+            self.encoder = SwinTransformer(img_size=224, window_size=7, in_chans=1, num_classes=0)
             prev_dim = self.encoder.num_features
             # num_classes = 0 --> self.head = nn.Identity
             
@@ -69,9 +69,9 @@ class SimSiam(nn.Module):
         """
         Forward pass for SimSiam model.
         """
-        transform_rs = transforms.Resize((256, 256))
-        x1 = transform_rs(x1).unsqueeze(1)
-        x2 = transform_rs(x2).unsqueeze(1)
+        # transform_rs = transforms.Resize((256, 256))
+        # x1 = transform_rs(x1).unsqueeze(1)
+        # x2 = transform_rs(x2).unsqueeze(1)
         
         # Compute features for both views
         z1 = self.projector(self.encoder(x1))  # NxC
