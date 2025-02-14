@@ -43,9 +43,9 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 def main():
     # Loading args
-    parser = argparse.ArgumentParser(description="SimSiam")
+    parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_6secs.yaml")
+    config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -119,9 +119,9 @@ def main_worker(gpu, ngpus_per_node, args):
     # Only initialize WandB on the master process (rank 0)
     if args.rank == 0 and args.log_wandb:
         wandb.init(
-            project="SimSiam Training",
+            project=args.wandb_project_name,
             name=args.wandb_name,
-            notes="SSBP Official Training",
+            notes=args.wandb_notes,
             config=vars(args),  # Store args
         )
         
@@ -132,10 +132,6 @@ def main_worker(gpu, ngpus_per_node, args):
         dim=args.dim,
         pred_dim=args.pred_dim,
     )
-    # print("=> creating model '{}'".format(args.arch))
-    # model = simsiam.builder.SimSiam(
-    #     models.__dict__[args.arch],
-    #     args.dim, args.pred_dim)
 
     # infer learning rate before changing batch size
     init_lr = args.lr * args.batch_size / 256
@@ -208,13 +204,16 @@ def main_worker(gpu, ngpus_per_node, args):
     # Loading dataset
     train_dataset = BPDataset(
         sample_rate=args.sample_rate, 
-        duration=args.segment_second, 
+        segment_second=args.segment_second, 
+        piece_second=args.piece_second,
         data_dir=args.data_dir,
         augment_func=CLARTransform(
             sample_rate=args.sample_rate,
-            duration=int(args.segment_second/2),
+            duration=int(args.piece_second),
         ),
         n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
@@ -222,15 +221,14 @@ def main_worker(gpu, ngpus_per_node, args):
         stems=['other'],
     )
     
-    
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
         train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
+        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), sampler=train_sampler,
+        num_workers=args.workers, pin_memory=args.pin_memory, drop_last=args.drop_last)
 
 
     

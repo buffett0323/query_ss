@@ -1,31 +1,31 @@
 # Pre-process
-segment_second: 6 # half in 2 seconds
-sep_model_name: "htdemucs"
-target: "chorus"
-log_wandb: True #False
-wandb_project_name: "SimSiam_BP"
-wandb_name: "SwinT+6secs+noise+melspec"
-melspec_transform: True #Wavegram will transform for us
-data_augmentation: True
-random_slice: False # Random slice enhance model's ability of capturing timbre
+segment_second: 8 # half in 2 seconds
+piece_second: 3
+log_wandb: False #False
+wandb_project_name: "SimSiam Training"
+wandb_name: "SwinT+3/8secs+noise+melspec"
+wandb_notes: "SSBP Swin Transformer Training"
 
 
 # distributed training
 # data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
-data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_4secs_npy"
+data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
 dist_backend: 'nccl'
 multiprocessing_distributed: True #True
 find_unused_parameters: False # False
+melspec_transform: True #Wavegram will transform for us
+data_augmentation: True
+random_slice: False # Random slice enhance model's ability of capturing timbre
 workers: 24 # 24 for terra, 56 for fatcat
 gpu: [0, 1, 2, 3] #[0,1,2,3]
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #256 #512 
+batch_size: 8 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -43,23 +43,24 @@ print_freq: 20
 
 # dataset options
 max_length: 64
-n_fft: 2048 #2048
-hop_length: 250 #320 #512 #1024
+n_fft: 1024 #2048
+hop_length: 188 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
 n_mels: 256 #128
+img_size: 256
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True
 drop_last: True #False
 persistent_workers: True
 
+
 # model options
 encoder_name: "SwinTransformer" #"Wavegram_Logmel128_Cnn14"
 channels: 1
-encoder_output_dim: 512
-projection_dim: 128
 model_dict_save_dir: "./model_dict"
+
 
 # loss options
 optimizer: "Adam" # or LARS (experimental)

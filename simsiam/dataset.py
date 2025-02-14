@@ -30,9 +30,12 @@ class BPDataset(Dataset):
     def __init__(
         self,
         sample_rate,
-        duration,
+        segment_second,
         data_dir,
         augment_func,
+        piece_second=3,
+        n_fft=1024,
+        hop_length=320,
         n_mels=128,
         split="train",
         melspec_transform=False,
@@ -62,15 +65,20 @@ class BPDataset(Dataset):
                 for stem in stems
         ]
         
-        self.augment_func = augment_func # CLARTransform
+        
         self.sample_rate = sample_rate
-        self.duration = duration
+        self.segment_second = segment_second
+        self.duration = sample_rate * piece_second # 3 seconds for each piece
+        self.augment_func = augment_func # CLARTransform
+        self.n_fft = n_fft
+        self.hop_length = hop_length
         self.n_mels = n_mels
-        self.slice_duration = sample_rate * duration
         self.split = split
         self.melspec_transform = melspec_transform
         self.data_augmentation = data_augmentation
         self.random_slice = random_slice
+        
+    
     
     def get_label(self, folder, stem):
         style = self.class_dict[folder.split('_')[0]]
@@ -80,7 +88,7 @@ class BPDataset(Dataset):
     def mel_spec_transform(self, x):
         mel_spec = librosa.feature.melspectrogram(
             y=x, sr=self.sample_rate, n_mels=self.n_mels, 
-            n_fft=1024, hop_length=256, fmax=8000,
+            n_fft=self.n_fft, hop_length=self.hop_length, fmax=8000,
         )    
         return librosa.power_to_db(mel_spec, ref=np.max)
     
@@ -91,21 +99,28 @@ class BPDataset(Dataset):
     
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
+        lbl = self.label_list[idx]
+        
+        # Read data and segment
         x = np.load(path)
+        f1 = int(random.uniform(0, 2.5) * x.shape[0] / self.segment_second)
+        f2 = int(random.uniform(2.5, 5) * x.shape[0] / self.segment_second)
+        x_i, x_j = x[f1: f1+self.duration], x[f2: f2+self.duration]
         
-        x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
-        
-        # Augmentation for training
+        # Augmentation
         if self.data_augmentation:
             x_i, x_j = self.augment_func(x_i, x_j)
             
+        # Mel-spectrogram
         if self.melspec_transform:
             x_i, x_j = self.mel_spec_transform(x_i), self.mel_spec_transform(x_j)
             
-        x_i = torch.tensor(x_i, dtype=torch.float32)
-        x_j = torch.tensor(x_j, dtype=torch.float32)
+        # Adding channel
+        x_i = torch.tensor(x_i, dtype=torch.float32).unsqueeze(0)
+        x_j = torch.tensor(x_j, dtype=torch.float32).unsqueeze(0)
+        label = torch.tensor(lbl, dtype=torch.int64)
         
-        return x_i, x_j, torch.tensor(self.label_list[idx], dtype=torch.int64)
+        return x_i, x_j, label
 
 
 class BPDataModule(LightningDataModule):
@@ -207,7 +222,7 @@ class BPDataModule(LightningDataModule):
 
 
 if __name__ == "__main__":    
-    parser = argparse.ArgumentParser(description="SimCLR_BP")
+    parser = argparse.ArgumentParser(description="Simsiam_BP")
 
     config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
@@ -219,16 +234,18 @@ if __name__ == "__main__":
     # for i in range(10):
     #     print(ds[i][2])
     
-    
     train_dataset = BPDataset(
         sample_rate=args.sample_rate, 
-        duration=args.segment_second, 
+        segment_second=args.segment_second, 
+        piece_second=args.piece_second,
         data_dir=args.data_dir,
         augment_func=CLARTransform(
             sample_rate=args.sample_rate,
             duration=int(args.segment_second/2),
         ),
         n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
@@ -236,15 +253,28 @@ if __name__ == "__main__":
         stems=['other'],
     )
     ts = train_dataset[0]
-    print(ts[0].shape, ts[1].shape, ts[2])
-    # train_loader = torch.utils.data.DataLoader(
-    #     train_dataset, batch_size=4, shuffle=True,
-    #     num_workers=args.workers, pin_memory=True, drop_last=True)
     
-    # for ds in train_loader:
-    #     print(ds[0].shape, ds[1].shape) # 256, 128, 94
-    #     break
     
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=4, shuffle=True,
+        num_workers=args.workers, pin_memory=True, drop_last=True)
+    
+    for ds in train_loader:
+        print(ds[0].shape, ds[1].shape) # 256, 128, 94
+        break
+    
+    
+    
+    # t = torch.randn([16, 48000]).numpy()
+    # tt = librosa.feature.melspectrogram(
+    #     y=t, sr=args.sample_rate, n_mels=args.n_mels, 
+    #     n_fft=args.n_fft, hop_length=args.hop_length, fmax=8000,
+    # )    
+    # ttt = librosa.power_to_db(tt, ref=np.max)
+    # print(ttt.shape)
+    
+    
+   
     
     # for tr in tqdm(dm.train_dataloader()):
     #     pass; #print(tr[0].shape)
