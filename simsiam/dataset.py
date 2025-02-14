@@ -77,7 +77,23 @@ class BPDataset(Dataset):
         self.melspec_transform = melspec_transform
         self.data_augmentation = data_augmentation
         self.random_slice = random_slice
+    
+    
+    def random_sample(self, audio_length):
+        # TODO: minimum repetivie 1.5 seconds (x), maximum 5 seconds (v)
+        f1 = random.randint(0, audio_length - self.duration)
         
+        # Define valid range for f2 relative to f1
+        min_offset = self.sample_rate * 1.5
+        max_offset = self.sample_rate * 5
+
+        # Ensure f2 stays within bounds
+        min_f2 = max(0, f1 - max_offset)
+        max_f2 = min(audio_length - self.duration, f1 + max_offset)
+
+        # Directly sample f2 within valid range
+        f2 = random.randint(min_f2, max_f2)
+        return f1, f2
     
     
     def get_label(self, folder, stem):
@@ -99,13 +115,18 @@ class BPDataset(Dataset):
     
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
-        lbl = self.label_list[idx]
         
         # Read data and segment
         x = np.load(path)
-        f1 = int(random.uniform(0, 2.5) * x.shape[0] / self.segment_second)
-        f2 = int(random.uniform(2.5, 5) * x.shape[0] / self.segment_second)
-        x_i, x_j = x[f1: f1+self.duration], x[f2: f2+self.duration]
+        audio_length = x.shape[0]
+
+        # Random Crop for 3 seconds
+        if self.random_slice:
+            f1, f2 = self.random_sample(audio_length)
+            x_i, x_j = x[f1: f1+self.duration], x[f2: f2+self.duration]
+        else:
+            x_i, x_j = x[:int(audio_length/2)], x[int(audio_length/2):]
+        
         
         # Augmentation
         if self.data_augmentation:
@@ -118,9 +139,7 @@ class BPDataset(Dataset):
         # Adding channel
         x_i = torch.tensor(x_i, dtype=torch.float32).unsqueeze(0)
         x_j = torch.tensor(x_j, dtype=torch.float32).unsqueeze(0)
-        label = torch.tensor(lbl, dtype=torch.int64)
-        
-        return x_i, x_j, label
+        return x_i, x_j #, label
 
 
 class BPDataModule(LightningDataModule):
@@ -241,7 +260,7 @@ if __name__ == "__main__":
         data_dir=args.data_dir,
         augment_func=CLARTransform(
             sample_rate=args.sample_rate,
-            duration=int(args.segment_second/2),
+            duration=int(args.piece_second),
         ),
         n_mels=args.n_mels,
         n_fft=args.n_fft,
@@ -249,19 +268,20 @@ if __name__ == "__main__":
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
-        random_slice=False,
+        random_slice=args.random_slice,
         stems=['other'],
     )
-    ts = train_dataset[0]
+
+    # for i in range(10):
+    #     print(train_dataset[i][0].shape, train_dataset[i][1].shape)
     
     
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=4, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
     
-    for ds in train_loader:
-        print(ds[0].shape, ds[1].shape) # 256, 128, 94
-        break
+    for ds in tqdm(train_loader):
+        pass
     
     
     

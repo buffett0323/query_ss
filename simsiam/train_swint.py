@@ -217,7 +217,7 @@ def main_worker(gpu, ngpus_per_node, args):
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
-        random_slice=False,
+        random_slice=args.random_slice,
         stems=['other'],
     )
     
@@ -272,7 +272,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j, _) in enumerate(train_loader):
+    for i, (x_i, x_j) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
