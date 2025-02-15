@@ -12,33 +12,6 @@ from swin_transformer import SwinTransformer
 from utils import *
 
 
-class MelSpecTransform:
-    def __init__(self, sample_rate=16000, n_mels=128, n_fft=1024, hop_length=512, fmax=8000, device="cuda"):
-        self.mel_transform = T.MelSpectrogram(
-            sample_rate=sample_rate,
-            n_mels=n_mels,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            f_max=fmax
-        ).to(device)  # Move transform to GPU for speed
-
-        self.db_transform = T.AmplitudeToDB(stype="power").to(device)  # Convert power spectrogram to dB
-
-    def __call__(self, x):
-        """
-        x: Tensor of shape (samples,) on the same device as self.mel_transform
-        Returns: Tensor of shape (n_mels, T) in dB scale
-        """
-        if not isinstance(x, torch.Tensor):
-            x = torch.tensor(x, dtype=torch.float32)  # Convert NumPy array to Tensor
-        x = x.to(self.mel_transform.device)  # Move to same device as transform
-
-        # Convert waveform to mel spectrogram and apply dB scaling
-        mel_spec = self.mel_transform(x)
-        mel_spec_db = self.db_transform(mel_spec)
-        return mel_spec_db
-
-
 class SimSiam(nn.Module):
     """
     SimSiam model with Wavegram_Logmel128_Cnn14 as the encoder.
@@ -111,7 +84,7 @@ class SimSiam(nn.Module):
     def do_mel_transform(self, x):
         # Convert waveform to mel spectrogram and apply dB scaling
         mel_spec = self.mel_transform(x)
-        return self.db_transform(mel_spec)
+        return self.db_transform(mel_spec).unsqueeze(1)
     
 
     def forward(self, x1, x2):
@@ -119,8 +92,8 @@ class SimSiam(nn.Module):
         Forward pass for SimSiam model.
         """
         # Mel-transform the input waveforms
-        # x1 = self.do_mel_transform(x1)
-        # x2 = self.do_mel_transform(x2)
+        x1 = self.do_mel_transform(x1)
+        x2 = self.do_mel_transform(x2)
         
         # Compute features for both views
         z1 = self.projector(self.encoder(x1))  # NxC

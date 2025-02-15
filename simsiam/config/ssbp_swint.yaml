@@ -3,7 +3,7 @@ segment_second: 6 # half in 2 seconds
 piece_second: 3
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "SwinT+3/6secs+noise+melspec"
+wandb_name: "SwinT+3/6secs+CLAR+melspec"
 wandb_notes: "SSBP Swin Transformer Training"
 
 
@@ -16,7 +16,7 @@ dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
 dist_backend: 'nccl'
 multiprocessing_distributed: True #True
 find_unused_parameters: False # False
-melspec_transform: True #Wavegram will transform for us
+melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
 workers: 48 # 24 for terra, 56 for fatcat
@@ -33,7 +33,7 @@ check_val_every_n_epoch: 4
 early_stop_patience: 5 #10
 lr: 0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
-warmup_epochs: 30
+warmup_epochs: 30 #10
 dim: 2048
 pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
