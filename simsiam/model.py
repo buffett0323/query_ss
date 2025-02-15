@@ -48,7 +48,7 @@ class SimSiam(nn.Module):
         elif self.args.encoder_name == "SwinTransformer":
             self.encoder = SwinTransformer(
                 img_size=args.img_size, 
-                window_size=8, 
+                window_size=args.swint_window_size, 
                 in_chans=args.channels, 
                 num_classes=0,  # num_classes = 0 --> self.head = nn.Identity
             )
@@ -84,7 +84,7 @@ class SimSiam(nn.Module):
     def do_mel_transform(self, x):
         # Convert waveform to mel spectrogram and apply dB scaling
         mel_spec = self.mel_transform(x)
-        return self.db_transform(mel_spec).unsqueeze(1)
+        return self.db_transform(mel_spec)#.unsqueeze(1)
     
 
     def forward(self, x1, x2):
@@ -94,6 +94,11 @@ class SimSiam(nn.Module):
         # Mel-transform the input waveforms
         x1 = self.do_mel_transform(x1)
         x2 = self.do_mel_transform(x2)
+        print("bf x1.shape:", x1.shape)
+        transform_rs = transforms.Resize((self.args.img_size, self.args.img_size))
+        x1 = transform_rs(x1.unsqueeze(1))
+        x2 = transform_rs(x2.unsqueeze(1))
+        print("af x1.shape:", x1.shape)
         
         # Compute features for both views
         z1 = self.projector(self.encoder(x1))  # NxC

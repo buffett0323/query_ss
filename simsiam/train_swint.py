@@ -228,7 +228,9 @@ def main_worker(gpu, ngpus_per_node, args):
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), sampler=train_sampler,
-        num_workers=args.workers, pin_memory=args.pin_memory, drop_last=args.drop_last)
+        num_workers=args.workers, pin_memory=args.pin_memory, drop_last=args.drop_last,
+        persistent_workers=args.persistent_workers,  # Keep workers alive to reduce loading overhead
+        prefetch_factor=4)
 
 
     

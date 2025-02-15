@@ -43,12 +43,13 @@ print_freq: 20
 
 # dataset options
 max_length: 64
-n_fft: 1024 #2048
-hop_length: 188 #320 #512 #1024
+n_fft: 2048 #1024 #2048
+hop_length: 512 #188 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
-n_mels: 256 #128
-img_size: 256
+n_mels: 128 #256 #128
+img_size: 224 #256
+swint_window_size: 7 #8
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True

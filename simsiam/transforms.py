@@ -341,3 +341,99 @@ class AudioFXAugmentation(nn.Module):
         # x2 = self.apply_equalization_filter(x2)
         return x1, x2
 
+
+
+class S3TAugmentation(nn.Module):
+    def __init__(self):
+        super(S3TAugmentation, self).__init__()
+        
+        
+    def random_multi_crop(self, spectrogram, min_ratio=0.1, max_ratio=0.9):
+        T_full = spectrogram.shape[1]  # Time dimension
+        r1, r2 = random.uniform(min_ratio, max_ratio), random.uniform(min_ratio, max_ratio)
+        T_r1, T_r2 = int(T_full * r1), int(T_full * r2)
+        
+        start1 = random.randint(0, T_full - T_r1)
+        start2 = random.randint(0, T_full - T_r2)
+        
+        crop1 = spectrogram[:, start1:start1 + T_r1]
+        crop2 = spectrogram[:, start2:start2 + T_r2]
+        
+        return crop1, crop2
+
+    def random_frequency_masking(self, spectrogram, p=0.5, N_range=(1, 5), F_range=(5, 30)):
+        if random.random() < p:
+            N = random.randint(*N_range)
+            F = random.randint(*F_range)
+            transform = T.FrequencyMasking(freq_mask_param=F)
+            for _ in range(N):
+                spectrogram = transform(spectrogram)
+        return spectrogram
+
+    def random_time_masking(self, spectrogram, p=0.5, N_range=(1, 10), r_range=(0.01, 0.2)):
+        if random.random() < p:
+            T_full = spectrogram.shape[1]
+            N = random.randint(*N_range)
+            r = random.uniform(*r_range)
+            t = int(T_full * r)
+            transform = T.TimeMasking(time_mask_param=t)
+            for _ in range(N):
+                spectrogram = transform(spectrogram)
+        return spectrogram
+
+    def time_warping(self, spectrogram, p=0.4, W_range=(0, 10)):
+        if random.random() < p:
+            T_full = spectrogram.shape[1]
+            W = random.randint(*W_range)
+            center = T_full // 2
+            shift = random.choice([-1, 1]) * W
+            warped_spectrogram = torch.roll(spectrogram, shifts=shift, dims=1)
+            return warped_spectrogram
+        return spectrogram
+
+    def random_shifting(self, spectrogram, p=0.4, shift_range=(1, 10)):
+        if random.random() < p:
+            t_shift = random.randint(*shift_range)
+            f_shift = random.randint(*shift_range)
+            shift_t = random.choice([-1, 1]) * t_shift
+            shift_f = random.choice([-1, 1]) * f_shift
+            shifted_spectrogram = torch.roll(spectrogram, shifts=(shift_f, shift_t), dims=(0, 1))
+            return shifted_spectrogram
+        return spectrogram
+
+    def frequency_tiling(self, spectrogram, n):
+        F, T = spectrogram.shape
+        tiled = spectrogram.repeat(n, 1)  # Repeat along frequency axis
+        return tiled[:T, :]  # Cut extra high frequency part to T x T
+
+    def time_folding(self, spectrogram, n):
+        F, T = spectrogram.shape
+        folded = spectrogram.view(F * n, T // n)  # Reshape to (F * n) x (T/n)
+        return folded
+
+    def apply_augmentations(self, spectrogram):
+        crop1, crop2 = self.random_multi_crop(spectrogram)
+        
+        crop1 = self.random_frequency_masking(crop1)
+        crop1 = self.random_time_masking(crop1)
+        crop1 = self.time_warping(crop1)
+        crop1 = self.random_shifting(crop1)
+        
+        crop2 = self.random_frequency_masking(crop2)
+        crop2 = self.random_time_masking(crop2)
+        crop2 = self.time_warping(crop2)
+        crop2 = self.random_shifting(crop2)
+        
+        return crop1, crop2
+    
+    
+if __name__ == "__main__":
+    Aug = S3TAugmentation()
+        # Example usage:
+    spectrogram = torch.randn(128, 1000)  # Example spectrogram with 128 frequency bins and 1000 time steps
+    crop1, crop2 = Aug.apply_augmentations(spectrogram)
+    print("Crop 1 shape:", crop1.shape, crop2.shape) 
+    # Applying preprocessors
+    crop1 = Aug.frequency_tiling(crop1, 2)
+    crop1 = Aug.time_folding(crop1, 2)
+    print("Crop 1 shape:", crop1.shape, crop2.shape) 
