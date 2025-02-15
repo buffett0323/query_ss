@@ -94,11 +94,10 @@ class SimSiam(nn.Module):
         # Mel-transform the input waveforms
         x1 = self.do_mel_transform(x1)
         x2 = self.do_mel_transform(x2)
-        print("bf x1.shape:", x1.shape)
+
         transform_rs = transforms.Resize((self.args.img_size, self.args.img_size))
         x1 = transform_rs(x1.unsqueeze(1))
         x2 = transform_rs(x2.unsqueeze(1))
-        print("af x1.shape:", x1.shape)
         
         # Compute features for both views
         z1 = self.projector(self.encoder(x1))  # NxC

@@ -3,7 +3,7 @@ segment_second: 6 # half in 2 seconds
 piece_second: 3
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "SwinT+3/6secs+CLAR+melspec"
+wandb_name: "SwinT+3/6secs+CLAR+resnet_settings"
 wandb_notes: "SSBP Swin Transformer Training"
 
 
