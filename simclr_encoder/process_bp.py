@@ -38,6 +38,8 @@ def process_file(filename):
         
         # Load .npy file
         audio_data = np.load(filepath)  # Shape: (samples, ) or (samples, channels)
+        if audio_data.shape[0] < slice_duration:
+            continue
         audio_data = audio_data[:slice_duration]
 
         # Save Resampled Data
