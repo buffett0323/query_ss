@@ -1,42 +1,97 @@
+import os
 import torch
 import torchaudio
 import argparse
 import torchvision.transforms as transforms
 import torchaudio.transforms as T
 import numpy as np
-from torch.utils.data import DataLoader
-from dataset import BPDataset
+
+from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from utils import yaml_config_hook
 from tqdm import tqdm
 
-def compute_mean_std(dataset, mel_transform, db_transform):
-    """
-    Compute mean and standard deviation of a dataset of Mel spectrograms (single-channel).
-    """
+
+class BPDataset(Dataset):
+    def __init__(
+        self,
+        sample_rate,
+        segment_second,
+        data_dir,
+        augment_func,
+        piece_second=3,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        split="train",
+        melspec_transform=False,
+        data_augmentation=True,
+        random_slice=False,
+        stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
+    ):
+
+        self.stems = stems
+        self.data_path_list = [
+            os.path.join(data_dir, folder, f"{stem}.npy")
+            for folder in os.listdir(data_dir)
+                for stem in stems
+        ]        
+        
+        self.sample_rate = sample_rate
+        self.segment_second = segment_second
+        self.duration = sample_rate * piece_second # 3 seconds for each piece
+        self.augment_func = augment_func # CLARTransform
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.n_mels = n_mels
+        self.split = split
+        self.melspec_transform = melspec_transform
+        self.data_augmentation = data_augmentation
+        self.random_slice = random_slice
+
+    def mel_spec_transform(self, x):
+        mel_transform = T.MelSpectrogram(
+            sample_rate=args.sample_rate,
+            n_mels=args.n_mels,
+            n_fft=args.n_fft,
+            hop_length=args.hop_length,
+            f_max=args.fmax,
+        )
+        db_transform = T.AmplitudeToDB(stype="power")
+        return db_transform(mel_transform(x))
+    
+        
+    def __len__(self): #""" Total we got 175698 files * 4 tracks """
+        return len(self.data_path_list)
+    
+    
+    def __getitem__(self, idx):
+        path = self.data_path_list[idx]
+        
+        # Read data and segment
+        x = torch.tensor(np.load(path))
+        return self.mel_spec_transform(x).unsqueeze(0)
+
+
+
+def compute_mean_std(dataset):
     loader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=24)
 
     sum_ = 0.0
     sum_sq_ = 0.0
     count = 0
 
-    for x1, x2 in tqdm(loader):  # Assuming dataset returns (mel_spec, label)
-        x1 = db_transform(mel_transform(x1))
-        x2 = db_transform(mel_transform(x2))
-        
-        x1 = x1.float()  # Ensure float precision
-        sum_ += x1.mean()
-        sum_sq_ += (x1 ** 2).mean()
-        count += 1
-        
-        x2 = x2.float()  # Ensure float precision
-        sum_ += x2.mean()
-        sum_sq_ += (x2 ** 2).mean()
+    for mel_spec in tqdm(loader):
+        mel_spec = mel_spec.float()  # Ensure float precision
+        sum_ += mel_spec.mean()
+        sum_sq_ += (mel_spec ** 2).mean()
         count += 1
 
     mean = sum_ / count
     std = (sum_sq_ / count - mean ** 2) ** 0.5  # Standard deviation formula
 
     return mean.item(), std.item()
+
+
 
 # Example usage with your dataset
 parser = argparse.ArgumentParser(description="Simsiam_BP")
@@ -47,7 +102,7 @@ for k, v in config.items():
 
 args = parser.parse_args()
 
-train_dataset = BPDataset(
+ds = BPDataset(
     sample_rate=args.sample_rate, 
     segment_second=args.segment_second, 
     piece_second=args.piece_second,
@@ -63,14 +118,7 @@ train_dataset = BPDataset(
     stems=['other'],
 )
 
-# Experiment 1: Mel-spectrogram
-mel_transform = T.MelSpectrogram(
-    sample_rate=args.sample_rate,
-    n_mels=args.n_mels,
-    n_fft=args.n_fft,
-    hop_length=args.hop_length,
-    f_max=args.fmax,
-)
-db_transform = T.AmplitudeToDB(stype="power")
-mean, std = compute_mean_std(train_dataset, mel_transform, db_transform)
+
+
+mean, std = compute_mean_std(ds)
 print(f"Mean: {mean}, Std: {std}")
