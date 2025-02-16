@@ -34,13 +34,13 @@ class BPDataset(Dataset):
         data_dir,
         augment_func,
         piece_second=3,
-        n_fft=1024,
-        hop_length=320,
+        n_fft=2048,
+        hop_length=512,
         n_mels=128,
         split="train",
         melspec_transform=False,
         data_augmentation=True,
-        random_slice=True,
+        random_slice=False,
         stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
     ):
         # Load split files from txt file
@@ -119,6 +119,7 @@ class BPDataset(Dataset):
         # Read data and segment
         x = np.load(path)
         audio_length = x.shape[0]
+        print(audio_length)
 
         # Random Crop for 3 seconds
         if self.random_slice:
@@ -241,7 +242,7 @@ class BPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_resnet50.yaml")
+    config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -290,16 +291,16 @@ if __name__ == "__main__":
     x2 = db_transform(mel_transform(xj))
     print(x1.shape, x2.shape)
     
-    plot_spec_and_save(x1, "mel_spectrogram_x1.png", sr=args.sample_rate)
-    plot_spec_and_save(x2, "mel_spectrogram_x2.png", sr=args.sample_rate)
+    plot_spec_and_save(x1, "mel_spectrogram_x1_256.png", sr=args.sample_rate)
+    plot_spec_and_save(x2, "mel_spectrogram_x2_256.png", sr=args.sample_rate)
     
 
     # Experiment 2: Resize spectrogram
     res_x1 = resize_spec(x1, target_size=(256, 256))
     res_x2 = resize_spec(x2, target_size=(256, 256))
     
-    plot_spec_and_save(res_x1, "resized_x1.png", sr=args.sample_rate)
-    plot_spec_and_save(res_x2, "resized_x2.png", sr=args.sample_rate)
+    plot_spec_and_save(res_x1, "resized_x1_256.png", sr=args.sample_rate)
+    plot_spec_and_save(res_x2, "resized_x2_256.png", sr=args.sample_rate)
 
 
     # for i in range(10):
