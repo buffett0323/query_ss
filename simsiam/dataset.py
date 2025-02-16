@@ -23,7 +23,7 @@ from tqdm import tqdm
 from torchaudio.functional import pitch_shift
 
 from transforms import CLARTransform, AudioFXAugmentation
-from utils import yaml_config_hook, train_test_split_BPDataset
+from utils import yaml_config_hook, plot_spec_and_save, resize_spec
 
 # Beatport Dataset
 class BPDataset(Dataset):
@@ -247,10 +247,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    # ds = SlakhDataset(args.sample_rate, args.segment_second, split="train")
-    # for i in range(10):
-    #     print(ds[i][2])
-    
     train_dataset = BPDataset(
         sample_rate=args.sample_rate, 
         segment_second=args.segment_second, 
@@ -270,30 +266,50 @@ if __name__ == "__main__":
         stems=['other'],
     )
 
+    # Experiment 1: Mel-spectrogram
+    mel_transform = T.MelSpectrogram(
+        sample_rate=args.sample_rate,
+        n_mels=args.n_mels,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+        f_max=args.fmax,
+    )
+    db_transform = T.AmplitudeToDB(stype="power")
+    i = 0
+    xi, xj = train_dataset[i][0], train_dataset[i][1]
+    
+    # original dataset
+    x = np.load(train_dataset.data_path_list[i])
+    
+    torchaudio.save("visualization/x.wav", torch.tensor(x).clone().detach().unsqueeze(0), args.sample_rate)
+    torchaudio.save("visualization/xi.wav", xi.clone().detach().unsqueeze(0), args.sample_rate)
+    torchaudio.save("visualization/xj.wav", xj.clone().detach().unsqueeze(0), args.sample_rate)
+
+    
+    x1 = db_transform(mel_transform(xi))
+    x2 = db_transform(mel_transform(xj))
+    print(x1.shape, x2.shape)
+    
+    plot_spec_and_save(x1, "mel_spectrogram_x1.png", sr=args.sample_rate)
+    plot_spec_and_save(x2, "mel_spectrogram_x2.png", sr=args.sample_rate)
+    
+
+    # Experiment 2: Resize spectrogram
+    res_x1 = resize_spec(x1, target_size=(256, 256))
+    res_x2 = resize_spec(x2, target_size=(256, 256))
+    
+    plot_spec_and_save(res_x1, "resized_x1.png", sr=args.sample_rate)
+    plot_spec_and_save(res_x2, "resized_x2.png", sr=args.sample_rate)
+
+
     # for i in range(10):
     #     print(train_dataset[i][0].shape, train_dataset[i][1].shape)
     
+    # train_loader = torch.utils.data.DataLoader(
+    #     train_dataset, batch_size=4, shuffle=True,
+    #     num_workers=args.workers, pin_memory=True, drop_last=True)
     
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=4, shuffle=True,
-        num_workers=args.workers, pin_memory=True, drop_last=True)
+    # for ds in tqdm(train_loader):
+    #     print(ds[0].shape, ds[1].shape)
+    #     pass
     
-    for ds in tqdm(train_loader):
-        print(ds[0].shape, ds[1].shape)
-        pass
-    
-    
-    
-    # t = torch.randn([16, 48000]).numpy()
-    # tt = librosa.feature.melspectrogram(
-    #     y=t, sr=args.sample_rate, n_mels=args.n_mels, 
-    #     n_fft=args.n_fft, hop_length=args.hop_length, fmax=8000,
-    # )    
-    # ttt = librosa.power_to_db(tt, ref=np.max)
-    # print(ttt.shape)
-    
-    
-   
-    
-    # for tr in tqdm(dm.train_dataloader()):
-    #     pass; #print(tr[0].shape)

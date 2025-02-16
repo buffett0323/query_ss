@@ -1,6 +1,12 @@
 import os
 import yaml
 import random
+import torch
+import librosa
+import librosa.display
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.ndimage import zoom
 
 def yaml_config_hook(config_file):
     """
@@ -78,7 +84,28 @@ def load_from_txt(filename):
         return [line.strip() for line in f.readlines()]
     
     
+def plot_spec_and_save(spectrogram, savefig_name, sr=16000):
+    if isinstance(spectrogram, torch.Tensor):
+        spectrogram = spectrogram.squeeze().numpy()
+                
+    plt.figure(figsize=(6, 6))
+    librosa.display.specshow(
+        spectrogram,
+        x_axis='time', 
+        y_axis='mel', 
+        sr=sr,
+    )
+    plt.colorbar(format='%+2.0f dB')
+    plt.title("Mel-Spectrogram")
+    plt.savefig(f"visualization/{savefig_name}")
 
+
+def resize_spec(spectrogram, target_size=(256, 256)):
+    """ Resize spectrogram using interpolation to fit Swin Transformer input """
+    resized_spec = zoom(spectrogram, (target_size[0] / spectrogram.shape[0], target_size[1] / spectrogram.shape[1]), order=3)
+    return resized_spec
+
+    
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self, name, fmt=':f'):
