@@ -33,7 +33,7 @@ class SimSiam(nn.Module):
             f_max=self.args.fmax,
         )
         self.db_transform = T.AmplitudeToDB(stype="power")
-        
+        self.transform_rs = transforms.Resize((args.img_size, args.img_size))
 
         # create the encoder
         # num_classes is the output fc dimension, zero-initialize last BNs
@@ -58,7 +58,6 @@ class SimSiam(nn.Module):
                                         nn.ReLU(inplace=True), # hidden layer
                                         nn.Linear(pred_dim, dim)) # output layer
     
-    
     def do_mel_transform(self, x):
         # Convert waveform to mel spectrogram and apply dB scaling
         mel_spec = self.mel_transform(x)
@@ -78,9 +77,8 @@ class SimSiam(nn.Module):
         x1 = self.do_mel_transform(x1)
         x2 = self.do_mel_transform(x2)
         
-        transform_rs = transforms.Resize((224, 224))
-        x1 = transform_rs(x1.unsqueeze(1))
-        x2 = transform_rs(x2.unsqueeze(1))
+        x1 = self.transform_rs(x1.unsqueeze(1))
+        x2 = self.transform_rs(x2.unsqueeze(1))
 
         # compute features for one view
         z1 = self.encoder(x1) # NxC

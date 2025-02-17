@@ -119,7 +119,6 @@ class BPDataset(Dataset):
         # Read data and segment
         x = np.load(path)
         audio_length = x.shape[0]
-        print(audio_length)
 
         # Random Crop for 3 seconds
         if self.random_slice:
@@ -138,7 +137,7 @@ class BPDataset(Dataset):
             x_i, x_j = self.mel_spec_transform(x_i), self.mel_spec_transform(x_j)
             return torch.tensor(x_i, dtype=torch.float32).unsqueeze(0), torch.tensor(x_j, dtype=torch.float32).unsqueeze(0)
             
-        return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
+        return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32), path
 
 
 class BPDataModule(LightningDataModule):

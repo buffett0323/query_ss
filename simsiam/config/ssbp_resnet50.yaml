@@ -52,6 +52,7 @@ hop_length: 512 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
 n_mels: 128 #128
+img_size: 224 #256
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True
@@ -76,4 +77,6 @@ lr_decay_factor: 0.05 #0.01
 model_path: "save" # set to the directory containing `checkpoint_##.tar` 
 reload: False
 
-# other simsiam settings
+# knn options
+knn_k: 3 #200
+knn_t: 1.0 #0.2
