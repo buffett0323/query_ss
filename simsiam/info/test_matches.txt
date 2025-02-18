@@ -1,0 +1,160 @@
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/78812393-c69c-43a7-bdf5-984ba284a981_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/320cbd78-63fa-41bf-94aa-70005acb010a_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/280f1b5d-db92-4332-aa3d-49e2c41ca42c_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/05dd70d6-7bf2-49c7-b063-ab5e2ae3165d_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/88372731-3ce9-4024-8049-d2cb3d562833_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e15dcfde-15f1-4a36-bfec-9a32065fc049_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/f0320a17-7f1a-4900-8d75-5b3de35f0907_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ab0808bf-14f9-48f1-9729-10dee72d4f18_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7ad032a4-2686-465c-9c57-23decbc7c390_8/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ae0a41c8-2088-4dc6-9d26-2480d8fd05cb_8/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7ad032a4-2686-465c-9c57-23decbc7c390_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7d7dab99-4a8e-48ce-a01f-455e0c00b38a_3/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/77666f02-1a37-4eb1-94bb-231b476bda34_3/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/47c31d41-abe3-4bca-8f5b-9bebfb4a1363_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/51661762-79d5-4dd9-a641-d379284e6e3d_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ecdb3a7f-8535-47c5-8a55-12420ffdcd2b_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/2605878a-02b5-4444-a1e9-d2a9e11b4772_6/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/4a612bc0-6751-4535-938d-362617527f9d_1/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/a45776d7-3ddf-441b-ae53-2684f64bd4eb_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/9e00d494-2480-4942-b210-6dbdff663639_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/04729055-a23d-423b-a331-b929b8ba94b4_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/5cf91cde-f0b2-48dc-85de-ecfc96731bcc_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ac4474d3-03d7-42de-8f5f-a194fda252ad_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/44eaa890-fe1c-45ee-92e0-ac6dee4a06a5_5/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/86ef2b7c-a922-47f7-97a0-9535784a4fd3_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/86ef2b7c-a922-47f7-97a0-9535784a4fd3_4/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e8d0d036-8585-4882-80bd-19dc68eaec33_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6d9fb88c-9cce-4df3-a67b-b80245646a46_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/482f526e-2046-4609-9ce1-cba471057221_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/482f526e-2046-4609-9ce1-cba471057221_6/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/482f526e-2046-4609-9ce1-cba471057221_5/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/482f526e-2046-4609-9ce1-cba471057221_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/9f404648-bab1-4a20-8036-9e1678acdf3e_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/c0e3ab69-482f-4b01-ba02-36717724a552_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/4263b926-4987-47c8-a976-0855ff62ccfb_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/a871c99a-ea1a-4aa5-bc12-0ce95cb77651_5/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7e24e184-7c71-4c0c-bedb-ea77f7504db4_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7c81582f-ba40-4023-9876-c2d55b1ba133_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7e24e184-7c71-4c0c-bedb-ea77f7504db4_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/f7b1cfe7-58ec-46d1-8be1-87af2fce0e4e_3/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d2fb5b8b-6b5a-44fc-b539-9358b7270576_5/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/b1e7718a-d93c-4a14-99bf-0ae76cdc7ce2_1/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/4be2e29b-425c-49c7-af32-faa7b4444925_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/59f2ca04-d7f8-4cba-aa33-f9f025c2fbc8_3/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/b28c55f0-5702-42f4-bfaa-50f718793776_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6e671a9c-ba1e-48f9-9a60-0bfb2b1c1be9_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/68273a39-7096-421f-89c1-a154d0b2fef7_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/8136ab5d-163d-4fb7-bb36-b95097b74a2e_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e8c2b976-6124-48f1-bb7b-037a2110bcb4_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/26bcfbb0-4fa3-4fd9-af3a-82384b355a03_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e2aa429a-f1b8-4cfb-ada4-2068edfc964f_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/92c8cb54-1020-4b79-b9a2-f1131399138b_6/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ae27de41-90e1-447d-bd13-44d6ccec58ce_3/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/772a8d03-b2b8-4e88-b78b-1f0b04a69707_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/f83a64dd-c42e-44ed-aead-bb17e20fb152_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/273a78e3-9439-4155-a144-27c78d17cb84_3/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/23fc26af-7e8e-49bd-83e8-23fb9a4d1378_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/23fc26af-7e8e-49bd-83e8-23fb9a4d1378_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/67de2456-7fa3-4eaa-be40-03be946ad0ad_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e6e3df19-4f27-4c4e-8e44-9afffafcf844_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/a99ee1a3-6d6c-4644-9256-03edad0e86ec_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/1fcebeb8-1fac-44a7-97f0-141f4a40483e_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/8dea99a3-1058-43ce-acde-7221cac5bca2_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/1fcebeb8-1fac-44a7-97f0-141f4a40483e_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/84dfc75e-8750-487f-83d2-867b4f3900b0_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/fa48a761-f537-4fe7-8c71-fb09432d60b0_6/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/84dfc75e-8750-487f-83d2-867b4f3900b0_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d4e855fc-63d4-412f-a523-655dc0a9f4c8_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/43e27a88-a8aa-4827-aad7-d107b1f37cd4_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/bc410127-affe-454f-b666-48c4b172f842_1/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d81f7067-901d-4ae8-a6f9-87882c223d47_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d81f7067-901d-4ae8-a6f9-87882c223d47_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ffc3f65c-79d3-4105-b2bc-c95d3f455e4d_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/75211619-ea54-4f14-a843-904b9c145cb4_1/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/75211619-ea54-4f14-a843-904b9c145cb4_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ffc3f65c-79d3-4105-b2bc-c95d3f455e4d_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/edceb0b9-4be8-426f-816a-a466b37ef501_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ac838f80-af99-4193-a6e9-c23ec5020143_1/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7bdcfd3f-b14c-49b4-b5f7-eca93e4df56e_5/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/4b36b4cf-383a-409f-883b-04c143fa39b8_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/29530a42-af88-4b76-90f0-50cff79b357d_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d3e8e38c-2b31-4628-8af7-033ebf3be04e_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e6af5c3a-a803-4949-81b2-8509dfea015b_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/48c7519d-d9a5-4aa1-8a7a-a702662c689b_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6bd021af-c275-48c8-a532-e8717b13838f_4/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/8a72859b-5aaf-4a1b-ad30-7018b7be1549_4/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/acbd2c25-176f-41ec-8fe2-3fb888a9c720_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/fcf4865d-e34a-45e3-9240-54330833cad2_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/69971e01-93a5-4d9f-8ed3-de857f6370fd_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/69971e01-93a5-4d9f-8ed3-de857f6370fd_5/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/69971e01-93a5-4d9f-8ed3-de857f6370fd_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/113505c9-0ff0-4a35-87d3-498790b90840_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6ec56c77-f962-447f-b08d-36b7427f90d1_4/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/32c237e1-974e-467d-8471-1a0827defebf_6/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6ec56c77-f962-447f-b08d-36b7427f90d1_5/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ddf2664e-7038-463f-bac3-171290fc082c_4/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/39fe757b-471b-4b5f-8ec8-cd3c1cf6caf8_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/7e84d2de-babc-4117-b872-f162b6c25a29_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d932be4d-296a-48a1-937c-9f3a75c63036_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/cc813c17-f28d-4c0a-9ce2-279e56ec7dcb_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d6fc198e-5d54-44f3-8a93-6894c5e3a072_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d6fc198e-5d54-44f3-8a93-6894c5e3a072_4/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d6fc198e-5d54-44f3-8a93-6894c5e3a072_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d6fc198e-5d54-44f3-8a93-6894c5e3a072_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d4ea0cbc-69ba-45a0-9398-b5a9d73cf89c_2/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/5b17b81e-b265-41cf-93d7-398ecd738e95_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/5b17b81e-b265-41cf-93d7-398ecd738e95_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/4c527156-9df2-49ca-a619-d6fdf08d5027_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/f1373ce9-6cc7-4235-b848-6af915d269bf_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/2a58bbc0-8028-4081-ac22-ed63a707d9a0_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/be6bb59a-2dc3-4ac5-ab55-a175be777510_1/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ec5a251f-1489-4a32-b290-6b47783e235e_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/30f7997b-5893-4db2-8bc7-2b54ba7e7f53_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/30f7997b-5893-4db2-8bc7-2b54ba7e7f53_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/328e4306-a3ee-4cfe-81ae-b9e925aa3b27_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/eec36449-e6bd-4b9c-a833-30a52a701e8d_2/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/8e6224cb-9829-4eb7-8984-99a3631e367d_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/ca3c093a-4e0c-4cad-801c-13cc39738771_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6176fb1a-6043-4810-a737-a0d5a8bb0ab8_5/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/6176fb1a-6043-4810-a737-a0d5a8bb0ab8_4/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/5d6e0dbe-7e5a-426b-933c-90be28c46e23_1/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/855b6b19-98a0-4610-ab11-ce6c0a5ce84b_2/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/88f86893-a057-4a16-952d-e0f52f22a6e6_2/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/c6ad4da5-8f40-4bdd-ad3a-b01e65c7964b_1/other.npy
+
+Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/bc8f0cb8-f895-49c2-aba3-13d9ba042b8b_3/other.npy
+  Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/e11c4d8b-e2fb-42b8-94fe-ccb83dabbc86_3/other.npy
+  Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/88c622d1-d280-48a9-b6db-8c6ffba032ed_3/other.npy
+  Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/b580f491-ab91-4314-a515-d06a49ef09b0_3/other.npy
+

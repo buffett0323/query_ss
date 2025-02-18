@@ -317,7 +317,6 @@ def validate(memory_loader, test_loader, model, args):
                 print(f"Test sample: {test_sample_path}")
                 print(f"Top-3 Nearest Paths: {nearest_paths}")
                 
-                break
 
 
 if __name__ == "__main__":
