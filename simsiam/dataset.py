@@ -21,6 +21,7 @@ from typing import Optional
 from librosa import effects
 from tqdm import tqdm
 from torchaudio.functional import pitch_shift
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift
 
 from transforms import CLARTransform, AudioFXAugmentation
 from utils import yaml_config_hook, plot_spec_and_save, resize_spec
@@ -42,16 +43,14 @@ class BPDataset(Dataset):
         data_augmentation=True,
         random_slice=False,
         stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
+        fmax=8000,
+        img_size=256,
+        img_mean=0,
+        img_std=0,
     ):
         # Load split files from txt file
-        with open(f"info/{split}_bp.txt", "r") as f:
+        with open(f"info/{split}_bp_8secs.txt", "r") as f:
             bp_listdir = [line.strip() for line in f.readlines()]
-            
-        with open("info/labels.txt", "r") as f:
-            self.labels = [line.strip() for line in f.readlines()]
-            
-        with open("info/class_dict.json", "r", encoding="utf-8") as f:
-            self.class_dict = json.load(f)
 
         self.stems = stems
         self.data_path_list = [
@@ -59,16 +58,10 @@ class BPDataset(Dataset):
             for folder in bp_listdir
                 for stem in stems
         ]
-        self.label_list = [
-            self.get_label(folder, stem)
-            for folder in bp_listdir
-                for stem in stems
-        ]
-        
-        
+
         self.sample_rate = sample_rate
         self.segment_second = segment_second
-        self.duration = sample_rate * piece_second # 3 seconds for each piece
+        self.duration = sample_rate * piece_second # 4 seconds for each piece
         self.augment_func = augment_func # CLARTransform
         self.n_fft = n_fft
         self.hop_length = hop_length
@@ -77,67 +70,70 @@ class BPDataset(Dataset):
         self.melspec_transform = melspec_transform
         self.data_augmentation = data_augmentation
         self.random_slice = random_slice
-    
-    
-    def random_sample(self, audio_length):
-        # TODO: minimum repetivie 1.5 seconds (x), maximum 5 seconds (v)
-        f1 = random.randint(0, audio_length - self.duration)
         
-        # Define valid range for f2 relative to f1
-        min_offset = self.sample_rate * 1.5
-        max_offset = self.sample_rate * 5
-
-        # Ensure f2 stays within bounds
-        min_f2 = max(0, f1 - max_offset)
-        max_f2 = min(audio_length - self.duration, f1 + max_offset)
-
-        # Directly sample f2 within valid range
-        f2 = random.randint(min_f2, max_f2)
-        return f1, f2
+        # Mel-spec transform
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_mels=n_mels,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            f_max=fmax,
+        )
+        self.db_transform = T.AmplitudeToDB(
+            stype="power"
+        )
+        self.resizer = transforms.Resize((img_size, img_size))
+        self.img_mean = img_mean
+        self.img_std = img_std
+        self.augment = Compose([
+            AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5), 
+            TimeStretch(min_rate=0.8, max_rate=1.25, p=0.4), # S3T settings
+            PitchShift(min_semitones=-4, max_semitones=4, p=0.4), # S3T settings
+            # Shift(p=1),
+        ])
     
     
-    def get_label(self, folder, stem):
-        style = self.class_dict[folder.split('_')[0]]
-        return self.labels.index(style) * len(self.stems) + self.stems.index(stem)
-
-    
-    def mel_spec_transform(self, x):
-        mel_spec = librosa.feature.melspectrogram(
-            y=x, sr=self.sample_rate, n_mels=self.n_mels, 
-            n_fft=self.n_fft, hop_length=self.hop_length, fmax=8000,
-        )    
-        return librosa.power_to_db(mel_spec, ref=np.max)
-    
-        
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
     
     
-    def __getitem__(self, idx):
-        path = self.data_path_list[idx]
+    def mel_spec_transform(self, x):
+        x = x.float()
+        mel_spec = self.mel_transform(x).float()
+        return self.db_transform(mel_spec)
         
-        # Read data and segment
-        x = np.load(path)
-        audio_length = x.shape[0]
+    
+    
+    def data_pipeline(self, x):
+        x = torch.tensor(x)
+        x = self.mel_spec_transform(x).unsqueeze(0)
+        x = self.resizer(x) # transform to 1, img_size, img_size
+        return (x - self.img_mean) / self.img_std
 
-        # Random Crop for 3 seconds
-        if self.random_slice:
-            f1, f2 = self.random_sample(audio_length)
-            x_i, x_j = x[f1: f1+self.duration], x[f2: f2+self.duration]
-        else:
-            x_i, x_j = x[:int(audio_length/2)], x[int(audio_length/2):]
-        
+
+    def __getitem__(self, idx):
+        """ 
+            1. Mel-Spectrogram Transformation
+            2. Resize
+            3. Normalization
+            4. Data Augmentation
+        """
+        # Load audio data
+        path = self.data_path_list[idx]
+        x = np.load(path)
         
         # Augmentation
         if self.data_augmentation:
-            x_i, x_j = self.augment_func(x_i, x_j)
-            
-        # Mel-spectrogram and add channel
-        if self.melspec_transform:
-            x_i, x_j = self.mel_spec_transform(x_i), self.mel_spec_transform(x_j)
-            return torch.tensor(x_i, dtype=torch.float32).unsqueeze(0), torch.tensor(x_j, dtype=torch.float32).unsqueeze(0)
-            
-        return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32), path
+            # x_i, x_j = self.augment_func(x[:self.duration], x[self.duration:])
+            x_i = self.augment(x[:self.duration], sample_rate=self.sample_rate)
+            x_j = self.augment(x[self.duration:], sample_rate=self.sample_rate)
+        
+        # TODO: Random Crop for 4 seconds
+        x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
+        
+        return x_i.float(), x_j.float(), path
+
+
 
 
 class BPDataModule(LightningDataModule):

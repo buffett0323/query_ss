@@ -11,6 +11,7 @@ import scipy.interpolate
 import scipy.stats
 import numpy as np
 import torch.nn as nn
+import soundfile as sf
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
 import torchvision.transforms as transforms
@@ -20,6 +21,7 @@ from tqdm import tqdm
 from torchaudio.functional import pitch_shift
 from utils import yaml_config_hook
 
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift
 
 class CLARTransform(nn.Module):
     def __init__(
@@ -426,14 +428,66 @@ class S3TAugmentation(nn.Module):
         
         return crop1, crop2
     
-    
+
+
+
+def mel_to_audio(mel_spec, sample_rate=16000, n_fft=2048, hop_length=512, n_mels=128):
+    """
+    Convert a mel-spectrogram back to audio using Griffin-Lim.
+
+    Args:
+        mel_spec (torch.Tensor): Mel-spectrogram (shape: [1, n_mels, T])
+        sample_rate (int): Sample rate of the output audio.
+        n_fft (int): FFT size.
+        hop_length (int): Hop length between STFT frames.
+        n_mels (int): Number of mel filter banks.
+
+    Returns:
+        waveform (torch.Tensor): Reconstructed audio waveform.
+    """
+    # Ensure correct shape and type
+    mel_spec = mel_spec.float()
+
+    # Invert mel-spectrogram back to linear spectrogram
+    inverse_mel_transform = T.InverseMelScale(n_stft=n_fft // 2 + 1, n_mels=n_mels)
+    linear_spec = inverse_mel_transform(mel_spec)
+
+    # Apply Griffin-Lim to recover phase
+    griffin_lim = T.GriffinLim(n_fft=n_fft, hop_length=hop_length)
+    waveform = griffin_lim(linear_spec)
+
+    return waveform
+
+
 if __name__ == "__main__":
-    Aug = S3TAugmentation()
-        # Example usage:
-    spectrogram = torch.randn(128, 1000)  # Example spectrogram with 128 frequency bins and 1000 time steps
-    crop1, crop2 = Aug.apply_augmentations(spectrogram)
-    print("Crop 1 shape:", crop1.shape, crop2.shape) 
-    # Applying preprocessors
-    crop1 = Aug.frequency_tiling(crop1, 2)
-    crop1 = Aug.time_folding(crop1, 2)
-    print("Crop 1 shape:", crop1.shape, crop2.shape) 
+    # y = librosa.load("sample_audio/temp_audio.wav", sr=16000)[0]
+    y = torchaudio.load("sample_audio/temp_audio.wav")[0]
+    y = y.squeeze(0)
+    mel_transform = T.MelSpectrogram(
+        sample_rate=16000,
+        n_mels=128,
+        n_fft=2048,
+        hop_length=512,
+        f_max=8000,
+    )
+    db_transform = T.AmplitudeToDB(
+        stype="power"
+    )
+    x1, x2 = y[:48000].float(), y[48000:].float()
+    mel_spec1 = mel_transform(x1).float()
+    mel_spec1 = db_transform(mel_spec1).numpy()
+    mel_spec2 = mel_transform(x2).float()
+    mel_spec2 = db_transform(mel_spec2).numpy()
+    
+    afx = AudioFXAugmentation(sample_rate=16000, duration=3.0, n_mels=128)
+    print(mel_spec1.shape, mel_spec2.shape)
+    mel_spec1, mel_spec2 = afx(mel_spec1, mel_spec2)
+    
+    wav1 = mel_to_audio(mel_spec1)
+    wav2 = mel_to_audio(mel_spec2)
+    torchaudio.save("sample_audio/wav_mel1.wav", wav1, 16000)
+    torchaudio.save("sample_audio/wav_mel2.wav", wav2, 16000)
+
+    # y1 = augment(samples=y, sample_rate=16000)        
+    # temp_wav = "sample_audio/temp_audio_tsps.wav"
+    # sf.write(temp_wav, y1, samplerate=16000)

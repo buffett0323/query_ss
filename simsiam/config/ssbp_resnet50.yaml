@@ -1,6 +1,6 @@
 # Pre-process
-segment_second: 6 # half in 2 seconds
-piece_second: 3
+segment_second: 8 # half in 2 seconds
+piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
 wandb_name: "Resnet+3/6secs+CLAR+melspec"
@@ -28,6 +28,8 @@ gpu: [0, 1, 2, 3] #[0,1,2,3]
 
 
 # train options
+img_mean: -1.1041008234024048
+img_std: 14.636213302612305
 seed: 42 # sacred handles automatic seeding when passed in the config
 batch_size: 128 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps

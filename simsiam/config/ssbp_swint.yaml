@@ -1,9 +1,9 @@
 # Pre-process
-segment_second: 6 # half in 2 seconds
-piece_second: 3
-log_wandb: True #False
+segment_second: 8 # half in 2 seconds
+piece_second: 4
+log_wandb: False #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "SwinT+3/6secs+CLAR+resnet_settings"
+wandb_name: "SwinT+4/8secs+256*8win+Crop+Noise"
 wandb_notes: "SSBP Swin Transformer Training"
 
 
@@ -19,13 +19,15 @@ find_unused_parameters: False # False
 melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
-workers: 48 # 24 for terra, 56 for fatcat
-gpu: [0, 1, 2, 3, 4, 5] #[0,1,2,3]
+workers: 24 # 24 for terra, 56 for fatcat
+gpu: [1, 2] #[0,1,2,3]
 
 
 # train options
+img_mean: -1.100174903869629
+img_std: 14.353998184204102
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #256 #512 
+batch_size: 4 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -48,8 +50,8 @@ hop_length: 512 #188 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
 n_mels: 128 #256 #128
-img_size: 224 #256
-swint_window_size: 7 #8
+img_size: 256 #256
+swint_window_size: 8 #8
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True
@@ -73,5 +75,3 @@ lr_decay_factor: 0.05 #0.01
 # reload options
 model_path: "save" # set to the directory containing `checkpoint_##.tar` 
 reload: False
-
-# other simsiam settings

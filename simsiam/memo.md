@@ -7,5 +7,12 @@ During inference, first cd to ```BP_WGL128_CNN14.ckpt```, and run ```python zero
 CUDA_VISIBLE_DEVICES=0,1 python train_pl.py
 ```
 
-BP Dataset
-Mean: -1.1039695739746094, Std: 14.636246681213379
+BP Dataset 8 secs no resize
+img_mean: -1.1041008234024048
+img_std: 14.636213302612305
+
+BP Dataset 8 secs slice 4 secs + resize 256
+Mean: -1.100174903869629, Std: 14.353998184204102
+
+BP Dataset 8 secs slice 4 secs + resize 224
+Mean: -1.100771427154541, Std: 14.373129844665527

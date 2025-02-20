@@ -26,9 +26,8 @@ import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
 from model import SimSiam
-from dataset import BPDataset, BPDataModule
-from transforms import CLARTransform, AudioFXAugmentation
-import simsiam.builder
+from dataset import BPDataset
+from transforms import CLARTransform
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -219,6 +218,10 @@ def main_worker(gpu, ngpus_per_node, args):
         data_augmentation=args.data_augmentation,
         random_slice=args.random_slice,
         stems=['other'],
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
     )
     
     if args.distributed:
@@ -227,8 +230,10 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), sampler=train_sampler,
-        num_workers=args.workers, pin_memory=args.pin_memory, drop_last=args.drop_last,
+        train_dataset, batch_size=args.batch_size, 
+        shuffle=(train_sampler is None), sampler=train_sampler,
+        num_workers=args.workers, pin_memory=args.pin_memory, 
+        drop_last=args.drop_last,
         persistent_workers=args.persistent_workers,  # Keep workers alive to reduce loading overhead
         prefetch_factor=4)
 
@@ -274,7 +279,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j) in enumerate(train_loader):
+    for i, (x_i, x_j, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
