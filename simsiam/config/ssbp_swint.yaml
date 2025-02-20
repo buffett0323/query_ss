@@ -8,8 +8,8 @@ wandb_notes: "SSBP Swin Transformer Training"
 
 
 # distributed training
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy"
-# data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
+# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy"
+data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
@@ -20,7 +20,7 @@ melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: False # Random slice enhance model's ability of capturing timbre
 workers: 24 # 24 for terra, 56 for fatcat
-gpu: [1, 2] #[0,1,2,3]
+gpu: [0, 1, 2, 3] #[0,1,2,3]
 
 
 # train options
