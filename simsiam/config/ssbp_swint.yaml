@@ -4,12 +4,12 @@ piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
 wandb_name: "SwinT+4/8secs+256*8win+Crop+Noise"
-wandb_notes: "SSBP Swin Transformer Training"
+wandb_notes: "SSBP Swin Transformer Training 3090*2"
 
 
 # distributed training
-# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy"
-data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy"
+# data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
