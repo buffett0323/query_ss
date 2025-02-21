@@ -1,7 +1,7 @@
 # Pre-process
 segment_second: 8 # half in 2 seconds
 piece_second: 4
-log_wandb: False #False
+log_wandb: True #False
 wandb_project_name: "SimSiam Training"
 wandb_name: "SwinT+4/8secs+256*8win+Crop+Noise"
 wandb_notes: "SSBP Swin Transformer Training"
@@ -27,7 +27,7 @@ gpu: [0, 1, 2, 3] #[0,1,2,3]
 img_mean: -1.100174903869629
 img_std: 14.353998184204102
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 4 #256 #512 
+batch_size: 128 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
