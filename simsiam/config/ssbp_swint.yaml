@@ -35,7 +35,7 @@ check_val_every_n_epoch: 4
 early_stop_patience: 5 #10
 lr: 0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
-warmup_epochs: 30 #10
+warmup_epochs: 10 #30 #10
 dim: 2048
 pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
