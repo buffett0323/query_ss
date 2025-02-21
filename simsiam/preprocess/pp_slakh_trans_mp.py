@@ -7,7 +7,7 @@ from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Path
-split = "train"
+split = "validation" # "test"
 input_path = f"/mnt/gestalt/home/ddmanddman/slakh2100_flac_redux/{split}"
 output_path = f"/mnt/gestalt/home/ddmanddman/slakh2100_demucs/{split}"
 os.makedirs(output_path, exist_ok=True)
