@@ -2,33 +2,32 @@ import os
 import torchaudio
 import torchaudio.transforms as T
 import yaml
+import numpy as np
 import soundfile as sf
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Path
-split = "validation" # "test"
-input_path = f"/mnt/gestalt/home/ddmanddman/slakh2100_flac_redux/{split}"
-output_path = f"/mnt/gestalt/home/ddmanddman/slakh2100_demucs/{split}"
+split = "test" # "test"
+path = "/mnt/gestalt/home/ddmanddman" # "/home/buffett/NAS_NTU/"
+input_path = f"{path}/slakh2100_flac_redux/{split}"
+output_path = f"{path}/slakh2100_demucs_npy/{split}"
 os.makedirs(output_path, exist_ok=True)
 
+
 # Number of processes (use all available cores)
-NUM_PROCESSES = min(cpu_count(), 8)  # Limit to 8 cores if too many processes slow down disk IO
+NUM_PROCESSES = min(cpu_count(), 24)  # Limit to 8 cores if too many processes slow down disk IO
 
 
 
-def convert_flac_to_wav(input_flac, output_wav, target_sr=44100):
+def convert_flac_to_npy(input_flac, output_npy, target_sr=44100):
     """ Convert FLAC file to WAV with target sample rate. """
     waveform, sr = torchaudio.load(input_flac, format="flac")
-    if sr != 44100:
+    if sr != target_sr:
         print("Wrong sr when converting:", sr)    
     
-    if sr != target_sr:
-        resampler = T.Resample(orig_freq=sr, new_freq=target_sr)
-        waveform = resampler(waveform)
-    
-    sf.write(output_wav, waveform.squeeze(0).numpy(), target_sr)
-
+    # sf.write(output_wav, waveform.squeeze(0).numpy(), target_sr)
+    np.save(output_npy, waveform.numpy())
 
 
 def process_track(track):
@@ -50,10 +49,10 @@ def process_track(track):
 
         # Get base name from YAML mapping
         basename = stem_mapping[os.path.splitext(stem)[0]]
-        output_wav = os.path.join(output_wav_folder, f"{basename}.wav")
+        output_npy = os.path.join(output_wav_folder, f"{basename}.npy")
 
         # Convert FLAC to WAV
-        convert_flac_to_wav(input_flac, output_wav)
+        convert_flac_to_npy(input_flac, output_npy)
 
 
 
