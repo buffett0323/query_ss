@@ -75,3 +75,7 @@ lr_decay_factor: 0.05 #0.01
 # reload options
 model_path: "save" # set to the directory containing `checkpoint_##.tar` 
 reload: False
+
+# knn options
+knn_k: 3 #200
+knn_t: 1.0 #0.2
