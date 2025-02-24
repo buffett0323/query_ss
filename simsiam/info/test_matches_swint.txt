@@ -1,0 +1,640 @@
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c89f2fcd-e38e-4c87-8dec-70e5af46bd12_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6529128b-d7de-4d57-b657-d47e773bb950_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9632b4b3-8692-4a33-9197-ef735213f226_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0287d80d-0879-484d-9966-38920b1b8b8a_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9155055e-fd1b-4337-b42d-4e7540670409_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/66672280-ac17-4b07-8fdb-6b3e5d30f2af_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/23cce546-d91e-424d-921f-28022bc40c0c_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/34017915-816e-4782-bcbc-a95bc33c5dd2_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5d1443b4-0e22-49dd-bb22-88c6dfd3c80f_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/64ef727f-6e3f-452f-9710-edb51eadb821_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cf322084-6dd0-4a05-9a2b-e838c016631b_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7bed7600-aec4-47f2-8cd7-50ba17c77ead_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a37a7b62-e4bc-4682-a4cc-782148bde3eb_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cccda941-2e1d-409b-9f51-d8ac6b119718_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/81100241-35c0-490a-8fc5-f70fb65db243_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/187c40cf-16ab-44d5-8bfe-423ce7e690bf_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e45fb768-2e43-48cf-a395-e9a4dc70638b_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/33db238c-d5a7-4c48-bc84-5ea02ff63f9c_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6813e131-61c5-4103-bb89-7e28f6749b36_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/46fe8562-0332-4045-b2e9-2e5a501c3cef_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/192b9302-1ace-46a3-8faf-69187cff5e34_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ca47d5ff-9023-48dd-9b8b-d0fc34a112d9_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/eab413ad-3255-41c2-8e62-aa6864f29055_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6124dd48-1c40-4aa3-96be-0bb4d647b71f_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cfe7515f-e09d-4045-88e5-5ed39bbadd12_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/824f59fc-d63f-45bf-8d63-e82d6b8e05e1_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b57f66d8-7945-4e58-9400-31f329c97402_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4cc4fb41-2b3e-49c3-9461-f833f1ab66ab_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cb39aa36-69bf-4650-8ef7-a1c3b2cabeb7_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d1589860-fd41-414c-a626-835351365182_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/aacba504-0803-4fad-a1a3-75390c5771d9_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/87e5932b-2ee7-4cef-b057-20f322ab671c_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d33e64c0-fb33-412a-b620-538fd9feb677_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/910861e8-30e7-48a3-a3e7-c49cbd732beb_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/168a0c13-0902-4db9-9616-7feaf03b354e_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b6261bcd-6313-4a93-9d10-c0d49cffad52_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/40685bf9-a81c-4fc2-8ec8-94f092380685_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f9abbfe1-5f27-4594-a4d2-a2fe1800ade8_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c3387c9a-17b8-488f-8dc6-9687563f8ea5_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6813e131-61c5-4103-bb89-7e28f6749b36_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/42674d8b-835a-42fa-86e2-9a95bc8af0bc_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/64ef727f-6e3f-452f-9710-edb51eadb821_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d921e8de-7bab-42d3-8156-49917e0b098c_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3ffba865-f57b-4a4c-95c4-e49b04951abc_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7f7d15cb-ad88-4284-8f3c-de5ca1c8b7fd_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/694a8006-0e18-490e-b644-58e53623ee00_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/55689ba0-46d1-4380-9316-5fc44cad6a05_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/27a06c3b-ea72-4dac-8dcc-22d9be8636b1_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a6e6ee62-2861-49f0-8ab5-9bfd49097552_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fcc543ad-e41a-46a1-82bb-da6359499547_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f03122fa-de58-4bf7-9128-db0992f19099_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c5575bea-6875-403a-967c-3acbcfc327d8_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/48e87f3e-18bc-484a-8f79-9d3a2eb2bb75_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fcd2dec2-95bf-4abd-8690-a618b9d8edb6_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/82601644-e5d0-4889-8947-96a6d5c94ea2_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b6261bcd-6313-4a93-9d10-c0d49cffad52_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d63922e7-177f-437b-b464-f854605d5083_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fd366ed1-9da6-49ba-ba4e-1219478b4674_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/237b0001-e78a-4809-a0ae-1fb83d449bf2_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9fc3b127-9cd8-4cfd-8862-f9f87e5650e8_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/32f8bf13-3f85-43d5-a725-1ef0e14d5918_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/389f850d-6b30-44c9-87ed-348974743c41_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/23cce546-d91e-424d-921f-28022bc40c0c_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d4e74ea6-64ec-408a-b60c-79d3b35811b7_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d6336b78-e6d8-4965-b394-b4725a1201e8_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3d3ce5e4-8a41-4c90-a3aa-185cd12a58c9_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5c332686-c2ce-4c05-ad53-92e3cb2464ae_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c2c6d997-b86e-404f-8564-37eef6bd7421_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c3575690-f8a5-4f77-bbb2-c36824b8f4f0_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ae12b308-e09a-402a-977e-b0656ceacac0_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fbac8b52-4beb-4c3d-9513-fe71f323cdbe_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/1190c56c-cbed-41ca-bf05-b13fd011c557_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cf8d3557-bdcd-43e9-ab9b-296cefabe1eb_6/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/032a821c-2da2-41f9-ae3d-0fffb44fd706_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a3de90e7-b6e0-4333-bd0a-beda468dd70d_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/60e6b2a6-1398-4602-8c0f-88451f4fd71c_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/847976d8-7832-445a-9eff-fa255f2b5b11_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6c373596-72a5-4ca1-b7e7-69eb6f6566dd_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4c4a203e-f463-4b26-b428-3caa87f59482_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e48bb514-0574-441a-826d-508863f07491_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/61dd06ae-6aeb-4e17-af81-184aac2199f9_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cd075103-9d2f-447c-830c-dae1bf683f39_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f33bafec-1289-468c-bbe3-546ab016dd9f_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8a1011d4-6f33-4ac1-bc1e-e7daf0d0f7b1_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b1cce977-ac8b-4137-ba63-7d52eabda936_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/35edbc8d-9f06-48b5-8100-aefc7e236743_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/912a9efb-a231-4b48-8ce5-b45956032a34_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b2e75484-c333-40a7-bda8-fe89652b42b7_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c7411cca-bb00-4344-9df8-5962b85c70ab_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/31f75022-0455-46c1-b6d4-247975e0dc3e_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d7054903-9b47-4d36-946a-9e20097e2043_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ee7b5cae-8631-49c7-9abe-8a993d866449_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/50f96027-a30e-4b61-8ae6-a66b49f94088_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8ddcd856-f90f-4a24-bc22-2b32f452345a_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d5a1fe57-dd52-4226-88c7-28fec8c250f0_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b41336ea-3d1c-4d40-b0c6-e893bb1e7cb3_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8d577cbc-fa4d-480b-9c2f-0661df5d0f95_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/377db46f-4605-4897-bafa-5dd2ad2e564b_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/82315dfe-d5b2-4336-af6d-22426488e2c3_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/1190c56c-cbed-41ca-bf05-b13fd011c557_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ce88011f-2eb7-45a8-bfce-c67f7c07fd0a_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8291779e-db20-412e-93c6-cef6f6d0933b_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9bb0e4d4-1570-45fe-b9b0-f4e46f203074_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b971ef00-4aca-4769-8049-56353131f4b3_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6f126e74-b48a-4c99-bca0-1771f855fc13_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c53eac92-4780-4688-a27c-f6af344c5242_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/037ad9e7-5d82-4db6-b666-72f0b6c5e0b2_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/989c352e-541a-4d36-8e96-820d234266b9_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/bb7deb26-ce4a-4891-b7e2-18402b96b508_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8a1011d4-6f33-4ac1-bc1e-e7daf0d0f7b1_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d6dfa8fb-f2ab-4229-84d7-e85155ba5df1_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/835579dd-5b3f-4bf5-9e2b-cb52ffe99d21_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4b70090b-69bc-4cd9-b750-9aff139d4b44_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d2507bbd-d7d3-4a64-bc68-84bc74bd74bc_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b52307bf-05eb-48a2-a53a-bfa652c81473_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c3387c9a-17b8-488f-8dc6-9687563f8ea5_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cdb6755a-3913-485f-9901-ee7ef9510316_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8be285e0-d166-436c-b790-1e39b58b47e4_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7a580825-1382-4644-8bd8-6bb3a0bf9408_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fdc4e1f5-7367-423f-88c2-a69355fb5fcf_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/324b7066-e685-4fe4-b5db-ecfad0511dd1_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e198be5c-370f-4ef4-b161-94b7e404f15e_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4cc4fb41-2b3e-49c3-9461-f833f1ab66ab_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9f2b0be0-5775-46c5-bb01-1fc23d338ac4_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/322be590-58bf-42b9-b6c6-5ab02649a8b1_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5c332686-c2ce-4c05-ad53-92e3cb2464ae_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3d3ce5e4-8a41-4c90-a3aa-185cd12a58c9_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/65ed67a9-c138-4098-acc7-2528c38c9da5_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/55bd11fa-bf26-4659-a9fb-5965fea5f824_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b740c7e1-5f07-47c3-bdb3-97cadbab2bdb_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fc30cb97-770c-4ba4-8032-f38784176230_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/45e4dcb9-8635-4e69-8079-33c29567590b_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/987e105f-ad4b-45ca-ba7b-deb078a7b3a0_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8296511f-5a07-450d-a30e-d1076ee1b7cb_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7867fcd7-cbd4-47eb-9b86-f46b605ffc12_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a508b028-1f61-4bab-873f-2c318ddf9f2c_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/60e1c8a4-4b5f-4baf-b4bf-b93a64c8a411_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ed403cda-f110-4560-ac7e-41d4e37f064a_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3e5721a2-6639-48f0-bcd1-ecd1fb8a4c4a_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7bed7600-aec4-47f2-8cd7-50ba17c77ead_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ae0afede-61bd-42e0-baf9-a24601b14998_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8899b943-59f0-4542-ae1a-7d1b713c307f_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a6c0eeca-77c9-43c9-b027-8496a895e5bf_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5c0de246-988e-4fc1-bbc1-46ee1467602e_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6fd54775-b8c5-413d-9d40-f42374191bcb_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ca47d5ff-9023-48dd-9b8b-d0fc34a112d9_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/78037346-37d6-4c7a-adc7-13fea909aa0d_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/91f3c1d8-c365-47b5-b706-f94f804b3366_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/24a5f8c1-54b8-42bf-9156-ca1acbbe0faa_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/15870659-e004-466f-b8db-8258a8135f7e_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0dcf6f21-d062-4c03-8544-8e0842519854_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/835579dd-5b3f-4bf5-9e2b-cb52ffe99d21_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8711e267-ac98-4a6f-9164-475a007f1ae1_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/bf61a986-0287-471d-a5d5-8cb36003d12a_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5d580ecb-a678-4001-9ec3-e8bb0921f4b1_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/57373549-8f6c-46ca-a407-35dc962d5e6c_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/90938ae0-ddbe-475e-9543-bf5c08120256_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c7385da3-2da6-40d3-b6b1-523a03580071_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a818f7c5-fdd4-4a6b-990d-470feba69016_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ceef287d-6049-4a4c-9ec1-240d5b0923d9_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/30819cec-9f6d-4be5-805f-82c55ecdab77_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e9c3a96c-dd14-442d-9066-8d9b4258cf2b_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/eab6b1bf-0287-47f7-90d7-4ec1848e1d31_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/29468c14-d9d0-459c-9e56-404cc005d3e3_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b69ede47-e6a4-4100-a509-7355c3132a0a_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cb4f1db3-cfb2-4c96-ad73-bd8981501032_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b43f94d5-fc3e-4278-a4f7-31c36f7649e0_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6580d194-99b6-407c-b968-406514a6d0cd_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ca67dc67-7f94-4f22-abba-e476581188e3_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b8d99d80-f8c2-4c7b-ac7b-db0ee3150fdf_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9bb0e4d4-1570-45fe-b9b0-f4e46f203074_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f1d2aba2-c35a-45a0-bf27-e8b4d6c1e9fe_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0251daf8-a8dc-428f-9653-177675a821d8_6/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a3de90e7-b6e0-4333-bd0a-beda468dd70d_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ac42c70d-caeb-42ab-b33c-b47a1d75b33b_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b1f9a8c1-0496-489c-b80f-c822dd0c865b_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ae80b4fd-243f-4286-ba5a-237048b89745_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c6a112ae-15da-486d-894c-2478207ffb67_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fe804d51-4f1c-44d2-99d6-dd85ac6365cd_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7b2fa61f-1a8e-4b26-ae44-fd1cd852c118_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/46c74387-0a6c-47f5-8dc6-6e82d0df023f_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5c0de246-988e-4fc1-bbc1-46ee1467602e_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/54db0ef3-2166-4fa5-92a2-bb9af58fe8ee_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4edf43a9-ed13-4d39-b734-e315902d99ed_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d21fabee-569d-4b56-9b57-0f5699d85cad_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b10c1229-fe86-4dd6-a56f-a569bef0722a_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ee7b5cae-8631-49c7-9abe-8a993d866449_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d0a59bc2-0930-4ea5-b8d3-293c5860ea8f_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/bba9a4d0-a27c-4c8c-91c1-37102bcdc748_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/de249322-5053-45cb-ac07-25b2df73da8e_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c38a42a7-32b9-4c02-a871-e869ea19c023_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/125815d9-6307-4fca-8033-0548e1ee3262_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5de54682-0bbd-4e50-894b-ff8cd0924ffb_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/23cce546-d91e-424d-921f-28022bc40c0c_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a07e9267-5453-494f-a956-71fa59ec819f_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/88a3d635-0042-4655-9dad-5500acdeb091_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/64189000-01db-4f32-9965-7f14d6fa8a90_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/845e392e-43fa-4f7b-9729-4b2441b622f3_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a75fa556-1a84-4d8e-a278-d55db4e7dc75_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e8cae743-eddf-4404-877f-58db1e953a55_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/50a59c4c-3718-4ddf-b854-9455a71205d7_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cc1ba862-4bd8-4909-ba0d-76e9146de145_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/35edbc8d-9f06-48b5-8100-aefc7e236743_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/89445f7f-39c7-44b9-9227-142229bcfe49_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e4b6ad50-6ca7-4919-a5a1-c24fae6eb042_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c02b13ed-33ec-4a79-b58e-8d329c7da9a3_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6fb2950a-17ff-4a3e-a2f8-b248640b4913_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/59eb59b0-2509-4ddc-aedd-d98046289547_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/78e8dfae-9e31-4fa8-9179-92d4e9d03ee8_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/097ed037-7ee9-4e41-a711-f8343484f2cf_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/24806188-b56e-4e88-a16e-d7fa47aa134d_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6690600b-a781-422b-ad95-8d3a58fce6c0_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/626df993-b3a7-427c-84c6-0878f1e925af_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8240bc59-b6c5-4682-a84d-c31448ad4c3d_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/93331b6d-e963-47e5-bb43-99ba3ff14ebd_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9632b4b3-8692-4a33-9197-ef735213f226_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7be6ef15-57b8-46e9-b0f0-aeffaf230775_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/852eacfe-9725-4f29-a1dc-390a85337b99_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d92532ec-7be9-4982-833e-a4519b161ec1_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f33bafec-1289-468c-bbe3-546ab016dd9f_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5138b818-5a1f-49d6-acfe-adf4c273ebfe_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d2507bbd-d7d3-4a64-bc68-84bc74bd74bc_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b52307bf-05eb-48a2-a53a-bfa652c81473_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6790cb1b-bdb3-43bd-8ecd-51d30f420abf_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c2591c71-0737-49e9-a307-7bf2cf5235c6_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/31d14d8d-edac-4c67-8ef6-1504daf41e79_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7020b0cc-5a08-4d54-8c71-b18baff9ac2e_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9632b4b3-8692-4a33-9197-ef735213f226_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/98a30ec3-d3fb-4736-82c1-447f9d496758_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/eab413ad-3255-41c2-8e62-aa6864f29055_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7e9a109e-1bb3-4179-a7eb-2d5e5af15615_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6143c572-951c-428f-a533-6214fdce1618_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/03424768-7c47-4692-806d-d639b7d0bcaf_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a1655e80-1a1b-41ca-abd5-b93babbe9a27_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6690600b-a781-422b-ad95-8d3a58fce6c0_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/24806188-b56e-4e88-a16e-d7fa47aa134d_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/53a999b4-4592-40f3-b723-f7dcee117825_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e1ef31c2-4960-42b3-8a70-c69f79234c6c_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6c466bc3-4a4b-4a28-90ef-1fcb31a18cd4_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c47fee0f-54f5-493f-a9d9-66a9cac6e959_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f0b52b33-cde0-4264-b040-994660476ba8_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f786b677-32d9-451b-b363-be1834a022a1_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a301bd74-9871-4605-a04a-4afdf970e7c3_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b57f66d8-7945-4e58-9400-31f329c97402_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fcc45d96-8a0f-474e-b7b4-b72260e92cfb_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/918540ff-2051-476c-a3b0-7c6555252e00_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/13cd52de-0ac8-44fa-867d-73c18cf24f3f_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/489cb73b-a2fa-400f-8774-d3598357c244_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e27f8b3b-ea01-47f2-9af4-49810c5493a3_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4c4a203e-f463-4b26-b428-3caa87f59482_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/005c74a4-ea75-4218-ab2e-4e223545d200_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/21dee337-8e21-46fe-9b67-90410db71847_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fd8ae2d9-5caf-4f20-aa55-9346b5009aaf_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6bb83e21-deea-4abe-be20-04d4decd16c5_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c00b05a4-a939-4fd9-86f3-62308d0f1d32_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/09806e7c-6248-437e-b705-56e1ea126700_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/317112ec-dd06-4e2a-a900-f57b1f82b1b7_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/50673721-1f94-4f23-b111-11875e3ad87a_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5bd4675f-b71b-4c98-9256-80a659be02cd_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7ffd1abe-468d-486e-a3d8-b1da07213216_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5b96f699-0829-4bcf-b6f0-e56a288e76c9_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a0be32b2-ac15-4329-bf94-786375fdc8e1_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4ee65498-5133-46ae-a4b2-f537a7f86a43_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/68373e35-b168-46ca-baad-bd7bd8ea6a4e_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8b9c7523-932f-48c7-99d6-9ff7f3b68e3e_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ce6b573e-9c37-4bc0-9561-e56c2933a9de_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/489cb73b-a2fa-400f-8774-d3598357c244_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b4fda94b-e307-4ef0-8327-4b334c515504_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9a92bcd9-6f5c-462b-8821-5e677cb44e59_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d5bafbbf-f803-4205-9545-a261e2ed7d42_7/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3ef308b0-901d-4ac6-8aa1-64ee57944815_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/aab36f05-f718-4f24-84b9-9ad1212bcc30_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/da7f1882-3841-4192-ad46-70106b9d044f_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/35edbc8d-9f06-48b5-8100-aefc7e236743_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6143c572-951c-428f-a533-6214fdce1618_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8bb27c79-170f-4462-a7f3-465693abfc90_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8958f3dc-43dc-4623-9777-d53e7ef4b956_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8a1011d4-6f33-4ac1-bc1e-e7daf0d0f7b1_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b57f66d8-7945-4e58-9400-31f329c97402_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f786b677-32d9-451b-b363-be1834a022a1_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b05af595-3df0-44a4-9632-6df259f89d58_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7dcfd800-5d23-4abd-b020-5c5133c3e080_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/293c1397-f38b-46f6-be30-d1d41eac039f_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/551b4d32-2373-4594-8e57-b9f181e5b9ab_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/610b4e2a-d7d0-4757-b20e-80d377663467_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/dfc5a081-2e84-4516-9595-f8f5c789b2a5_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3e49bbc1-d6ca-4528-bad8-fc93e18df198_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/1800c590-0c41-43df-a801-65948c031ae3_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d4729435-f644-4ac2-a4fa-b36055808a85_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d8447ea6-d727-4b30-8bb0-640038e6007a_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/aced4140-2751-4bbe-9be7-bfe85ca2a756_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e9445776-860a-4804-994e-1a287641d83b_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/dc9c1ce3-f77c-4782-8ea4-bdfccc95cd35_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9133219e-e88d-41b8-a240-dbbafe6b9f81_6/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6bb83e21-deea-4abe-be20-04d4decd16c5_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8dfd11ec-99a1-4faa-af5e-34b4524b8d9e_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/dd9fb0dc-f655-4507-9a63-8026a883a12c_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/037ad9e7-5d82-4db6-b666-72f0b6c5e0b2_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c53eac92-4780-4688-a27c-f6af344c5242_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/93f5ae60-2a8a-4936-9904-3a894df1115c_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5d1059e9-f731-4ee8-9725-eded6e305416_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6ae1e077-66a5-480e-a855-ad36b1f726f8_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/09eb3b44-b223-4db0-ae2a-0ea1faadb396_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ac437ea6-fae9-4d42-8139-f6d7eaca0789_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7749abcc-8fee-4cb7-9a75-6800053a168b_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/187c40cf-16ab-44d5-8bfe-423ce7e690bf_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9dd343f9-7259-4a13-bd38-6bb0538f3f4d_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f6d636e3-9a97-4c6c-ada0-5c5fc0fa281f_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ea8b7170-21c2-479d-afed-bffe0a5f8e9c_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d921e8de-7bab-42d3-8156-49917e0b098c_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/92e7948d-2699-48fd-bece-513e0f5cb0e5_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cf322084-6dd0-4a05-9a2b-e838c016631b_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e76b0525-c1b8-49c7-8f65-9284776bc016_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/65ed67a9-c138-4098-acc7-2528c38c9da5_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8fde93f6-6824-4bc9-86fd-354e6470f8f8_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/293626a0-1476-4519-b731-342788c7edf5_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9d36fbf8-d8ee-44c6-9df9-0f684faa9f21_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/448b6b31-093c-4679-bcd0-209e196ab350_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/05dd70d6-7bf2-49c7-b063-ab5e2ae3165d_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b4727fef-d01e-42df-b755-72cb59c59a97_6/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6f906fb1-5293-44a7-8880-56041f796cd2_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5c332686-c2ce-4c05-ad53-92e3cb2464ae_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3d3ce5e4-8a41-4c90-a3aa-185cd12a58c9_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f663a1d7-3964-41cf-8e6f-7c42b673a9bf_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/817f6616-91d8-4bde-abbb-e31df589dcf3_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9417f073-06a2-4c0c-a87f-18c676440c0d_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/823f7efb-57a0-42ca-a570-1ef64ef21472_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/1785b66d-2bc1-42a4-b843-6fdf8b666108_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9e2e4520-78ee-46a4-875d-fde9567eaee9_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d8447ea6-d727-4b30-8bb0-640038e6007a_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/03859dbc-010c-4fae-aa09-ffabb31d82e3_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7720cabf-c79d-40ec-b766-fdb46948024e_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/af52af3e-4815-4514-8cf1-caf34b47964d_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f790a039-6aa1-43ff-9bd4-92a0aa4ec423_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/af7c0a21-6f00-41f3-9713-0f2def696401_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/818f24ba-2716-4731-a420-c22e1cd86645_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/566bc131-4dd1-48e1-8286-649ab1787a98_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ba168f89-2fcd-41b7-9892-21662a5f8a2d_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9133219e-e88d-41b8-a240-dbbafe6b9f81_6/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/09806e7c-6248-437e-b705-56e1ea126700_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b4d523fd-aa00-46e5-bac6-66feb4fdafdd_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/aad2bece-1de8-45c8-908e-5f8be3686622_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7bed7600-aec4-47f2-8cd7-50ba17c77ead_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4be069c1-c200-499e-a816-91e54e70b880_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/52264da8-b274-4a60-ab74-8d406100adf1_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b43f94d5-fc3e-4278-a4f7-31c36f7649e0_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a927cd2b-bef0-4aad-825c-b0124856cd37_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cb4f1db3-cfb2-4c96-ad73-bd8981501032_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/bc0029dd-b6db-4848-b40f-bb1aded698a9_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/acd7d9cf-e341-4eb4-9426-5042bc1970af_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ae12b308-e09a-402a-977e-b0656ceacac0_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/810a0fab-ec66-4f97-9d1b-1449798b86b8_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0324be05-23da-4b8d-9363-40645d62b80a_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f8cedc6f-5e01-4b3d-9a0e-d88ab0f6fb45_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/102d3254-c6b4-43c9-a373-3bad6d9b115a_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/feb4fb34-3024-49da-85c1-27fd6b3bea02_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/98d2eeec-b9aa-4284-94be-f7f0c0636a85_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/657dc9d9-a704-4050-b8b3-1ffee8e7df62_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b2d5bf5c-fecc-41ee-bff0-a7f80010bfdc_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/40eaffd9-d45f-4953-b3d8-ec66cdd014df_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c0a8a35b-4fa9-44c4-bb8a-8fd6be655a65_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6529128b-d7de-4d57-b657-d47e773bb950_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/93331b6d-e963-47e5-bb43-99ba3ff14ebd_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/910861e8-30e7-48a3-a3e7-c49cbd732beb_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5d935ee2-c3ce-409d-b54a-8bb0df421df5_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/54a8f5e0-ff14-45ec-83f9-b0150a454102_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7020b0cc-5a08-4d54-8c71-b18baff9ac2e_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a508b028-1f61-4bab-873f-2c318ddf9f2c_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/34476335-a812-4bcc-96d0-d0509188cd50_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/125815d9-6307-4fca-8033-0548e1ee3262_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/de249322-5053-45cb-ac07-25b2df73da8e_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/be918fa7-f2da-4e02-8efe-40a91cba1ff0_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/27f74f32-91f3-46ec-8c43-dd2ab855a4ab_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b41336ea-3d1c-4d40-b0c6-e893bb1e7cb3_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/51769f86-0655-44a6-9b4a-aa1951f0ea20_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fd4447e0-3552-4af5-b2b3-94de3b0d7921_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/2570ba2b-02a5-4e24-9b40-c5b0bc32e423_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a57b3891-44bb-4408-b722-262c27faa7c6_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6de1540e-9fd0-452d-8b78-b63b122bf12a_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/53fde2fb-d74e-44f5-b1e8-537b04a8de40_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/240d96b0-1430-4c84-9105-73f5a1fb2f07_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0970d1f2-798b-457d-b887-34559bd0de9e_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8cb3dbcf-38bb-4c9a-bb89-9f150b9263b3_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c2b68fc0-72ed-4786-ae95-771b2b79e74e_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8affc317-7adf-4f8e-aae5-9761d5b630b6_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/832c3a9f-746a-4b0d-a2e8-cdb18ce94879_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e683864d-f42a-43a8-a633-115fad6700b6_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e9445776-860a-4804-994e-1a287641d83b_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/fea5f80a-2074-4ed6-a96b-955df0de60cd_6/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/93331b6d-e963-47e5-bb43-99ba3ff14ebd_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6529128b-d7de-4d57-b657-d47e773bb950_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9632b4b3-8692-4a33-9197-ef735213f226_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7b86e1ac-2523-4569-93ed-85cf8aecf033_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7720cabf-c79d-40ec-b766-fdb46948024e_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/78f32212-6252-4ea1-865f-a26221307e4c_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/af3444e8-1b8b-4c50-85a4-cc7cd4487531_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e10c1115-b72d-4068-ba25-b23f12bd4ac2_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0684cff5-965b-4ebf-9213-95845c4dea56_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5b2f6c2b-b4a8-43ef-bc4a-5d2d3c91d32f_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a6c2a9a5-db9b-4f84-9fea-41c3668f0a17_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5f2431c4-7fdc-4eea-9aea-51c8b244582e_6/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3af797fd-b93f-4734-a780-68c09200bcc7_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5f2eb66a-4e80-4382-bc56-c389338b9376_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d0a59bc2-0930-4ea5-b8d3-293c5860ea8f_4/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9725a45b-53f0-4053-9bb4-d603a329299b_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/66672280-ac17-4b07-8fdb-6b3e5d30f2af_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/34017915-816e-4782-bcbc-a95bc33c5dd2_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/23cce546-d91e-424d-921f-28022bc40c0c_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b0da3be6-776a-4b02-bec1-f8471726acd6_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5784bcae-4ae5-4a03-acce-1da46ca5b5cf_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/66672280-ac17-4b07-8fdb-6b3e5d30f2af_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/34017915-816e-4782-bcbc-a95bc33c5dd2_5/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/049addd2-e502-458c-b9c1-1428a642191f_5/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/dfc5a081-2e84-4516-9595-f8f5c789b2a5_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/92e7948d-2699-48fd-bece-513e0f5cb0e5_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3e49bbc1-d6ca-4528-bad8-fc93e18df198_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e31d38b8-b1b8-4afe-a7f5-ab71398620e6_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/1b0a33f2-2380-4391-9606-ddb8972fcd9a_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0dcf6f21-d062-4c03-8544-8e0842519854_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cd075103-9d2f-447c-830c-dae1bf683f39_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/67012423-b12c-4b26-a3ae-684bdc8523f0_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/68c19770-b1fd-4dc2-b483-732e20f19f3f_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/be4255e3-706a-4283-bca8-6e1184c58e6d_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a927cd2b-bef0-4aad-825c-b0124856cd37_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b294f7a9-0fbb-4ca6-8aa6-cfe449b527d2_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/2780c2d2-beb4-42cd-bf7d-f6cfc2d95526_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/237b0001-e78a-4809-a0ae-1fb83d449bf2_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/aab36f05-f718-4f24-84b9-9ad1212bcc30_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a9741281-f202-4611-8c6e-70ad2bdb5a20_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/065c35b6-18f4-4712-81f4-00e6deeb372c_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/44a0e215-4e3c-4e3e-905b-15798692928f_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4b3355ac-6301-45c4-b4d3-6ffa35006e49_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5bc20edf-5b3c-4bb5-8ff2-cdd04a3f0713_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/85459d9a-59e1-4cf8-b3c9-9f9b115341d8_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7a580825-1382-4644-8bd8-6bb3a0bf9408_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b299fbb7-8a24-4620-805a-a4aada29bc39_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3b686ded-6332-44c3-8074-ceacb83c876b_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/85aee4e4-f3f6-4e67-8444-ded98ff8f6b1_5/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e42bd1a1-e0b5-46c5-8bea-54a23fc6f7e0_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a57f966d-8de3-4669-91d0-1f302b2e9365_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4501affc-53bb-40eb-b221-20d3e6949b45_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/65b760c3-3162-4402-97ab-95363dc7d1c9_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8dfd11ec-99a1-4faa-af5e-34b4524b8d9e_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9f296498-49d5-4c07-a5fc-cfcc5cd2354e_6/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5b6505b7-792d-477c-8ff4-dd104253af2c_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/149e24c9-218a-4ab0-b3ce-663490d8dc20_6/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3dee3fec-9d98-4b51-9944-1cdaf2d9a429_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e2719211-3f81-4e94-8355-432dd2ebd285_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c3ab659e-ef4a-41ea-a0f4-61b71e07a201_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c4655fa1-b32f-4f4e-ae15-bed7307640e7_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/96acb20a-c1e6-44d4-8637-74d2840e6c12_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/0dcf6f21-d062-4c03-8544-8e0842519854_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/73aabcfd-8178-4319-8733-71291da65399_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8af4c767-1808-44bf-80ec-92b8d3c51d99_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c6a112ae-15da-486d-894c-2478207ffb67_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7b2fa61f-1a8e-4b26-ae44-fd1cd852c118_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e53f154c-9205-4670-ae10-204c64e5b23c_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/65ed67a9-c138-4098-acc7-2528c38c9da5_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a3de90e7-b6e0-4333-bd0a-beda468dd70d_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5c332686-c2ce-4c05-ad53-92e3cb2464ae_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/dd6be876-5b30-4b26-bb08-9b92dea44334_4/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a07e9267-5453-494f-a956-71fa59ec819f_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6d9fb88c-9cce-4df3-a67b-b80245646a46_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9f296498-49d5-4c07-a5fc-cfcc5cd2354e_6/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/12347215-d555-4cb7-9e12-735ee7e51b6a_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c2282f9d-9ee0-4a45-8b37-f0dc7e911c70_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/5491965b-0fde-418e-adba-3fe6ff5c4ebf_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/50a0d00b-6863-44a0-83fd-e2b97470b78e_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8e698f06-2f38-4515-9204-9c0fb8f95f50_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ea1bc434-ec11-4043-9e16-4181b9dc239b_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/21dee337-8e21-46fe-9b67-90410db71847_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/dcaab2c2-fa6d-4e95-8a35-26da85ac02fe_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/027087ea-0231-4c93-ba87-eb6ddbde2357_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/ef639095-652d-4753-95ff-e86fdaa51fdc_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b299fbb7-8a24-4620-805a-a4aada29bc39_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7bed7600-aec4-47f2-8cd7-50ba17c77ead_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/cb5c891d-536b-40f4-b8df-fceed76fff9f_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3ef308b0-901d-4ac6-8aa1-64ee57944815_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/293626a0-1476-4519-b731-342788c7edf5_4/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8fde93f6-6824-4bc9-86fd-354e6470f8f8_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/90e185ff-09ba-4d31-ad7a-8919a5d89c4b_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8be285e0-d166-436c-b790-1e39b58b47e4_4/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7a580825-1382-4644-8bd8-6bb3a0bf9408_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/574ffd7a-c43b-461f-a2be-81baee58ffa2_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8e37a595-c6c7-4270-8ffa-1ac1ffd4c877_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/06404bb8-b261-42e7-a2b1-ae365c3c84d0_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c8190061-c64f-41a8-a546-3196f836947f_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/377db46f-4605-4897-bafa-5dd2ad2e564b_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/273c6834-bec1-4f84-bc41-a65b4d829c8b_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/3351029a-5896-4404-8e8b-79e79af67958_2/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/f33bafec-1289-468c-bbe3-546ab016dd9f_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8a1011d4-6f33-4ac1-bc1e-e7daf0d0f7b1_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/6f881218-d386-4a53-8fb2-a8f99882c9d3_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8e8a8513-fd8d-441c-9108-27c9fbfee8c0_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/d921e8de-7bab-42d3-8156-49917e0b098c_2/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8af4c767-1808-44bf-80ec-92b8d3c51d99_3/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/219c4eb1-e5be-4493-a33e-f5f5ffef82e5_3/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/85dada6f-f1b0-4e6c-a8f8-7848f7b560cc_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c9815256-f76f-4b95-adc9-4382aa9568f2_3/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/8234476e-14ae-461b-8eec-778ae03b475b_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/39c89a10-c161-4168-8d82-d0563eab5a58_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/e8cae743-eddf-4404-877f-58db1e953a55_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/14bd0305-6b06-4dce-8205-f1b1afdfd328_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/21b687d1-f37d-4b01-a4b0-edd15e58351e_2/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/b011b73f-2f47-492f-8a1d-ed0b9956f3dd_1/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c7385da3-2da6-40d3-b6b1-523a03580071_3/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/aacba504-0803-4fad-a1a3-75390c5771d9_1/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/a818f7c5-fdd4-4a6b-990d-470feba69016_1/other.npy
+
+Test sample: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/9510c7bf-4c63-485f-8eb3-153efe6e55e0_2/other.npy
+  Neighbor 1: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/7e9a109e-1bb3-4179-a7eb-2d5e5af15615_1/other.npy
+  Neighbor 2: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/eab413ad-3255-41c2-8e62-aa6864f29055_5/other.npy
+  Neighbor 3: /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/c92fa4ed-1a8e-4995-8614-312938ceae2f_4/other.npy
+

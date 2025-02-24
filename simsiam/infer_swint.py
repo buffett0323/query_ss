@@ -22,7 +22,7 @@ import torchvision.models as models
 
 from collections import OrderedDict
 from tqdm import tqdm
-
+from model import SimSiam
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -148,10 +148,12 @@ def main_worker(gpu, ngpus_per_node, args):
     
 
     # Loading model
-    print("=> creating model '{}'".format(args.arch))
-    model = simsiam.builder.SimSiam(
-        models.__dict__[args.arch], args,
-        args.dim, args.pred_dim)
+    print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
+    model = SimSiam(
+        args=args,
+        dim=args.dim,
+        pred_dim=args.pred_dim,
+    )
     checkpoint = torch.load('model_dict/checkpoint_0150.pth.tar')  # Replace with the actual filename
 
     # Create a new state_dict without 'module.' prefix
@@ -250,10 +252,10 @@ def main_worker(gpu, ngpus_per_node, args):
         test_sampler = None
 
     memory_loader = torch.utils.data.DataLoader(
-        memory_dataset, batch_size=args.batch_size, shuffle=(memory_sampler is None),
+        memory_dataset, batch_size=64, shuffle=(memory_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=memory_sampler, drop_last=True)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False,
+        test_dataset, batch_size=64, shuffle=False,
         num_workers=args.workers, pin_memory=True, sampler=test_sampler, drop_last=True)
 
     validate(memory_loader, test_loader, model, args)
