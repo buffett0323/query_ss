@@ -1,14 +1,14 @@
 python npy2mp3.py --output_mp3 target.mp3 \
-    /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/5d2f358f-1ee8-4a32-8234-4d59a959e15d_4/other.npy
+    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/34476335-a812-4bcc-96d0-d0509188cd50_3/other.npy
 
 
 python npy2mp3.py --output_mp3 top1.mp3 \
-    /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/5d2f358f-1ee8-4a32-8234-4d59a959e15d_3/other.npy
+    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/24598c6b-2158-44fa-be01-690f798e37cb_4/other.npy
 
 
 python npy2mp3.py --output_mp3 top2.mp3 \
-    /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/eea22238-14d5-49de-9b83-faff59520d97_1/other.npy
+    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/4d2d3d37-f1c0-4f75-ba45-06616e94e66d_1/other.npy
 
 
 python npy2mp3.py --output_mp3 top3.mp3 \
-    /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/40ec3e1e-c285-45c8-ad9b-03bbd2ee2495_4/other.npy
+    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/176bcf36-855f-49d7-88a5-dd343553c59b_2/other.npy
