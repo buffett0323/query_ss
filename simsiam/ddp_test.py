@@ -6,6 +6,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler, TensorDataset
 import torch.nn as nn
 import torch.optim as optim
+from tqdm import tqdm
 
 # Simple Model
 class SimpleModel(nn.Module):
@@ -41,7 +42,7 @@ def train(rank, world_size):
     optimizer = optim.SGD(model.parameters(), lr=0.01)
 
     # Training loop
-    for epoch in range(5):
+    for epoch in tqdm(range(3)):
         sampler.set_epoch(epoch)  # Ensures randomness across epochs
         for batch in dataloader:
             inputs, targets = batch
