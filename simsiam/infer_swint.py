@@ -154,7 +154,7 @@ def main_worker(gpu, ngpus_per_node, args):
         dim=args.dim,
         pred_dim=args.pred_dim,
     )
-    checkpoint = torch.load('model_dict/checkpoint_0150.pth.tar')  # Replace with the actual filename
+    checkpoint = torch.load('model_dict/checkpoint_0200.pth.tar')  # Replace with the actual filename
 
     # Create a new state_dict without 'module.' prefix
     new_state_dict = OrderedDict()

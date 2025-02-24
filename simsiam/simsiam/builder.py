@@ -22,18 +22,6 @@ class SimSiam(nn.Module):
         """
         super(SimSiam, self).__init__()
         self.args = args
-        
-        
-        # ** Melspec Transform **
-        self.mel_transform = T.MelSpectrogram(
-            sample_rate=self.args.sample_rate,
-            n_mels=self.args.n_mels,
-            n_fft=self.args.n_fft,
-            hop_length=self.args.hop_length,
-            f_max=self.args.fmax,
-        )
-        self.db_transform = T.AmplitudeToDB(stype="power")
-        self.transform_rs = transforms.Resize((args.img_size, args.img_size))
 
         # create the encoder
         # num_classes is the output fc dimension, zero-initialize last BNs
@@ -58,11 +46,6 @@ class SimSiam(nn.Module):
                                         nn.ReLU(inplace=True), # hidden layer
                                         nn.Linear(pred_dim, dim)) # output layer
     
-    def do_mel_transform(self, x):
-        # Convert waveform to mel spectrogram and apply dB scaling
-        mel_spec = self.mel_transform(x)
-        return self.db_transform(mel_spec)
-    
 
     def forward(self, x1, x2):
         """
@@ -73,13 +56,6 @@ class SimSiam(nn.Module):
             p1, p2, z1, z2: predictors and targets of the network
             See Sec. 3 of https://arxiv.org/abs/2011.10566 for detailed notations
         """
-        # Mel-transform the input waveforms
-        x1 = self.do_mel_transform(x1)
-        x2 = self.do_mel_transform(x2)
-        
-        x1 = self.transform_rs(x1.unsqueeze(1))
-        x2 = self.transform_rs(x2.unsqueeze(1))
-
         # compute features for one view
         z1 = self.encoder(x1) # NxC
         z2 = self.encoder(x2) # NxC
@@ -88,6 +64,7 @@ class SimSiam(nn.Module):
         p2 = self.predictor(z2) # NxC
 
         return p1, p2, z1.detach(), z2.detach()
+    
     
 if __name__ == "__main__":
     

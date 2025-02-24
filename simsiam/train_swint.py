@@ -255,7 +255,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # Save checkpoints
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
-            if epoch % 50 == 0 and epoch != 0:
+            if (epoch+1) % 50 == 0 and epoch != 0:
                 save_checkpoint({
                     'epoch': epoch + 1,
                     'state_dict': model.state_dict(),

@@ -25,9 +25,8 @@ import torch.utils.data
 import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
-from model import SimSiam
 from dataset import BPDataset, BPDataModule
-from transforms import CLARTransform, AudioFXAugmentation
+from transforms import CLARTransform
 import simsiam.builder
 
 model_names = sorted(name for name in models.__dict__
@@ -43,7 +42,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 def main():
     # Loading args
-    parser = argparse.ArgumentParser(description="SimSiam")
+    parser = argparse.ArgumentParser(description="SimSiam_BP")
 
     config = yaml_config_hook("config/ssbp_resnet50.yaml")
     for k, v in config.items():
@@ -126,16 +125,13 @@ def main_worker(gpu, ngpus_per_node, args):
         )
         
     # create model
-    # print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
-    # model = SimSiam(
-    #     args=args,
-    #     dim=args.dim,
-    #     pred_dim=args.pred_dim,
-    # )
     print("=> creating model '{}'".format(args.arch))
     model = simsiam.builder.SimSiam(
-        models.__dict__[args.arch], args,
-        args.dim, args.pred_dim)
+        base_encoder=models.__dict__[args.arch], 
+        args=args,
+        dim=args.dim, 
+        pred_dim=args.pred_dim,
+    )
 
     # infer learning rate before changing batch size
     init_lr = args.lr * args.batch_size / 256
@@ -223,6 +219,10 @@ def main_worker(gpu, ngpus_per_node, args):
         data_augmentation=args.data_augmentation,
         random_slice=args.random_slice,
         stems=['other'],
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
     )
     
     
@@ -232,9 +232,12 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
-
+        train_dataset, batch_size=args.batch_size, 
+        shuffle=(train_sampler is None), sampler=train_sampler,
+        num_workers=args.workers, pin_memory=args.pin_memory, 
+        drop_last=args.drop_last,
+        persistent_workers=args.persistent_workers,  # Keep workers alive to reduce loading overhead
+        prefetch_factor=4)
 
     
     # Training loops
@@ -253,7 +256,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # Save checkpoints
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
-            if epoch % 25 == 0:
+            if (epoch+1) % 50 == 0 and epoch != 0:
                 save_checkpoint({
                     'epoch': epoch + 1,
                     'state_dict': model.state_dict(),
@@ -277,7 +280,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j) in enumerate(train_loader):
+    for i, (x_i, x_j, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 

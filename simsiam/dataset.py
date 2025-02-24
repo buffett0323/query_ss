@@ -87,8 +87,8 @@ class BPDataset(Dataset):
         self.img_std = img_std
         self.augment = Compose([
             AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5), 
-            TimeStretch(min_rate=0.8, max_rate=1.25, p=0.4), # S3T settings
-            PitchShift(min_semitones=-4, max_semitones=4, p=0.4), # S3T settings
+            # TimeStretch(min_rate=0.8, max_rate=1.25, p=0.4), # S3T settings
+            # PitchShift(min_semitones=-4, max_semitones=4, p=0.4), # S3T settings
             # Shift(p=1),
         ])
     
@@ -111,6 +111,13 @@ class BPDataset(Dataset):
         return (x - self.img_mean) / self.img_std
 
 
+    def random_crop(self, x):
+        """ Random crop for 4 seconds """
+        max_idx = int(x.shape[0]) - self.duration
+        idx = random.randint(0, max_idx)
+        return x[idx:idx+self.duration]
+
+
     def __getitem__(self, idx):
         """ 
             1. Mel-Spectrogram Transformation
@@ -122,11 +129,19 @@ class BPDataset(Dataset):
         path = self.data_path_list[idx]
         x = np.load(path)
         
+        
+        # Random Crop
+        if self.random_slice:
+            x_i, x_j = self.random_crop(x), self.random_crop(x)
+        else:
+            x_i, x_j = x[:self.duration], x[self.duration:]
+        
         # Augmentation
         if self.data_augmentation:
             # x_i, x_j = self.augment_func(x[:self.duration], x[self.duration:])
-            x_i = self.augment(x[:self.duration], sample_rate=self.sample_rate)
-            x_j = self.augment(x[self.duration:], sample_rate=self.sample_rate)
+            x_i = self.augment(x_i, sample_rate=self.sample_rate)
+            x_j = self.augment(x_j, sample_rate=self.sample_rate)
+        
         
         # TODO: Random Crop for 4 seconds
         x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
@@ -237,7 +252,7 @@ class BPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_swint.yaml")
+    config = yaml_config_hook("config/ssbp_resnet50.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -260,42 +275,50 @@ if __name__ == "__main__":
         data_augmentation=args.data_augmentation,
         random_slice=args.random_slice,
         stems=['other'],
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
     )
+    
+    for i in range(10):
+        ts1, ts2, _ = train_dataset[i]
+        print(ts1.shape, ts2.shape)
 
-    # Experiment 1: Mel-spectrogram
-    mel_transform = T.MelSpectrogram(
-        sample_rate=args.sample_rate,
-        n_mels=args.n_mels,
-        n_fft=args.n_fft,
-        hop_length=args.hop_length,
-        f_max=args.fmax,
-    )
-    db_transform = T.AmplitudeToDB(stype="power")
-    i = 0
-    xi, xj = train_dataset[i][0], train_dataset[i][1]
+    # # Experiment 1: Mel-spectrogram
+    # mel_transform = T.MelSpectrogram(
+    #     sample_rate=args.sample_rate,
+    #     n_mels=args.n_mels,
+    #     n_fft=args.n_fft,
+    #     hop_length=args.hop_length,
+    #     f_max=args.fmax,
+    # )
+    # db_transform = T.AmplitudeToDB(stype="power")
+    # i = 0
+    # xi, xj = train_dataset[i][0], train_dataset[i][1]
     
-    # original dataset
-    x = np.load(train_dataset.data_path_list[i])
+    # # original dataset
+    # x = np.load(train_dataset.data_path_list[i])
     
-    torchaudio.save("visualization/x.wav", torch.tensor(x).clone().detach().unsqueeze(0), args.sample_rate)
-    torchaudio.save("visualization/xi.wav", xi.clone().detach().unsqueeze(0), args.sample_rate)
-    torchaudio.save("visualization/xj.wav", xj.clone().detach().unsqueeze(0), args.sample_rate)
+    # torchaudio.save("visualization/x.wav", torch.tensor(x).clone().detach().unsqueeze(0), args.sample_rate)
+    # torchaudio.save("visualization/xi.wav", xi.clone().detach().unsqueeze(0), args.sample_rate)
+    # torchaudio.save("visualization/xj.wav", xj.clone().detach().unsqueeze(0), args.sample_rate)
 
     
-    x1 = db_transform(mel_transform(xi))
-    x2 = db_transform(mel_transform(xj))
-    print(x1.shape, x2.shape)
+    # x1 = db_transform(mel_transform(xi))
+    # x2 = db_transform(mel_transform(xj))
+    # print(x1.shape, x2.shape)
     
-    plot_spec_and_save(x1, "mel_spectrogram_x1_256.png", sr=args.sample_rate)
-    plot_spec_and_save(x2, "mel_spectrogram_x2_256.png", sr=args.sample_rate)
+    # plot_spec_and_save(x1, "mel_spectrogram_x1_256.png", sr=args.sample_rate)
+    # plot_spec_and_save(x2, "mel_spectrogram_x2_256.png", sr=args.sample_rate)
     
 
-    # Experiment 2: Resize spectrogram
-    res_x1 = resize_spec(x1, target_size=(256, 256))
-    res_x2 = resize_spec(x2, target_size=(256, 256))
+    # # Experiment 2: Resize spectrogram
+    # res_x1 = resize_spec(x1, target_size=(256, 256))
+    # res_x2 = resize_spec(x2, target_size=(256, 256))
     
-    plot_spec_and_save(res_x1, "resized_x1_256.png", sr=args.sample_rate)
-    plot_spec_and_save(res_x2, "resized_x2_256.png", sr=args.sample_rate)
+    # plot_spec_and_save(res_x1, "resized_x1_256.png", sr=args.sample_rate)
+    # plot_spec_and_save(res_x2, "resized_x2_256.png", sr=args.sample_rate)
 
 
     # for i in range(10):
