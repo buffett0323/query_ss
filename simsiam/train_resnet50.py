@@ -256,7 +256,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # Save checkpoints
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
-            if (epoch+1) % 50 == 0 and epoch != 0:
+            if (epoch+1) % 10 == 0:
                 save_checkpoint({
                     'epoch': epoch + 1,
                     'state_dict': model.state_dict(),
@@ -333,7 +333,7 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
             param_group['lr'] = cur_lr
 
 
-def save_checkpoint(state, is_best, filename, save_dir="model_dict/"):
+def save_checkpoint(state, is_best, filename, save_dir="/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/"):
     torch.save(state, os.path.join(save_dir, filename))
     if is_best:
         shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))

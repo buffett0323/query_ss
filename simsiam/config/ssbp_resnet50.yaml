@@ -3,7 +3,7 @@ segment_second: 8 # half in 2 seconds
 piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "Resnet+4/8secs+224img+Crop+Noise"
+wandb_name: "Resnet+4/ALL+224img+Crop+Noise"
 wandb_notes: "SSBP Resnet50 Training 3090*2, no ts+ps"
 
 
@@ -21,7 +21,7 @@ melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: True # Random slice enhance model's ability of capturing timbre
 workers: 24 # 24 for terra, 56 for fatcat
-gpu: [0, 1, 2, 3] #[0,1,2,3]
+gpu: [1, 3] #[0,1,2,3]
 
 
 # train options
