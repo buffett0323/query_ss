@@ -153,7 +153,7 @@ def main_worker(gpu, ngpus_per_node, args):
     model = simsiam.builder.SimSiam(
         models.__dict__[args.arch], args,
         args.dim, args.pred_dim)
-    checkpoint = torch.load('model_dict/checkpoint_0175.pth.tar')  # Replace with the actual filename
+    checkpoint = torch.load('/home/buffett/NAS_NTU_BFT/simsiam_model_dict/resnet_model_dict/checkpoint_0079.pth.tar')  # Replace with the actual filename
 
     # Create a new state_dict without 'module.' prefix
     new_state_dict = OrderedDict()
@@ -211,10 +211,14 @@ def main_worker(gpu, ngpus_per_node, args):
         n_fft=args.n_fft,
         hop_length=args.hop_length,
         split="train",
-        melspec_transform=False, #args.melspec_transform,
-        data_augmentation=False, #args.data_augmentation,
-        random_slice=False, #args.random_slice,
+        melspec_transform=args.melspec_transform,
+        data_augmentation=args.data_augmentation,
+        random_slice=args.random_slice,
         stems=['other'],
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
     )
     test_dataset = BPDataset(
         sample_rate=args.sample_rate, 
@@ -229,10 +233,14 @@ def main_worker(gpu, ngpus_per_node, args):
         n_fft=args.n_fft,
         hop_length=args.hop_length,
         split="test",
-        melspec_transform=False, #args.melspec_transform,
-        data_augmentation=False, #args.data_augmentation,
-        random_slice=False, #args.random_slice,
+        melspec_transform=args.melspec_transform,
+        data_augmentation=args.data_augmentation,
+        random_slice=args.random_slice,
         stems=['other'],
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
     )
     
     if args.distributed:
@@ -243,10 +251,10 @@ def main_worker(gpu, ngpus_per_node, args):
         test_sampler = None
 
     memory_loader = torch.utils.data.DataLoader(
-        memory_dataset, batch_size=args.batch_size, shuffle=(memory_sampler is None),
+        memory_dataset, batch_size=64, shuffle=(memory_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=memory_sampler, drop_last=True)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False,
+        test_dataset, batch_size=64, shuffle=False,
         num_workers=args.workers, pin_memory=True, sampler=test_sampler, drop_last=True)
 
     validate(memory_loader, test_loader, model, args)
@@ -260,11 +268,12 @@ def validate(memory_loader, test_loader, model, args):
 
     with torch.no_grad():
         # Extract features from memory_loader
-        for x1, _, path in tqdm(memory_loader, desc='Feature extracting'):
-            x1 = x1.cuda(args.gpu, non_blocking=True)
-            x1 = model.module.do_mel_transform(x1).unsqueeze(1)
-            x1 = model.module.transform_rs(x1)
-            feature = model.module.encoder(x1)
+        for x_i, x_j, path in tqdm(memory_loader, desc='Feature extracting'):
+            if args.gpu is not None:
+                x_i = x_i.cuda(args.gpu, non_blocking=True)
+                x_j = x_j.cuda(args.gpu, non_blocking=True)
+            
+            _, _, feature, _ = model(x1=x_i, x2=x_j)
             feature = F.normalize(feature, dim=1)
             feature_bank.append(feature)
             feature_paths.extend(path)
@@ -289,18 +298,18 @@ def validate(memory_loader, test_loader, model, args):
 
         # Loop through test data to find top-3 nearest neighbors
         test_bar = tqdm(test_loader, desc='KNN Evaluation')
-        with open('info/test_matches.txt', 'w') as f: 
-            for x1, _, test_path in test_bar:  # Removed `target` as labels are not needed
-                x1 = x1.cuda(args.gpu, non_blocking=True)
-                x1 = model.module.do_mel_transform(x1).unsqueeze(1)
-                x1 = model.module.transform_rs(x1)
+        with open('info/test_matches_resnet50.txt', 'w') as f: 
+            for x_i, x_j, test_path in test_bar:
+                if args.gpu is not None:
+                    x_i = x_i.cuda(args.gpu, non_blocking=True)
+                    x_j = x_j.cuda(args.gpu, non_blocking=True)
                 
-                feature = model.module.encoder(x1)
+                _, _, feature, _ = model(x1=x_i, x2=x_j)
                 feature = F.normalize(feature, dim=1)
                     
                 # Get top-3 nearest neighbors
                 top_k_indices, top_k_similarities = knn_predict(
-                    feature, feature_bank, knn_k=3, knn_t=args.knn_t
+                    feature, feature_bank, knn_k=args.knn_k, knn_t=args.knn_t
                 )
 
                 # Retrieve the paths of the top-3 nearest neighbors
@@ -309,9 +318,11 @@ def validate(memory_loader, test_loader, model, args):
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
                     
                     # Write to file
-                    f.write(f"Test sample: {test_sample_path}\n")
+                    f.write("python npy2mp3.py --output_mp3 target.mp3 \\")
+                    f.write(f"    {test_sample_path}\n")
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
-                        f.write(f"  Neighbor {rank}: {neighbor_path}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3 \\")
+                        f.write(f"    {neighbor_path}\n")
                     f.write("\n")
 
                 print(f"Test sample: {test_sample_path}")
