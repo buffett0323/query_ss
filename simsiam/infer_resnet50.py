@@ -153,7 +153,7 @@ def main_worker(gpu, ngpus_per_node, args):
     model = simsiam.builder.SimSiam(
         models.__dict__[args.arch], args,
         args.dim, args.pred_dim)
-    checkpoint = torch.load('/home/buffett/NAS_NTU_BFT/simsiam_model_dict/resnet_model_dict/checkpoint_0079.pth.tar')  # Replace with the actual filename
+    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar')  # Replace with the actual filename
 
     # Create a new state_dict without 'module.' prefix
     new_state_dict = OrderedDict()
