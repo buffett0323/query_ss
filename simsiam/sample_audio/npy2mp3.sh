@@ -1,4 +1,4 @@
-python npy2mp3.py --output_mp3 target.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/934824a5-c6ee-4819-afed-581aa8a4b372_2/other.npy
-python npy2mp3.py --output_mp3 top1.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/934824a5-c6ee-4819-afed-581aa8a4b372_3/other.npy
-python npy2mp3.py --output_mp3 top2.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/de797868-47ce-4b79-aa76-4bd0f580a60b_3/other.npy
-python npy2mp3.py --output_mp3 top3.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/5a46c92b-3cec-44b5-9635-5ca88aea5a73_1/other.npy
+python npy2mp3.py --output_mp3 s5_target.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/934824a5-c6ee-4819-afed-581aa8a4b372_2/other.npy
+python npy2mp3.py --output_mp3 s5_top1.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/934824a5-c6ee-4819-afed-581aa8a4b372_3/other.npy
+python npy2mp3.py --output_mp3 s5_top2.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/de797868-47ce-4b79-aa76-4bd0f580a60b_3/other.npy
+python npy2mp3.py --output_mp3 s5_top3.mp3     /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/5a46c92b-3cec-44b5-9635-5ca88aea5a73_1/other.npy
