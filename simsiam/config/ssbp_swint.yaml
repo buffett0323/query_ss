@@ -3,12 +3,12 @@ segment_second: 8 # half in 2 seconds
 piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "SwinT+4/8secs+256*8win+Crop+Noise"
-wandb_notes: "SSBP Swin Transformer Training 3090*2"
+wandb_name: "SwinT+4/ALL+224*7win+Crop+Noise"
+wandb_notes: "SSBP SwinT Training 3090*2, no ts+ps"
 
 
 # distributed training
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy"
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
 # data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
 world_size: 1 #-1
 rank: 0 # -1
@@ -18,7 +18,7 @@ multiprocessing_distributed: True #True
 find_unused_parameters: False # False
 melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
-random_slice: False # Random slice enhance model's ability of capturing timbre
+random_slice: True # Random slice enhance model's ability of capturing timbre
 workers: 24 # 24 for terra, 56 for fatcat
 gpu: [0, 1, 2, 3] #[0,1,2,3]
 
@@ -50,8 +50,8 @@ hop_length: 512 #188 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
 n_mels: 128 #256 #128
-img_size: 256 #256
-swint_window_size: 8 #8
+img_size: 224 #256
+swint_window_size: 7 #8
 fmin: 20
 fmax: 8000 # 16000/2
 pin_memory: True

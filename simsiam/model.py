@@ -25,16 +25,6 @@ class SimSiam(nn.Module):
         super(SimSiam, self).__init__()
         self.args = args
 
-        # ** Melspec Transform **
-        self.mel_transform = T.MelSpectrogram(
-            sample_rate=self.args.sample_rate,
-            n_mels=self.args.n_mels,
-            n_fft=self.args.n_fft,
-            hop_length=self.args.hop_length,
-            f_max=self.args.fmax,
-        )
-        self.db_transform = T.AmplitudeToDB(stype="power")
-
         # ** Encoders **
         if self.args.encoder_name == "Wavegram_Logmel128_Cnn14":
             self.encoder = Wavegram_Logmel128_Cnn14(
