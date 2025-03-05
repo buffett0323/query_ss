@@ -104,6 +104,7 @@ class SynthesizerTrn(nn.Module):
         self.segment_size = segment_size
 
         # Speaker Representation -- Timbre Encoder
+        # TODO: Timbre Encoder: Simsiam inference
         self.emb_g = StyleEncoder(
             in_dim=80, 
             hidden_dim=256, 
@@ -111,6 +112,7 @@ class SynthesizerTrn(nn.Module):
         )
         
         # Pitch Encoder
+        # TODO: Basic Pitch yn
         self.emb_p = PitchEncoder(
             in_dim=80, 
             hidden_dim=256, 

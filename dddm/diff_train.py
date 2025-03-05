@@ -15,6 +15,7 @@ from torch.utils.data.distributed import DistributedSampler
 import random
 import commons
 import utils
+import wandb
 
 from augmentation.aug import Augment
 from model.simple_dddm_mixup import DDDM
@@ -118,7 +119,10 @@ def run(rank, n_gpus, hps):
     if rank == 0:
         print('[Encoder] number of Parameters:', get_param_num(model.encoder))
         print('[Decoder] number of Parameters:', get_param_num(model.decoder))
-
+    
+        # Log model structure to wandb
+        wandb.watch(model, log="all")
+    
     optimizer = torch.optim.AdamW(
         model.parameters(),
         hps.train.learning_rate,
@@ -194,6 +198,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         if rank == 0:
             if global_step % hps.train.log_interval == 0: # 500
                 lr = optimizer.param_groups[0]['lr']
+                wandb.log({"loss_diff": loss_diff.item(), "loss_mel": loss_mel.item(), "total_loss": loss_gen_all.item(), "learning_rate": lr, "step": global_step})
+                
                 losses = [loss_diff]
                 logger.info('Train Epoch: {} [{:.0f}%]'.format(
                     epoch,
@@ -262,6 +268,7 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=Tru
 
         mel_loss /= 100
         enc_loss /= 100
+        wandb.log({"val_mel_loss": mel_loss, "val_enc_loss": enc_loss, "step": global_step})
 
     scalar_dict = {"val/mel": mel_loss, "val/enc_mel": enc_loss}
     utils.summarize(
