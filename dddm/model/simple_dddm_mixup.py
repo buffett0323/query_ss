@@ -18,6 +18,8 @@ import transformers
 import commons
 from modules_sf.modules import *
 from commons import init_weights, get_padding  
+from model.basic_pitch_encoder import init_basic_pitch_model, basic_pitch_encoder
+from model.timbre_encoder import init_timbre_encoder, timbre_encoder
 
 class Wav2vec2(torch.nn.Module):
     def __init__(self, layer=12): 
@@ -103,22 +105,11 @@ class SynthesizerTrn(nn.Module):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.segment_size = segment_size
 
-        # Speaker Representation -- Timbre Encoder
-        # TODO: Timbre Encoder: Simsiam inference
-        self.emb_g = StyleEncoder(
-            in_dim=80, 
-            hidden_dim=256, 
-            out_dim=256,
-        )
+        # Speaker Representation -- Timbre Encoder: Simsiam inference
+        self.emb_g = init_timbre_encoder()
         
-        # Pitch Encoder
-        # TODO: Basic Pitch yn
-        self.emb_p = PitchEncoder(
-            in_dim=80, 
-            hidden_dim=256, 
-            pitch_classes=129,
-            out_dim=128,
-        )
+        # Pitch Encoder: Basic Pitch yn
+        self.emb_p = init_basic_pitch_model()
 
         # Decoder
         self.dec_s = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256) 
@@ -127,8 +118,8 @@ class SynthesizerTrn(nn.Module):
         x_mask = torch.unsqueeze(commons.sequence_mask(length, x_mel.size(2)), 1).to(x_mel.dtype)
         
         # Timbre & Pitch Encoders
-        g = self.emb_g(x_mel, x_mask).unsqueeze(-1)
-        f0, _ = self.emb_p(x_mel, x_mask)#.unsqueeze(-1)
+        g = self.emb_g(x_mel).unsqueeze(-1)
+        f0 = self.emb_p(x_mel)#.unsqueeze(-1)
 
         # Mix-up Training
         if mixup is True:

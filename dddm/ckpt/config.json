@@ -23,7 +23,7 @@
     "num_workers": 24
   },
   "data": {
-    "filelist_path": "/mnt/gestalt/home/ddmanddman/cocochorales_output/main_dataset/",
+    "filelist_path": "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/",
     "txt_path": "info/",
     "sampling_rate": 16000,
     "filter_length": 1280,

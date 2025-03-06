@@ -72,6 +72,7 @@ def init_timbre_encoder():
         new_key = k.replace("module.", "")  # Remove 'module.' prefix
         new_state_dict[new_key] = v
     model.load_state_dict(new_state_dict)
+    model.eval()
     
     return model.encoder
 

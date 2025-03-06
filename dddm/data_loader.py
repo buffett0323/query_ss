@@ -1,5 +1,10 @@
+import random
 import torch
+import os
 import torchaudio
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 import torchaudio.functional as AF
 import torchaudio.transforms as T
 from torchvision.transforms.functional import crop
@@ -11,15 +16,120 @@ from typing import Optional
 from functools import partial
 from tqdm import tqdm
 
-import os
-import torchaudio
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 import utils
 
 np.random.seed(1234)
+
+class BPDataset(Dataset):
+    def __init__(
+        self,
+        sample_rate,
+        segment_second,
+        data_dir,
+        augment_func,
+        piece_second=3,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        split="train",
+        melspec_transform=False,
+        data_augmentation=True,
+        random_slice=False,
+        stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
+        fmax=8000,
+        img_size=256,
+        img_mean=0,
+        img_std=0,
+    ):
+        # Load split files from txt file
+        with open(f"../simsiam/info/{split}_bp_8secs.txt", "r") as f:
+            bp_listdir = [line.strip() for line in f.readlines()]
+
+        self.stems = stems
+        self.data_path_list = [
+            os.path.join(data_dir, folder, f"{stem}.npy")
+            for folder in bp_listdir
+                for stem in stems
+        ]
+
+        self.sample_rate = sample_rate
+        self.segment_second = segment_second
+        self.duration = sample_rate * piece_second # 4 seconds for each piece
+        self.augment_func = augment_func # CLARTransform
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.n_mels = n_mels
+        self.split = split
+        self.melspec_transform = melspec_transform
+        self.data_augmentation = data_augmentation
+        self.random_slice = random_slice
+        
+        # Mel-spec transform
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_mels=n_mels,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            f_max=fmax,
+        )
+        self.db_transform = T.AmplitudeToDB(
+            stype="power"
+        )
+        self.resizer = transforms.Resize((img_size, img_size))
+        self.img_mean = img_mean
+        self.img_std = img_std
+
+    
+    def __len__(self): #""" Total we got 175698 files * 4 tracks """
+        return len(self.data_path_list)
+    
+    
+    def mel_spec_transform(self, x):
+        x = x.float()
+        mel_spec = self.mel_transform(x).float()
+        return self.db_transform(mel_spec)
+        
+    
+    
+    def data_pipeline(self, x):
+        x = torch.tensor(x)
+        x = self.mel_spec_transform(x).unsqueeze(0)
+        x = self.resizer(x) # transform to 1, img_size, img_size
+        return (x - self.img_mean) / self.img_std
+
+
+    def random_crop(self, x):
+        """ Random crop for 4 seconds """
+        max_idx = int(x.shape[0]) - self.duration
+        idx = random.randint(0, max_idx)
+        return x[idx:idx+self.duration]
+
+
+    def __getitem__(self, idx):
+        """ 
+            1. Mel-Spectrogram Transformation
+            2. Resize
+            3. Normalization
+            4. Data Augmentation
+        """
+        # Load audio data
+        path = self.data_path_list[idx]
+        x_audio = np.load(path)
+        
+        
+        # Random Crop
+        if self.random_slice:
+            x_audio = self.random_crop(x_audio)
+        
+        # Mel-Spectrogram Transformation
+        x_mel = self.data_pipeline(x_audio)
+        
+        return x_mel.float(), x_audio.float(), path
+
+
+
+
 
 class CocoChorale_Simple_DS(Dataset):
     def __init__(
