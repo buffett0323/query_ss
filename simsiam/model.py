@@ -66,6 +66,9 @@ class SimSiam(nn.Module):
             nn.Linear(prev_dim, dim, bias=False),
             nn.BatchNorm1d(dim, affine=False)  # Output layer (no affine)
         )
+        
+        # **Added for Debugging**
+        self.projector[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
 
         # **Build a 2-layer predictor**
         self.predictor = nn.Sequential(

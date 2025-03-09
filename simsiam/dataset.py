@@ -150,6 +150,16 @@ class BPDataset(Dataset):
 
 
 
+class MixedDataset(Dataset):
+    def __init__(self, bp_dataset, mix_dataset):
+        self.bp_dataset = bp_dataset
+        self.mix_dataset = mix_dataset
+        
+        
+        
+
+
+
 
 class BPDataModule(LightningDataModule):
     def __init__(
