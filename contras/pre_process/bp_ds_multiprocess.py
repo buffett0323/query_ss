@@ -7,12 +7,15 @@ from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 
 # Init settings
-path = "/home/buffett/NAS_NTU" # "/mnt/gestalt/home/ddmanddman"
-output_path = f"{path}/beatport_analyze/chorus_audio_npy"
+section = "verse"
+path = "/mnt/gestalt/home/ddmanddman" # "/home/buffett/NAS_NTU" # 
+output_path = f"{path}/beatport_analyze/{section}_audio_npy" # f"{path}/beatport_analyze/chorus_audio_npy"
 json_folder = f"{path}/beatport_analyze/json"
 htdemucs_folder = f"{path}/beatport_analyze/htdemucs"
+stems = ["vocals"] #["drums", "bass", "other", "vocals"]
+
 os.makedirs(output_path, exist_ok=True)
-thres = 6
+thres = 8
 sr = 44100
 num_workers = max(1, cpu_count() - 2)  # Use available CPU cores minus 2 to avoid system freeze
 print("Num workers:", num_workers)
@@ -33,7 +36,7 @@ def process_json(json_path):
 
         # Load the original audio
         data_path = data["path"]
-        data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
+        # data_path = data_path.replace("/mnt/gestalt/database", "/home/buffett/NAS_DB")
         y, _ = torchaudio.load(data_path)#, sr=sr)
 
         # Extract name from path
@@ -41,7 +44,7 @@ def process_json(json_path):
 
         counter = 0
         for segment in data["segments"]:
-            if segment["label"] == "chorus" and (segment["end"] - segment["start"]) > thres:
+            if segment["label"] == section and (segment["end"] - segment["start"]) > thres:
                 counter += 1
                 start_sample = int(segment["start"] * sr)  # Convert time to samples
                 end_sample = int(segment["end"] * sr)
@@ -57,7 +60,7 @@ def process_json(json_path):
                 np.save(f"{segment_folder}/mix.npy", mix_seg)
 
                 # Load stems from htdemucs folder and save
-                for stem in ["drums", "bass", "other", "vocals"]:
+                for stem in stems:
                     stem_path = os.path.join(htdemucs_folder, name, f"{stem}.wav")
                     if os.path.exists(stem_path):  # Ensure the stem file exists
                         ht_stem, _ = torchaudio.load(stem_path)
