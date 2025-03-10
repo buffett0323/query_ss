@@ -6,19 +6,19 @@ from multiprocessing import Pool, cpu_count
 
 # Directory Paths
 seconds = 8
-input_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"  
-output_dir = f"/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_{seconds}secs_npy"  
-sources = ["other.npy"] #["bass.npy", "drums.npy", "mix.npy", "other.npy", "vocals.npy"]
+input_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_npy"  
+output_dir = f"/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
+sources = ["vocals.npy"] #["bass.npy", "drums.npy", "mix.npy", "other.npy", "vocals.npy"]
 
 # Ensure output directory exists
 os.makedirs(output_dir, exist_ok=True)
 slice_duration = 16000 * seconds  # 6 seconds
 
-# # Resampling function
-# def resample_audio(audio, orig_sr=44100, target_sr=16000):
-#     """Efficiently resample audio using polyphase filtering."""
-#     audio = np.mean(audio, axis=0, keepdims=False)  # Convert to mono
-#     return scipy.signal.resample_poly(audio, target_sr, orig_sr)
+# Resampling function
+def resample_audio(audio, orig_sr=44100, target_sr=16000):
+    """Efficiently resample audio using polyphase filtering."""
+    audio = np.mean(audio, axis=0, keepdims=False)  # Convert to mono
+    return scipy.signal.resample_poly(audio, target_sr, orig_sr)
 
 
 
@@ -38,12 +38,16 @@ def process_file(filename):
         
         # Load .npy file
         audio_data = np.load(filepath)  # Shape: (samples, ) or (samples, channels)
-        if audio_data.shape[0] < slice_duration:
+        
+        # Resample
+        resampled_audio = resample_audio(audio_data)
+        
+        if resampled_audio.shape[0] < slice_duration:
+            print(f"Skipping {filename} because of insufficient length {resampled_audio.shape[0]}")
             continue
-        audio_data = audio_data[:slice_duration]
 
         # Save Resampled Data
-        np.save(output_path, audio_data)
+        np.save(output_path, resampled_audio)
 
     return f"Processed {filename}"
 
