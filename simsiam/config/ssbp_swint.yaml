@@ -1,15 +1,16 @@
 # Pre-process
 segment_second: 8 # half in 2 seconds
 piece_second: 4
-log_wandb: True #False
+log_wandb: False #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "SwinT+4/ALL+224*7win+Crop+Noise"
-wandb_notes: "SSBP SwinT Training 3090*2, no ts+ps"
+wandb_name: "SwinT+4/ALL+256*8win+Crop+Noise+TS+TW+FM+TM"
+wandb_notes: "SSBP SwinT Training Sinica server"
 
 
 # distributed training
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
-# data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"
+# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
+data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
+verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
@@ -45,14 +46,14 @@ print_freq: 20
 
 # dataset options
 max_length: 64
-n_fft: 2048 #1024 #2048
-hop_length: 512 #188 #320 #512 #1024
+n_fft: 1024 #1024 #2048
+hop_length: 256 #188 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
-n_mels: 128 #256 #128
-img_size: 224 #256
-swint_window_size: 7 #8
-fmin: 20
+n_mels: 256 #256 #128
+img_size: 256 #256
+swint_window_size: 8 #8
+fmin: 0 #20
 fmax: 8000 # 16000/2
 pin_memory: True
 drop_last: True #False

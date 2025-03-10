@@ -52,7 +52,7 @@ def define_param_groups(model, weight_decay, optimizer_name):
    return param_groups
 
 
-def train_test_split_BPDataset(path="/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_8secs_npy"):
+def train_test_split_BPDataset(path="/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"):
     path_file = os.listdir(path)
     random.shuffle(path_file)
 
@@ -73,9 +73,9 @@ def train_test_split_BPDataset(path="/home/buffett/NAS_NTU/beatport_analyze/chor
             for item in data:
                 f.write(f"{item}\n")
 
-    save_to_txt("info/train_bp_8secs.txt", train_files)
-    save_to_txt("info/valid_bp_8secs.txt", valid_files)
-    save_to_txt("info/test_bp_8secs.txt", test_files)
+    save_to_txt("info/train_bp_verse_8secs.txt", train_files)
+    save_to_txt("info/valid_bp_verse_8secs.txt", valid_files)
+    save_to_txt("info/test_bp_verse_8secs.txt", test_files)
     print(f"Dataset split complete: {train_size} train, {valid_size} valid, {test_size} test")
 
 
@@ -97,7 +97,7 @@ def plot_spec_and_save(spectrogram, savefig_name, sr=16000):
     )
     plt.colorbar(format='%+2.0f dB')
     plt.title("Mel-Spectrogram")
-    plt.savefig(f"visualization/{savefig_name}")
+    plt.savefig(savefig_name)
 
 
 def resize_spec(spectrogram, target_size=(256, 256)):

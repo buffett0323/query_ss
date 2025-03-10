@@ -14,7 +14,7 @@ import torch.nn as nn
 import soundfile as sf
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
-import torchvision.transforms as transforms
+from torchvision import transforms
 
 from librosa import effects
 from tqdm import tqdm
@@ -22,6 +22,43 @@ from torchaudio.functional import pitch_shift
 from utils import yaml_config_hook
 
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift
+
+class RandomFrequencyMasking:
+    def __init__(self, n_range=(1, 5), f_range=(5, 30), p=0.5):
+        """
+        Args:
+            n_range (tuple): Range of number of masks (N)
+            f_range (tuple): Range of mask length (F)
+            p (float): Probability of applying the transform
+        """
+        self.n_range = n_range
+        self.f_range = f_range
+        self.p = p
+
+    def __call__(self, spectrogram):
+        if random.random() > self.p:
+            return spectrogram  # No augmentation
+
+        num_masks = random.randint(*self.n_range)  # Sample N ∈ [1, 5]
+        total_mask_len = 0
+        max_freq = spectrogram.shape[-2]  # Frequency dimension
+        
+        for _ in range(num_masks):
+            mask_len = min(random.randint(*self.f_range), max_freq - total_mask_len)
+            mask_start = random.randint(0, max_freq - mask_len)  # Random starting index
+            
+            # Apply Frequency Masking
+            mask_transform = T.FrequencyMasking(freq_mask_param=mask_len)
+            spectrogram = mask_transform(spectrogram)
+
+            total_mask_len += mask_len
+            if total_mask_len >= max_freq:  # Ensure total mask length constraint
+                break
+        
+        return spectrogram
+
+
+
 
 class CLARTransform(nn.Module):
     def __init__(
@@ -33,19 +70,24 @@ class CLARTransform(nn.Module):
         self.sample_rate = sample_rate
         self.duration = duration
         self.transforms = [
-            self.pitch_shift_transform,
-            self.add_fade_transform,
-            self.add_noise_transform,
-            self.time_masking_transform,
-            self.time_shift_transform,
-            self.time_stretch_transform,
+            AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015),
         ]
+        self.aug_transforms = transforms.Compose(self.transforms)
+        
         
     def pitch_shift_transform(self, x, n_steps=15):
         return effects.pitch_shift(x, sr=self.sample_rate, n_steps=torch.randint(low=-n_steps, high=n_steps, size=[1]).item())
     
     
-    def time_stretch_augmentation(self, x):
+    def time_stretch_augmentation(self, x, length=1):
+        x = effects.time_stretch(x, np.random.uniform(.5, 1.5, [1])[0])
+        x = librosa.resample(x, x.shape[0] / length, self.sample_rate)
+        if x.shape[0] > (self.sample_rate * length):
+            return x[:(self.sample_rate * length)]
+        return np.pad(x, [0, (self.sample_rate * length) - x.shape[0]])
+
+    
+    def time_stretch_audio_fx(self, x):
         """
         Apply Time Stretching (TS) Augmentation following the TSPS methodology.
         
@@ -132,9 +174,10 @@ class CLARTransform(nn.Module):
 
 
     def time_masking_transform(self, x, sr=0.125):
-        sr = int(x.shape[0] * sr)
-        start = np.random.randint(x.shape[0] - sr)
-        x[start: start + sr] = np.float32(np.random.normal(0, 0.01, sr))
+        if torch.randint(low=0, high=2, size=[1]).item() == 0:
+            sr = int(x.shape[0] * sr)
+            start = np.random.randint(x.shape[0] - sr)
+            x[start: start + sr] = np.float32(np.random.normal(0, 0.01, sr))
         return x
 
     def time_shift_transform(self, x, shift_rate=8000):
@@ -148,18 +191,8 @@ class CLARTransform(nn.Module):
         return np.pad(x, [0, (self.sample_rate * self.duration) - x.shape[0]])
 
 
-    def __call__(self, x1, x2):
-        # Apply augmentations
-        x1 = self.add_noise_transform(x1)
-        # x1 = self.time_stretch_augmentation(x1)
-        # x1 = self.time_masking_transform(x1)
-        # x1 = self.time_shift_transform(x1)
-        
-        x2 = self.add_noise_transform(x2)
-        # x2 = self.time_stretch_augmentation(x2)
-        # x2 = self.time_masking_transform(x2)
-        # x2 = self.time_shift_transform(x2)
-        return x1, x2
+    def __call__(self, x):
+        return self.aug_transforms(x) #, sample_rate=self.sample_rate)
 
 
 

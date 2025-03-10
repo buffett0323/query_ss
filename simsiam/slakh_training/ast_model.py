@@ -14,7 +14,7 @@ import os
 import wget
 os.environ['TORCH_HOME'] = '../../pretrained_models'
 import timm
-from timm.models.layers import to_2tuple,trunc_normal_
+from timm.layers import to_2tuple,trunc_normal_
 
 # override the timm package to relax the input shape constraint.
 class PatchEmbed(nn.Module):
