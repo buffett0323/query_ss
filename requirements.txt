@@ -1,0 +1,13 @@
+numpy
+torch
+tqdm
+# torchaudio
+# torchvision
+# pytorch-lightning
+# wandb
+# tqdm
+# matplotlib
+# pandas
+# scipy
+# scikit-learn
+# scikit-fuzzy

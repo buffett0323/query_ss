@@ -1,3 +1,4 @@
+## Fuck off## Fuck off
 import os
 import torch
 import torch.distributed as dist
@@ -20,8 +21,8 @@ class SimpleModel(nn.Module):
 # Training Function
 def train(rank, world_size):
     # Initialize process group
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '12359'
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
     
     # Set device
