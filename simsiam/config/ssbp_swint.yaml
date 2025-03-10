@@ -8,9 +8,10 @@ wandb_notes: "SSBP SwinT Training Sinica server"
 
 
 # distributed training
-# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
-data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
-verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
+verse_data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
+# data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
+# verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
@@ -28,7 +29,7 @@ gpu: [0, 1, 2, 3] #[0,1,2,3]
 img_mean: -1.100174903869629
 img_std: 14.353998184204102
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #256 #512 
+batch_size: 32 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100

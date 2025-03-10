@@ -45,7 +45,7 @@ class SimSiam(nn.Module):
                 img_size=args.img_size, 
                 window_size=args.swint_window_size, 
                 in_chans=args.channels, 
-                num_classes=0,  # num_classes = 0 --> self.head = nn.Identity
+                num_classes=dim,  # num_classes = 0 --> self.head = nn.Identity
             )
             prev_dim = self.encoder.num_features
             
@@ -53,22 +53,19 @@ class SimSiam(nn.Module):
             self.encoder = nn.Identity()
         
         print("prev_dim:", prev_dim) 
-        
                 
         # **Build a separate 3-layer projector**
-        self.projector = nn.Sequential(
+        self.encoder.head = nn.Sequential(
             nn.Linear(prev_dim, prev_dim, bias=False),
             nn.BatchNorm1d(prev_dim),
-            nn.ReLU(inplace=True),  # First layer
+            nn.ReLU(inplace=True), # first layer
             nn.Linear(prev_dim, prev_dim, bias=False),
             nn.BatchNorm1d(prev_dim),
-            nn.ReLU(inplace=True),  # Second layer
-            nn.Linear(prev_dim, dim, bias=False),
-            nn.BatchNorm1d(dim, affine=False)  # Output layer (no affine)
-        )
-        
-        # **Added for Debugging**
-        self.projector[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
+            nn.ReLU(inplace=True), # second layer
+            self.encoder.head,
+            nn.BatchNorm1d(dim, affine=False)
+        ) # output layer
+        self.encoder.head[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
 
         # **Build a 2-layer predictor**
         self.predictor = nn.Sequential(
@@ -81,8 +78,8 @@ class SimSiam(nn.Module):
 
     def forward(self, x1, x2):
         # Compute features for both views
-        z1 = self.projector(self.encoder(x1))  # NxC
-        z2 = self.projector(self.encoder(x2))  # NxC
+        z1 = self.encoder(x1) # self.projector(self.encoder(x1))  # NxC
+        z2 = self.encoder(x2) # self.projector(self.encoder(x2))  # NxC
 
         p1 = self.predictor(z1)  # NxC
         p2 = self.predictor(z2)  # NxC
@@ -95,7 +92,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="SimCLR Encoder")
 
-    config = yaml_config_hook("config/ssbp_6secs.yaml")
+    config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -103,8 +100,8 @@ if __name__ == "__main__":
     
     # Load models
     model = SimSiam(args)#.to(device)
-
+    print(model)
     
-    x = torch.randn([16, 1, 256, 256])#.to(device)
-    res = model(x, x)
-    print(res[0].shape, res[2].shape)
+    #x = torch.randn([16, 1, 256, 256])#.to(device)
+    #res = model(x, x)
+    #print(res[0].shape, res[2].shape)

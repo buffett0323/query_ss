@@ -71,6 +71,5 @@ if __name__ == "__main__":
     model_names = sorted(name for name in models.__dict__
         if name.islower() and not name.startswith("__")
         and callable(models.__dict__[name]))
-    model = SimSiam( models.__dict__['resnet50'])
-    print(model.encoder)
-    
+    model = SimSiam( models.__dict__['resnet50'], args=None)
+    print(model)
