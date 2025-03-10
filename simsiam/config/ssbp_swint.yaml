@@ -8,8 +8,8 @@ wandb_notes: "SSBP SwinT Training Sinica server"
 
 
 # distributed training
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
-verse_data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
+data_dir: "/mnt/nas/beatport_analyze/chorus_audio_16000_npy"
+verse_data_dir: "/mnt/nas/beatport_analyze/verse_audio_16000_npy"
 # data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
 # verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
 world_size: 1 #-1
