@@ -257,10 +257,14 @@ def main_worker(gpu, ngpus_per_node, args):
                 and args.rank % ngpus_per_node == 0):
             if (epoch+1) % 10 == 0:
                 save_checkpoint({
-                    'epoch': epoch + 1,
-                    'state_dict': model.state_dict(),
-                    'optimizer' : optimizer.state_dict(),
-                }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
+                        'epoch': epoch + 1,
+                        'state_dict': model.state_dict(),
+                        'optimizer' : optimizer.state_dict(),
+                    }, 
+                    is_best=False, 
+                    filename='checkpoint_{:04d}.pth.tar'.format(epoch),
+                    save_dir=args.model_dict_save_dir
+                )
         
     if args.distributed:
         dist.destroy_process_group()
@@ -332,7 +336,7 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
             param_group['lr'] = cur_lr
 
 
-def save_checkpoint(state, is_best, filename, save_dir="/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_new/"):
+def save_checkpoint(state, is_best, filename, save_dir):
     torch.save(state, os.path.join(save_dir, filename))
     if is_best:
         shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))

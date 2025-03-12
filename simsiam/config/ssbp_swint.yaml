@@ -8,10 +8,11 @@ wandb_notes: "SSBP SwinT Training Sinica server"
 
 
 # distributed training
+# data_dir: "/mnt/nas/beatport_analyze/chorus_audio_16000_npy"
+# verse_data_dir: "/mnt/nas/beatport_analyze/verse_audio_16000_npy"
 data_dir: "/mnt/nas/beatport_analyze/chorus_audio_16000_npy"
 verse_data_dir: "/mnt/nas/beatport_analyze/verse_audio_16000_npy"
-# data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
-# verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
+model_dict_save_dir: "/mnt/nas/timbre_encoder_model_dict/swint/"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
@@ -21,7 +22,7 @@ find_unused_parameters: False # False
 melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: True # Random slice enhance model's ability of capturing timbre
-workers: 24 # 24 for terra, 56 for fatcat
+workers: 96 # 24 for terra, 56 for fatcat, 104 for sinica
 gpu: [0, 1, 2, 3] #[0,1,2,3]
 
 
@@ -29,7 +30,7 @@ gpu: [0, 1, 2, 3] #[0,1,2,3]
 img_mean: -1.100174903869629
 img_std: 14.353998184204102
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 32 #256 #512 
+batch_size: 128 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -40,7 +41,6 @@ momentum: 0.9
 warmup_epochs: 10 #30 #10
 dim: 2048
 pred_dim: 512
-resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
 print_freq: 20
 
@@ -64,7 +64,6 @@ persistent_workers: True
 # model options
 encoder_name: "SwinTransformer" #"Wavegram_Logmel128_Cnn14"
 channels: 1
-model_dict_save_dir: "./model_dict"
 
 
 # loss options
@@ -77,6 +76,7 @@ lr_decay_factor: 0.05 #0.01
 # reload options
 model_path: "save" # set to the directory containing `checkpoint_##.tar` 
 reload: False
+resume: '' # path to latest checkpoint (default: none)
 
 # knn options
 knn_k: 3 #200
