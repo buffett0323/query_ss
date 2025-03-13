@@ -191,9 +191,8 @@ class MixedBPDataset(Dataset):
             for folder in bp_listdir1
                 for stem in stems
         ] + [
-            os.path.join(data_dir2, folder, f"{stem}.npy")
-            for folder in bp_listdir2
-                for stem in stems
+            os.path.join(data_dir2, folder, f"vocals.npy")
+                for folder in bp_listdir2
         ]
 
         self.sample_rate = sample_rate
@@ -430,6 +429,55 @@ class BPDataModule(LightningDataModule):
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
         return len(self.train_ds)
+
+
+
+
+class MixedBPDataModule(LightningDataModule):
+    def __init__(self, args):
+        super(MixedBPDataModule, self).__init__()
+        self.args = args
+
+    def setup(self, stage=None):
+        self.train_dataset = MixedBPDataset(
+            sample_rate=self.args.sample_rate, 
+            segment_second=self.args.segment_second, 
+            piece_second=self.args.piece_second,
+            data_dir=self.args.data_dir,
+            augment_func=CLARTransform(
+                sample_rate=self.args.sample_rate,
+                duration=int(self.args.piece_second),
+            ),
+            n_mels=self.args.n_mels,
+            n_fft=self.args.n_fft,
+            hop_length=self.args.hop_length,
+            split="train",
+            melspec_transform=self.args.melspec_transform,
+            data_augmentation=self.args.data_augmentation,
+            random_slice=self.args.random_slice,
+            stems=['other'],
+            fmax=self.args.fmax,
+            img_size=self.args.img_size,
+            img_mean=self.args.img_mean,
+            img_std=self.args.img_std,
+        )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset, 
+            batch_size=self.args.batch_size, 
+            shuffle=True, 
+            num_workers=self.args.workers, 
+            pin_memory=self.args.pin_memory, 
+            drop_last=self.args.drop_last,
+            persistent_workers=self.args.persistent_workers,  # Keep workers alive to reduce loading overhead
+            prefetch_factor=4
+        )
+
+    @property
+    def num_samples(self) -> int:
+        self.setup(stage='fit')
+        return len(self.train_dataset)
 
 
 
