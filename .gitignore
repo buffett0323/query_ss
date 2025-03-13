@@ -34,5 +34,6 @@ dddm/examples/
 dddm/pretrained_models/
 DDDM_VC/
 
+lightning_logs/
 simsiam/model_dict/
 Dockerfile
