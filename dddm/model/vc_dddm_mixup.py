@@ -111,9 +111,9 @@ class SynthesizerTrn(nn.Module):
 
     def forward(self, w2v, f0_code, x_mel, length, mixup=False):
         content = self.emb_c(w2v)
-        f0 = None
-        # f0 = self.emb_f0(f0_code).transpose(1, 2)
-        # f0 = F.interpolate(f0, content.shape[-1])
+
+        f0 = self.emb_f0(f0_code).transpose(1, 2)
+        f0 = F.interpolate(f0, content.shape[-1])
 
         x_mask = torch.unsqueeze(commons.sequence_mask(length, x_mel.size(2)), 1).to(x_mel.dtype)
         g = self.emb_g(x_mel, x_mask).unsqueeze(-1)
@@ -121,7 +121,7 @@ class SynthesizerTrn(nn.Module):
         if mixup is True:
             g_mixup = torch.cat([g, g[torch.randperm(g.size()[0])]], dim=0)
             content = torch.cat([content, content], dim=0)
-            # f0 = torch.cat([f0, f0], dim=0)
+            f0 = torch.cat([f0, f0], dim=0)
             x_mask = torch.cat([x_mask, x_mask], dim=0)
             y_f = self.dec_f(F.relu(content), x_mask, g=g_mixup)
             y_s = self.dec_s(f0, x_mask, g=g_mixup)
@@ -241,4 +241,3 @@ class DDDM(BaseModule):
         mel_loss = F.l1_loss(x, enc_out)
 
         return diff_loss, mel_loss
-

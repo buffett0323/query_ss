@@ -62,9 +62,9 @@ class SimSiam(nn.Module):
     
 
 
-def init_timbre_encoder():
+def init_timbre_encoder(path='/home/buffett/NAS_NTU/timbre_encoder_model_dict/swint/checkpoint_0199.pth.tar'):
     model = SimSiam(models.__dict__['resnet50'], None)
-    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar')
+    checkpoint = torch.load(path)
     
     # Create a new state_dict without 'module.' prefix
     new_state_dict = OrderedDict()
