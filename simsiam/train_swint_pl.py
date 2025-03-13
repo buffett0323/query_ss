@@ -68,12 +68,6 @@ class SimSiamLightning(pl.LightningModule):
     def on_train_epoch_start(self):
         self.adjust_learning_rate()
     
-        # Fetch dataloader from the trainer's datamodule
-        if self.trainer.datamodule is not None:
-            dataloader_len = len(self.trainer.datamodule.train_dataloader())
-        else:
-            raise ValueError("Trainer has no datamodule. Make sure you have passed a valid LightningDataModule.")
-
         self.batch_time = AverageMeter('Time', ':6.3f')
         self.data_time = AverageMeter('Data', ':6.3f')
         self.losses = AverageMeter('Loss', ':.4f')
@@ -147,7 +141,6 @@ def main():
     # Init settings
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    find_unused_parameters = True
 
     # WandB logger
     wandb_logger = WandbLogger(
@@ -159,20 +152,14 @@ def main():
     
     
     # GPU Accelerator Settings
-    if str(-1) in args.gpu:
-        devices = -1
-        strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
+    devices = [int(i) for i in args.gpu] if args.gpu else [0]
+    if len(devices) == 1:
+        strategy = "auto"
     else:
-        devices = [int(i) for i in args.gpu]
-        if len(devices) == 1:
-            strategy = "auto"
-        else:
-            strategy = DDPStrategy(find_unused_parameters=find_unused_parameters)
-    
-    
+        strategy = DDPStrategy(find_unused_parameters=args.find_unused_parameters)
+        
     # Other settings
     cb = [TQDMProgressBar(refresh_rate=args.print_freq)]
-    
     
     # Initialize Lightning Model and DataModule
     model = SimSiamLightning(args)
