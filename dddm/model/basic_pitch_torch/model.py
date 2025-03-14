@@ -6,7 +6,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from nnAudio.features import CQT2010v2
 import numpy as np
-from basic_pitch_torch.constants import *
+from model.basic_pitch_torch.constants import *
 
 
 def log_base_b(x: Tensor, base: int) -> Tensor:

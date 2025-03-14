@@ -16,116 +16,74 @@ from typing import Optional
 from functools import partial
 from tqdm import tqdm
 
-
 import utils
 
 np.random.seed(1234)
-
-class BPDataset(Dataset):
+class BP_DDDM_Dataset(torch.utils.data.Dataset):
+    """
+    Provides dataset management for given filelist.
+    """
     def __init__(
-        self,
-        sample_rate,
-        segment_second,
-        data_dir,
-        augment_func,
-        piece_second=3,
-        n_fft=2048,
-        hop_length=512,
-        n_mels=128,
+        self, 
+        config, 
         split="train",
-        melspec_transform=False,
-        data_augmentation=True,
-        random_slice=False,
         stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
-        fmax=8000,
-        img_size=256,
-        img_mean=0,
-        img_std=0,
+        training=True
     ):
+        super(BP_DDDM_Dataset, self).__init__()
+        self.config = config
+        self.hop_length = config.data.hop_length
+        self.training = training
+        self.mel_length = config.train.segment_size // config.data.hop_length
+        if self.training:
+            self.segment_length = config.train.segment_size
+        self.sample_rate = config.data.sampling_rate
+        
         # Load split files from txt file
         with open(f"../simsiam/info/{split}_bp_8secs.txt", "r") as f:
             bp_listdir = [line.strip() for line in f.readlines()]
 
         self.stems = stems
-        self.data_path_list = [
-            os.path.join(data_dir, folder, f"{stem}.npy")
+        self.audio_paths = [
+            os.path.join(config.data.filelist_path, folder, f"{stem}.npy")
             for folder in bp_listdir
                 for stem in stems
         ]
 
-        self.sample_rate = sample_rate
-        self.segment_second = segment_second
-        self.duration = sample_rate * piece_second # 4 seconds for each piece
-        self.augment_func = augment_func # CLARTransform
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.n_mels = n_mels
-        self.split = split
-        self.melspec_transform = melspec_transform
-        self.data_augmentation = data_augmentation
-        self.random_slice = random_slice
-        
-        # Mel-spec transform
-        self.mel_transform = T.MelSpectrogram(
-            sample_rate=sample_rate,
-            n_mels=n_mels,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            f_max=fmax,
-        )
-        self.db_transform = T.AmplitudeToDB(
-            stype="power"
-        )
-        self.resizer = transforms.Resize((img_size, img_size))
-        self.img_mean = img_mean
-        self.img_std = img_std
+    def load_audio_to_torch(self, audio_path):
+        # audio, sample_rate = torchaudio.load(audio_path)
+        audio = np.load(audio_path)
+        audio = torch.tensor(audio)
 
-    
-    def __len__(self): #""" Total we got 175698 files * 4 tracks """
-        return len(self.data_path_list)
-    
-    
-    def mel_spec_transform(self, x):
-        x = x.float()
-        mel_spec = self.mel_transform(x).float()
-        return self.db_transform(mel_spec)
-        
-    
-    
-    def data_pipeline(self, x):
-        x = torch.tensor(x)
-        x = self.mel_spec_transform(x).unsqueeze(0)
-        x = self.resizer(x) # transform to 1, img_size, img_size
-        return (x - self.img_mean) / self.img_std
+        if not self.training:
+            p = (audio.shape[-1] // 1280 + 1) * 1280 - audio.shape[-1]
+            audio = torch.nn.functional.pad(audio, (0, p), mode='constant').data
+        return audio#.squeeze()
 
 
-    def random_crop(self, x):
-        """ Random crop for 4 seconds """
-        max_idx = int(x.shape[0]) - self.duration
-        idx = random.randint(0, max_idx)
-        return x[idx:idx+self.duration]
+    def __getitem__(self, index):
+        audio_path = self.audio_paths[index]
+        audio = self.load_audio_to_torch(audio_path)
+
+        if not self.training:  
+            return audio#, f0_norm
+        
+        if audio.shape[-1] > self.segment_length:
+            audio_start = np.random.randint(0, audio.shape[-1] - self.segment_length + 1)
+            audio_segment = audio[audio_start:audio_start + self.segment_length]
+            length = torch.LongTensor([self.mel_length])
+        else:
+            audio_segment = torch.nn.functional.pad(
+                audio, (0, self.segment_length - audio.shape[-1]), 'constant'
+            ).data
+            length = torch.LongTensor([audio.shape[-1] // self.hop_length])
+        
+        return audio_segment, length
 
 
-    def __getitem__(self, idx):
-        """ 
-            1. Mel-Spectrogram Transformation
-            2. Resize
-            3. Normalization
-            4. Data Augmentation
-        """
-        # Load audio data
-        path = self.data_path_list[idx]
-        x_audio = np.load(path)
-        
-        
-        # Random Crop
-        if self.random_slice:
-            x_audio = self.random_crop(x_audio)
-        
-        # Mel-Spectrogram Transformation
-        x_mel = self.data_pipeline(x_audio)
-        
-        return x_mel.float(), x_audio.float(), path
+    def __len__(self):
+        return len(self.audio_paths)
+
 
 
 
@@ -211,102 +169,8 @@ class CocoChorale_Simple_DS(Dataset):
             ).data
             length = torch.LongTensor([audio.shape[-1] // self.hop_length])
             
+        return audio_segment, length
         
-        # # Get pitch annotation by reading pickle
-        # stem_csv_file = os.path.basename(audio_path).replace(".wav", ".csv")
-        # stem_csv_file = str(int(stem_csv_file[0])-1) + str(stem_csv_file[1:])
-        # csv_file = os.path.join(
-        #     audio_path.split("/stems_audio")[0].replace("main_dataset", "note_expression"), 
-        #     stem_csv_file)
-        
-        # csv_df = pd.read_csv(csv_file)
-        # print(audio_start, csv_file)
-        # pitch_sequence = self.get_pitch_sequence(csv_df, audio_start)
-        # pitch_annotation = torch.tensor(pitch_sequence).unsqueeze(0) if not isinstance(pitch_sequence, torch.Tensor) else pitch_sequence
-        # print(pitch_annotation)
-        return audio_segment, length # torch.tensor(pitch_sequence)
-        
-
-class CocoChoraleDataset(Dataset):
-    def __init__(
-        self, 
-        N_s=4,
-        file_dir='/mnt/gestalt/home/ddmanddman/cocochorales_output/main_dataset',
-        split='train',
-        segment_duration=4.0,
-        ensemble="random",
-        sample_rate=16000, 
-        n_mels=64, 
-        n_fft=1024, 
-        hop_length=160,
-        num_pitches=129,
-        training=True,
-    ):
-        self.N_s = N_s
-        self.segment_duration = segment_duration
-        self.ensemble = ensemble
-        self.sample_rate = sample_rate
-        self.n_mels = n_mels
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.num_pitches = num_pitches
-        self.training = training
-        self.segment_length = int(self.sample_rate // self.hop_length * self.segment_duration)
-        self.file_dir = os.path.join(file_dir, split)
-        self.file_path = [
-            os.path.join(self.file_dir, i) 
-            for i in os.listdir(path=self.file_dir) 
-                if i.startswith(f'{ensemble}_track')
-        ]
-        
-    
-    def get_pitch_sequence(self, dataframe, start):
-        end = start + self.segment_length
-        pitch_sequence = []
-        
-        for _, row in dataframe.iterrows():
-            onset = row['onset']
-            offset = row['offset']
-            pitch = row['pitch']
-            
-            # Check if the current note overlaps with the specified range
-            if onset < end and offset > start:
-                # Determine the overlap range
-                overlap_start = max(onset, start)
-                overlap_end = min(offset, end)
-                pitch_sequence.extend([int(pitch)] * int(overlap_end - overlap_start))
-        
-        return pitch_sequence
-
-
-    def __len__(self):
-        return len(self.file_path)
-    
-    
-    def __getitem__(self, idx):
-        audio_path = self.file_path[idx]
-        mix_melspec = np.load(os.path.join(audio_path, 'mix_melspec.npy')) #, mmap_mode='r')
-        stems_melspec = np.load(os.path.join(audio_path, 'stems_melspec.npy')) #, mmap_mode='r')
-        
-        # Randomly sample segment
-        start_frame = np.random.randint(0, mix_melspec.shape[-1] - self.segment_length + 1)
-        mix_melspec = mix_melspec[:, :, start_frame:start_frame + self.segment_length]
-        stems_melspec = stems_melspec[:, :, start_frame:start_frame + self.segment_length]
-
-        # Get pitch annotation by reading pickle
-        csv_folder = audio_path.replace('main_dataset', 'note_expression')
-        pitch_annotation = []
-        for csv_file in os.listdir(csv_folder):
-            csv_file = os.path.join(csv_folder, csv_file)
-            csv_df = pd.read_csv(csv_file)
-            pitch_sequence = self.get_pitch_sequence(csv_df, start_frame)
-            pitch_annotation.append(pitch_sequence)  
-        
-        pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
-        pitch_annotation = torch.cat(pitch_annotation, dim=0)
-
-
-        return torch.tensor(mix_melspec), torch.tensor(stems_melspec), pitch_annotation
 
 
 
@@ -327,13 +191,12 @@ if __name__ == "__main__":
     hps = utils.get_hparams()
     n_gpus = 1
     
-    train_dataset = CocoChorale_Simple_DS(hps, split="train", training=True)
-    train_sampler = None
+    train_dataset = BP_DDDM_Dataset(hps, split="train", training=True)
     train_loader = DataLoader(
         train_dataset, 
-        batch_size=1, #hps.train.batch_size, 
+        batch_size=4, #hps.train.batch_size, 
         num_workers=hps.train.num_workers,
-        sampler=train_sampler, 
+        sampler=None, 
         drop_last=True, 
         persistent_workers=True, 
         pin_memory=True,

@@ -1,11 +1,11 @@
-from basic_pitch_torch.model import BasicPitchTorch
+from model.basic_pitch_torch.model import BasicPitchTorch
 import torch
 
 
 
 def init_basic_pitch_model():
     pt_model = BasicPitchTorch()
-    pt_model.load_state_dict(torch.load('assets/basic_pitch_pytorch_icassp_2022.pth'))
+    pt_model.load_state_dict(torch.load('model/assets/basic_pitch_pytorch_icassp_2022.pth'))
     pt_model.eval()
     return pt_model
 

@@ -62,7 +62,7 @@ class SimSiam(nn.Module):
     
 
 
-def init_timbre_encoder(path='/home/buffett/NAS_NTU/timbre_encoder_model_dict/swint/checkpoint_0199.pth.tar'):
+def init_timbre_encoder(path):
     model = SimSiam(models.__dict__['resnet50'], None)
     checkpoint = torch.load(path)
     

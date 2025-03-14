@@ -70,6 +70,7 @@ class Decoder(nn.Module):
 
 class SynthesizerTrn(nn.Module):
     def __init__(self,
+                 hps,
                  spec_channels,
                  segment_size,
                  inter_channels,
@@ -89,6 +90,7 @@ class SynthesizerTrn(nn.Module):
                  **kwargs):
         super().__init__()
         
+        self.hps = hps
         self.spec_channels = spec_channels
         self.inter_channels = inter_channels
         self.hidden_channels = hidden_channels
@@ -106,7 +108,9 @@ class SynthesizerTrn(nn.Module):
         self.segment_size = segment_size
 
         # Speaker Representation -- Timbre Encoder: Simsiam inference
-        self.emb_g = init_timbre_encoder()
+        self.emb_g = init_timbre_encoder(
+            path=self.hps.data.timbre_encoder_path
+        )
         
         # Pitch Encoder: Basic Pitch yn
         self.emb_p = init_basic_pitch_model()
@@ -120,6 +124,8 @@ class SynthesizerTrn(nn.Module):
         # Timbre & Pitch Encoders
         g = self.emb_g(x_mel).unsqueeze(-1)
         f0 = self.emb_p(x_mel)#.unsqueeze(-1)
+        print("g.shape: ", g.shape)
+        print("f0.shape: ", f0.shape)
 
         # Mix-up Training
         if mixup is True:
@@ -161,6 +167,7 @@ class DDDM(BaseModule):
         self.beta_max = beta_max
 
         self.encoder = SynthesizerTrn(
+            hps,
             hps.data.n_mel_channels,
             hps.train.segment_size // hps.data.hop_length,
             **hps.model

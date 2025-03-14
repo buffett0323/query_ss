@@ -177,7 +177,7 @@ def main():
         callbacks=cb,
     )
     
-    trainer.fit(model, datamodule=data_module)
+    trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_training_path)
 
     
     

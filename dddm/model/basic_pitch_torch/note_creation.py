@@ -26,7 +26,7 @@ import pretty_midi
 import scipy
 from scipy.io import wavfile
 
-from basic_pitch_torch.constants import (
+from model.basic_pitch_torch.constants import (
     AUDIO_SAMPLE_RATE,
     ANNOTATIONS_N_SEMITONES,
     ANNOTATIONS_BASE_FREQUENCY,

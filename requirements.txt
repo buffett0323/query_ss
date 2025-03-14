@@ -11,4 +11,8 @@ six
 torchlibrosa
 timm
 urllib3==2.2.2
-
+einops
+nnAudio
+pretty_midi
+mir_eval
+resampy

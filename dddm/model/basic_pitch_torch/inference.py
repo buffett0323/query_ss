@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import Tensor, nn
-from basic_pitch_torch.model import BasicPitchTorch
+from model.basic_pitch_torch.model import BasicPitchTorch
 import numpy as np
 import librosa
 import pretty_midi

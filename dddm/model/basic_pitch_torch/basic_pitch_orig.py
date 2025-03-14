@@ -2,9 +2,9 @@ import numpy as np
 import numpy.typing as npt
 from typing import Any, Dict, Iterable, Tuple, Union
 
-from basic_pitch.inference import Model
-from basic_pitch import ICASSP_2022_MODEL_PATH
-from basic_pitch.constants import (
+from model.basic_pitch.inference import Model
+from model.basic_pitch import ICASSP_2022_MODEL_PATH
+from model.basic_pitch.constants import (
     AUDIO_SAMPLE_RATE, # 22050
     AUDIO_N_SAMPLES, # 43844
     ANNOTATIONS_FPS, # 86

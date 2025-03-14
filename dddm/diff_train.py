@@ -19,7 +19,7 @@ import wandb
 
 from augmentation.aug import Augment
 from model.simple_dddm_mixup import DDDM
-from data_loader import CocoChorale_Simple_DS, MelSpectrogramFixed
+from data_loader import BP_DDDM_Dataset, MelSpectrogramFixed
 from vocoder.hifigan import HiFi
 from torch.utils.data import DataLoader
 
@@ -33,7 +33,7 @@ def get_param_num(model):
 def main():
     """Assume Single Node Multi GPUs Training Only"""
     assert torch.cuda.is_available(), "CPU training is not allowed."
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
     port = 50000 + random.randint(0, 100)
@@ -68,7 +68,7 @@ def run(rank, n_gpus, hps):
         window_fn=torch.hann_window
     ).cuda(rank)
 
-    train_dataset = CocoChorale_Simple_DS(hps, split="train", training=True)
+    train_dataset = BP_DDDM_Dataset(hps, split="train", training=True)
     train_sampler = DistributedSampler(train_dataset) if n_gpus > 1 else None
     train_loader = DataLoader(
         train_dataset, 
@@ -80,30 +80,23 @@ def run(rank, n_gpus, hps):
         pin_memory=True,
         shuffle=True,
     )
-    # valid_dataset = CocoChorale_Simple_DS(hps, split="valid", training=True) # Set true to split same size
-    # valid_sampler = DistributedSampler(valid_dataset) if n_gpus > 1 else None
-    # valid_loader = DataLoader(
-    #     valid_dataset, 
-    #     batch_size=hps.train.batch_size, 
-    #     num_workers=hps.train.num_workers,
-    #     sampler=valid_sampler, 
-    #     drop_last=True, 
-    #     persistent_workers=True, 
-    #     pin_memory=True,
-    #     shuffle=True,
-    # )
 
     if rank == 0:
-        test_dataset = CocoChorale_Simple_DS(hps, split="test", training=False)
-        eval_loader = DataLoader(test_dataset, batch_size=1)
+        test_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
+        eval_loader = DataLoader(
+            test_dataset, 
+            batch_size=4, 
+            num_workers=hps.train.num_workers, 
+            pin_memory=True
+        )
 
         net_v = HiFi(
             hps.data.n_mel_channels,
             hps.train.segment_size // hps.data.hop_length,
             **hps.model
         ).cuda()
-        path_ckpt = 'checkpoints/voc_ckpt.pth'
-
+        
+        path_ckpt = hps.data.voc_ckpt_path
         utils.load_checkpoint(path_ckpt, net_v, None)
         net_v.eval()
         net_v.dec.remove_weight_norm()
@@ -117,11 +110,18 @@ def run(rank, n_gpus, hps):
     ).cuda()
      
     if rank == 0:
+        if hps.wandb.log_wandb:
+            wandb.init(
+                project=hps.wandb.project_name,
+                name=hps.wandb.run_name,
+                config=hps,  # Log hyperparameters
+            )
+            # Log model structure to wandb
+            wandb.watch(model, log="all")
+            
         print('[Encoder] number of Parameters:', get_param_num(model.encoder))
         print('[Decoder] number of Parameters:', get_param_num(model.decoder))
     
-        # Log model structure to wandb
-        wandb.watch(model, log="all")
     
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -198,7 +198,14 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         if rank == 0:
             if global_step % hps.train.log_interval == 0: # 500
                 lr = optimizer.param_groups[0]['lr']
-                wandb.log({"loss_diff": loss_diff.item(), "loss_mel": loss_mel.item(), "total_loss": loss_gen_all.item(), "learning_rate": lr, "step": global_step})
+                
+                if hps.wandb.log_wandb:
+                    wandb.log(
+                        {"loss_diff": loss_diff.item(), 
+                        "loss_mel": loss_mel.item(), 
+                        "total_loss": loss_gen_all.item(), 
+                        "learning_rate": lr, 
+                        "step": global_step})
                 
                 losses = [loss_diff]
                 logger.info('Train Epoch: {} [{:.0f}%]'.format(
