@@ -361,7 +361,7 @@ if __name__ == "__main__":
         hps.data.n_mel_channels,
         hps.train.segment_size // hps.data.hop_length,
         **hps.model).cuda()
-    path_ckpt = 'checkpoints/voc_ckpt.pth'
+    path_ckpt = '/mnt/gestalt/home/ddmanddman/hifigan_ckpt/voc_ckpt.pth'
 
     utils.load_checkpoint(path_ckpt, net_v, None)
     net_v.eval()
