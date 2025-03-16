@@ -471,7 +471,7 @@ class MixedBPDataModule(LightningDataModule):
             pin_memory=self.args.pin_memory, 
             drop_last=self.args.drop_last,
             persistent_workers=self.args.persistent_workers,  # Keep workers alive to reduce loading overhead
-            prefetch_factor=4
+            prefetch_factor=self.args.prefetch_factor,
         )
 
     @property

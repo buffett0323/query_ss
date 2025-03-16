@@ -173,7 +173,7 @@ def main():
         devices=devices,
         strategy=strategy,
         logger=wandb_logger,
-        precision=16,  # Mixed precision training
+        precision="bf16", #16,  # Mixed precision training
         callbacks=cb,
     )
     

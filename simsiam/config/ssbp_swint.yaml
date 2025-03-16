@@ -24,7 +24,7 @@ find_unused_parameters: True # False
 melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: True # Random slice enhance model's ability of capturing timbre
-workers: 48 # 24 for terra, 56 for fatcat, 104 for sinica
+workers: 24 # 24 for terra, 56 for fatcat, 104 for sinica
 gpu: [1] #[0,1,2,3]
 
 
@@ -45,7 +45,7 @@ dim: 2048
 pred_dim: 512
 fix_pred_lr: True
 print_freq: 20
-
+prefetch_factor: 8
 
 # dataset options
 max_length: 64
