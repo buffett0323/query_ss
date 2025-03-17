@@ -18,8 +18,6 @@ import transformers
 import commons
 from modules_sf.modules import *
 from commons import init_weights, get_padding  
-from model.basic_pitch_encoder import init_basic_pitch_model, basic_pitch_encoder
-from model.timbre_encoder import init_timbre_encoder, timbre_encoder
 
 class Wav2vec2(torch.nn.Module):
     def __init__(self, layer=12): 
@@ -30,24 +28,24 @@ class Wav2vec2(torch.nn.Module):
             param.grad = None
         self.wav2vec2.eval()
         self.feature_layer = layer
-        
+
     @torch.no_grad()
     def forward(self, x): 
         outputs = self.wav2vec2(x.squeeze(1), output_hidden_states=True)
         y = outputs.hidden_states[self.feature_layer]    
-        
+
         return y.permute((0, 2, 1))    
 
 
 class Decoder(nn.Module):
     def __init__(self,
-                 in_channels,
-                 hidden_channels,
-                 kernel_size,
-                 dilation_rate,
-                 n_layers,
-                 mel_size=80,
-                 gin_channels=0):
+                in_channels,
+                hidden_channels,
+                kernel_size,
+                dilation_rate,
+                n_layers,
+                mel_size=80,
+                gin_channels=0):
         super().__init__()
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
@@ -70,27 +68,25 @@ class Decoder(nn.Module):
 
 class SynthesizerTrn(nn.Module):
     def __init__(self,
-                 hps,
-                 spec_channels,
-                 segment_size,
-                 inter_channels,
-                 hidden_channels,
-                 filter_channels,
-                 n_heads,
-                 n_layers,
-                 kernel_size,
-                 p_dropout,
-                 resblock,
-                 resblock_kernel_sizes,
-                 resblock_dilation_sizes,
-                 upsample_rates,
-                 upsample_initial_channel,
-                 upsample_kernel_sizes,
-                 encoder_hidden_size,
-                 **kwargs):
+                spec_channels,
+                segment_size,
+                inter_channels,
+                hidden_channels,
+                filter_channels,
+                n_heads,
+                n_layers,
+                kernel_size,
+                p_dropout,
+                resblock,
+                resblock_kernel_sizes,
+                resblock_dilation_sizes,
+                upsample_rates,
+                upsample_initial_channel,
+                upsample_kernel_sizes,
+                encoder_hidden_size,
+                **kwargs):
         super().__init__()
-        
-        self.hps = hps
+
         self.spec_channels = spec_channels
         self.inter_channels = inter_channels
         self.hidden_channels = hidden_channels
@@ -107,51 +103,59 @@ class SynthesizerTrn(nn.Module):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.segment_size = segment_size
 
-        # Speaker Representation -- Timbre Encoder: Simsiam inference
-        self.emb_g = init_timbre_encoder(
-            path=self.hps.data.timbre_encoder_path
+        # Speaker Representation -- Timbre Encoder
+        # TODO: Timbre Encoder: Simsiam inference
+        self.emb_g = StyleEncoder(
+            in_dim=80, 
+            hidden_dim=256, 
+            out_dim=256,
         )
-        
-        # Pitch Encoder: Basic Pitch yn
-        self.emb_p = init_basic_pitch_model()
+
+        # Pitch Encoder
+        # TODO: Basic Pitch yn
+        self.emb_p = PitchEncoder(
+            in_dim=80, 
+            hidden_dim=256, 
+            pitch_classes=88, # 129,
+            out_dim=128,
+        )
 
         # Decoder
         self.dec_s = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256) 
 
     def forward(self, x_mel, length, mixup=False):
         x_mask = torch.unsqueeze(commons.sequence_mask(length, x_mel.size(2)), 1).to(x_mel.dtype)
-        
+
         # Timbre & Pitch Encoders
-        g = self.emb_g(x_mel).unsqueeze(-1)
-        f0 = self.emb_p(x_mel)#.unsqueeze(-1)
-        print("g.shape: ", g.shape)
-        print("f0.shape: ", f0.shape)
+        g = self.emb_g(x_mel, x_mask).unsqueeze(-1)
+        f0, _ = self.emb_p(x_mel, x_mask)#.unsqueeze(-1)
 
         # Mix-up Training
         if mixup is True:
             g_mixup = torch.cat([g, g[torch.randperm(g.size()[0])]], dim=0)
             x_mask = torch.cat([x_mask, x_mask], dim=0)
             f0 = torch.cat([f0, f0], dim=0)
-                        
+            # torch.Size([8, 256, 1]) torch.Size([8, 1, 200]) torch.Size([8, 128, 200])
+            
             y_s = self.dec_s(f0, x_mask, g=g_mixup)
         else:
             y_s = self.dec_s(f0, x_mask, g=g)
 
         return g, y_s
-        
-    
+
+
     def voice_conversion(self, x_mel, x_length, y_mel, y_length):
         # Get x's pitch (w2v, f0_code are x's features)
         x_mask = torch.unsqueeze(commons.sequence_mask(x_length, x_mel.size(2)), 1).to(x_mel.dtype) # V
         f0, _ = self.emb_p(x_mel, x_mask)#.unsqueeze(-1) # V
-        
+
         # Get y's timbre
         y_mask = torch.unsqueeze(commons.sequence_mask(y_length, y_mel.size(2)), 1).to(y_mel.dtype)
         g_from_y = self.emb_g(y_mel, y_mask).unsqueeze(-1)
 
         # Decoder
         o_s = self.dec_s(f0, x_mask, g=g_from_y)
-        
+
         return g_from_y, o_s #spk, src_out
 
 
@@ -167,7 +171,6 @@ class DDDM(BaseModule):
         self.beta_max = beta_max
 
         self.encoder = SynthesizerTrn(
-            hps,
             hps.data.n_mel_channels,
             hps.train.segment_size // hps.data.hop_length,
             **hps.model
@@ -177,7 +180,7 @@ class DDDM(BaseModule):
     @torch.no_grad() # For evaluation
     def forward(self, x, x_lengths, n_timesteps, mode='ml'): 
         x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype) 
-        
+
         spk, src_out = self.encoder(x, x_lengths)
         src_mean_x = self.decoder.compute_diffused_mean(x, x_mask, src_out, 1.0)
 
@@ -189,6 +192,7 @@ class DDDM(BaseModule):
         src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
 
         for i in range(b):
+            print("shape check:", src_out.shape, src_new.shape, src_mean_x.shape, src_x_new.shape)
             src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
             src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
 
@@ -197,9 +201,9 @@ class DDDM(BaseModule):
 
         y = self.decoder(z_src, x_mask_new, src_new, spk, n_timesteps, mode)
         enc_out = src_out # + ftr_out
-        
+
         return enc_out, y[:, :, :max_length]
-    
+
     def vc(self, x, x_lengths, y, y_lengths, n_timesteps, mode='ml'): 
         x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype)
 
@@ -223,7 +227,7 @@ class DDDM(BaseModule):
         y = self.decoder(z_src, x_mask_new, src_new, spk, n_timesteps, mode)
 
         return y[:, :, :max_length]
-    
+
     def compute_loss(self, x, x_length): 
         # Encoder
         x_mask = sequence_mask(x_length, x.size(2)).unsqueeze(1).to(x.dtype)
@@ -239,4 +243,3 @@ class DDDM(BaseModule):
         mel_loss = F.l1_loss(x, enc_out)
 
         return diff_loss, mel_loss
-

@@ -33,7 +33,7 @@ def get_param_num(model):
 def main():
     """Assume Single Node Multi GPUs Training Only"""
     assert torch.cuda.is_available(), "CPU training is not allowed."
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
     n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
     port = 50000 + random.randint(0, 100)
@@ -245,6 +245,7 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=Tru
     mel_loss = 0
     enc_loss = 0
     with torch.no_grad():
+        # TODO: Audio & Mel-Spectrogram
         for batch_idx, y in enumerate(tqdm(eval_loader)):
             y = y.cuda(0)
             mel_y = mel_fn(y)

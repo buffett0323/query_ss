@@ -10,7 +10,7 @@
     "learning_rate": 5e-5,
     "betas": [0.8, 0.99],
     "eps": 1e-9,
-    "batch_size": 4,
+    "batch_size": 2,
     "fp16_run": true,
     "lr_decay": 0.999875,
     "segment_size": 64000,
@@ -20,15 +20,15 @@
     "c_diff": 1,
     "aug": true,
     "lambda_commit": 0.02,
-    "num_workers": 56
+    "num_workers": 24
   },
   "wandb": {
-    "log_wandb": true,
+    "log_wandb": false,
     "project_name": "Timbre_Transfer_DDDM",
     "run_name": "dddm_test"
   },
   "data": {
-    "filelist_path": "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy/",
+    "filelist_path": "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/",
     "voc_ckpt_path": "/mnt/gestalt/home/buffett/hifigan_ckpt/voc_ckpt.pth",
     "timbre_encoder_path": "/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar",
     "txt_path": "../simsiam/info/",

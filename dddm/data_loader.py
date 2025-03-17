@@ -1,12 +1,14 @@
 import random
 import torch
 import os
+import librosa
 import torchaudio
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torchaudio.functional as AF
 import torchaudio.transforms as T
+
 from torchvision.transforms.functional import crop
 from torchvision import transforms
 from torchaudio.transforms import MelSpectrogram
@@ -61,6 +63,28 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
         return audio#.squeeze()
 
 
+    def mel_timbre(self, x):
+        # Infos:
+        img_mean = -1.100174903869629
+        img_std = 14.353998184204102
+        
+        # To numpy
+        x = x.numpy()
+        x = librosa.feature.melspectrogram(
+            y=x, 
+            sr=16000, 
+            n_fft=1024,
+            hop_length=256,
+        )
+        x = librosa.power_to_db(np.abs(x))
+        x = torch.from_numpy(x).unsqueeze(0)
+        
+        # Resize to 256x256
+        resizer = transforms.Resize((256, 256))
+        x = resizer(x)
+        return (x - img_mean) / img_std
+    
+
     def __getitem__(self, index):
         audio_path = self.audio_paths[index]
         audio = self.load_audio_to_torch(audio_path)
@@ -79,6 +103,9 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
             length = torch.LongTensor([audio.shape[-1] // self.hop_length])
         
         return audio_segment, length
+        # # Get Mel-Spectrogram for Timbre Encoder
+        # mel_audio = self.mel_timbre(audio_segment)
+        # return audio_segment, mel_audio, length
 
 
     def __len__(self):
@@ -190,16 +217,22 @@ class MelSpectrogramFixed(torch.nn.Module):
 if __name__ == "__main__":
     hps = utils.get_hparams()
     n_gpus = 1
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    
+    
+    test_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=4, #hps.train.batch_size, 
+        num_workers=hps.train.num_workers,
+        shuffle=False,
+    )
     
     train_dataset = BP_DDDM_Dataset(hps, split="train", training=True)
     train_loader = DataLoader(
         train_dataset, 
         batch_size=4, #hps.train.batch_size, 
         num_workers=hps.train.num_workers,
-        sampler=None, 
-        drop_last=True, 
-        persistent_workers=True, 
-        pin_memory=True,
         shuffle=True,
     )
     
@@ -215,30 +248,37 @@ if __name__ == "__main__":
     )
     
     
-    # HIFIGAN TESTING
-    from vocoder.hifigan import HiFi
-    import utils
+    # # HIFIGAN TESTING
+    # from vocoder.hifigan import HiFi
+    # import utils
     
-    hps = utils.get_hparams()
-    net_v = HiFi(
-        hps.data.n_mel_channels,
-        hps.train.segment_size // hps.data.hop_length,
-        **hps.model).cuda()
-    path_ckpt = '/mnt/gestalt/home/ddmanddman/hifigan_ckpt/voc_ckpt.pth'
+    # hps = utils.get_hparams()
+    # net_v = HiFi(
+    #     hps.data.n_mel_channels,
+    #     hps.train.segment_size // hps.data.hop_length,
+    #     **hps.model).to(device)
+    # path_ckpt = '/mnt/gestalt/home/ddmanddman/hifigan_ckpt/voc_ckpt.pth'
 
-    utils.load_checkpoint(path_ckpt, net_v, None)
-    net_v.eval()
-    net_v.dec.remove_weight_norm()
+    # utils.load_checkpoint(path_ckpt, net_v, None)
+    # net_v.eval()
+    # net_v.dec.remove_weight_norm()
     
     
+    
+    for y in test_loader:
+        print(y)
+        y_mel = mel_fn(y).to(device)
+        print(y_mel.shape)
+        
+        # torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
+        # torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
+        break
     
     for (y, length) in train_loader:
-        y_mel = mel_fn(y).cuda()
-        print(y.shape, y_mel.shape)
-
-        recon_y = net_v(y_mel).squeeze(1)
-        print(recon_y.shape)
+        print(y.shape, length.shape)
+        y_mel = mel_fn(y).to(device)
+        print(y_mel.shape)
         
-        torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
-        torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
+        # torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
+        # torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
         break
