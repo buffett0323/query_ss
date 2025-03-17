@@ -15,7 +15,7 @@ def basic_pitch_encoder(input_array, model):
     with torch.no_grad():
         output_pt = model(input_array)
         contour_pt, note_pt, onset_pt = output_pt['contour'], output_pt['note'], output_pt['onset']
-    return contour_pt, note_pt, onset_pt
+    return input_array, contour_pt, note_pt, onset_pt
 
 
 
@@ -25,8 +25,9 @@ if __name__ == "__main__":
     pt_model.to(device)
     y_torch = torch.randn(8, 1, 16000*4).to(device)
     
-    contour_pt, note_pt, onset_pt = basic_pitch_encoder(y_torch, pt_model)
-
+    input_array, contour_pt, note_pt, onset_pt = basic_pitch_encoder(y_torch, pt_model)
+    
+    print(input_array.shape)
     print(contour_pt.shape)
     print(note_pt.shape)
     print(onset_pt.shape)

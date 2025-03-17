@@ -17,7 +17,7 @@
 
 import numpy as np
 
-FFT_HOP = 512 #256
+FFT_HOP = 256 #256
 N_FFT = 8 * FFT_HOP
 
 NOTES_BINS_PER_SEMITONE = 1
