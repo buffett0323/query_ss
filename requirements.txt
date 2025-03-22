@@ -16,3 +16,9 @@ nnAudio
 pretty_midi
 mir_eval
 resampy
+descript-audio-codec==1.0.0
+audiofile==1.2.1
+descript_audio_codec==1.0.0
+descript_audiotools==0.7.2
+einops==0.8.0
+encodec==0.1.1

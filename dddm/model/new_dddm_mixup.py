@@ -114,21 +114,21 @@ class SynthesizerTrn(nn.Module):
         
         # Pitch Encoder: Basic Pitch yn
         self.emb_p = init_basic_pitch_model()
+        self.proj_dense = nn.Linear(251, 200)
 
         # Decoder
-        self.dec_s = Decoder(88, 88, 5, 1, 8, mel_size=80, gin_channels=256)    
+        self.dec_s = Decoder(88, 88, 5, 1, 8, mel_size=80, gin_channels=2048) #gin_channels=256)    
         
 
     def forward(self, x, x_mel, length, mixup=False):
         # Timbre & Pitch Encoders
         g = self.emb_g(x_mel).unsqueeze(-1)
         f0 = self.emb_p(x)['note'].permute(0, 2, 1)#.unsqueeze(-1)
-        print("g.shape: ", g.shape) # torch.Size([4, 2048])
-        print("f0.shape: ", f0.shape) # torch.Size([4, 126, 88]) -> [4, 88, 126]
+        f0 = self.proj_dense(f0) # torch.Size([4, 200, 88]) -> [4, 88, 251] -> [4, 88, 200]
         
         x_mask = torch.unsqueeze(commons.sequence_mask(length, f0.size(2)), 1).to(f0.dtype)
-        print("x.shape: ", x.shape, "x_mel.shape: ", x_mel.shape, "x_mask.shape: ", x_mask.shape)
-        
+        # x.shape:  torch.Size([4, 64000]) x_mel.shape:  torch.Size([4, 1, 256, 256]) x_mask.shape:  torch.Size([4, 1, 200])
+
         # Mix-up Training
         if mixup is True:
             g_mixup = torch.cat([g, g[torch.randperm(g.size()[0])]], dim=0)
@@ -177,22 +177,26 @@ class DDDM(BaseModule):
         self.decoder = Diffusion(n_feats, dec_dim, spk_dim, beta_min, beta_max)
 
     @torch.no_grad() # For evaluation
-    def forward(self, x, x_lengths, n_timesteps, mode='ml'): 
-        x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype) 
+    def forward(self, x, mel_x, mel_fn_x, x_lengths, n_timesteps, mode='ml'): 
+        x_mask = sequence_mask(x_lengths, mel_fn_x.size(2)).unsqueeze(1).to(mel_fn_x.dtype) 
         
-        spk, src_out = self.encoder(x, x_lengths)
-        src_mean_x = self.decoder.compute_diffused_mean(x, x_mask, src_out, 1.0)
+        spk, src_out = self.encoder(x, mel_x, x_lengths)
+        src_mean_x = self.decoder.compute_diffused_mean(mel_fn_x, x_mask, src_out, 1.0)
 
-        b = x.shape[0]
+        b = mel_fn_x.shape[0]
         max_length = int(x_lengths.max())
         max_length_new = fix_len_compatibility(max_length)
-        x_mask_new = sequence_mask(x_lengths, max_length_new).unsqueeze(1).to(x.dtype)
-        src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
-        src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
+        x_mask_new = sequence_mask(x_lengths, max_length_new).unsqueeze(1).to(mel_fn_x.dtype)
+        
+        src_new = src_out
+        src_x_new = src_mean_x
+        
+        # src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=mel_fn_x.dtype, device=mel_fn_x.device)
+        # src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=mel_fn_x.dtype, device=mel_fn_x.device)
 
-        for i in range(b):
-            src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
-            src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
+        # for i in range(b):
+            # src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
+            # src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
 
         z_src = src_x_new
         z_src += torch.randn_like(src_x_new, device=src_x_new.device)
@@ -226,18 +230,18 @@ class DDDM(BaseModule):
 
         return y[:, :, :max_length]
     
-    def compute_loss(self, x, mel_x, x_length): 
+    def compute_loss(self, x, mel_x, mel_fn_x, x_length): 
         # Encoder
-        x_mask = sequence_mask(x_length, mel_x.size(2)).unsqueeze(1).to(mel_x.dtype)
+        x_mask = sequence_mask(x_length, mel_fn_x.size(2)).unsqueeze(1).to(mel_fn_x.dtype)
         spk, src_out = self.encoder(x, mel_x, x_length, mixup=True)
 
         # Mix-up
-        mixup = torch.randint(0, 2, (mel_x.size(0), 1, 1)).to(mel_x.device)
-        src_out_new = mixup*src_out[:mel_x.size(0), :, :] + (1-mixup)*src_out[mel_x.size(0):, :, :]
+        mixup = torch.randint(0, 2, (mel_fn_x.size(0), 1, 1)).to(mel_fn_x.device)
+        src_out_new = mixup*src_out[:mel_fn_x.size(0), :, :] + (1-mixup)*src_out[mel_fn_x.size(0):, :, :]
     
         # Decoder of DDDM
-        diff_loss = self.decoder.compute_loss(mel_x, x_mask, src_out_new, spk)
-        enc_out = src_out[:mel_x.size(0), :, :] #+ ftr_out[:x.size(0), :, :]
-        mel_loss = F.l1_loss(mel_x, enc_out)
+        diff_loss = self.decoder.compute_loss(mel_fn_x, x_mask, src_out_new, spk)
+        enc_out = src_out[:mel_fn_x.size(0), :, :] #+ ftr_out[:x.size(0), :, :]
+        mel_loss = F.l1_loss(mel_fn_x, enc_out)
 
         return diff_loss, mel_loss

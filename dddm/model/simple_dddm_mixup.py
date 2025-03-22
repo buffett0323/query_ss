@@ -192,7 +192,6 @@ class DDDM(BaseModule):
         src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
 
         for i in range(b):
-            print("shape check:", src_out.shape, src_new.shape, src_mean_x.shape, src_x_new.shape)
             src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
             src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
 
@@ -237,7 +236,7 @@ class DDDM(BaseModule):
         mixup = torch.randint(0, 2, (x.size(0),1,1)).to(x.device)
         src_out_new = mixup*src_out[:x.size(0), :, :] + (1-mixup)*src_out[x.size(0):, :, :]
     
-        # Decoder of DDDM
+        # Decoder of DDDM        
         diff_loss = self.decoder.compute_loss(x, x_mask, src_out_new, spk)
         enc_out = src_out[:x.size(0), :, :] #+ ftr_out[:x.size(0), :, :]
         mel_loss = F.l1_loss(x, enc_out)

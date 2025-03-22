@@ -10,7 +10,7 @@
     "learning_rate": 5e-5,
     "betas": [0.8, 0.99],
     "eps": 1e-9,
-    "batch_size": 2,
+    "batch_size": 4,
     "fp16_run": true,
     "lr_decay": 0.999875,
     "segment_size": 64000,
@@ -20,7 +20,8 @@
     "c_diff": 1,
     "aug": true,
     "lambda_commit": 0.02,
-    "num_workers": 24
+    "num_workers": 24,
+    "device": "3"
   },
   "wandb": {
     "log_wandb": false,
@@ -32,6 +33,8 @@
     "voc_ckpt_path": "/mnt/gestalt/home/buffett/hifigan_ckpt/voc_ckpt.pth",
     "timbre_encoder_path": "/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar",
     "txt_path": "../simsiam/info/",
+    "model_log_dir": "/mnt/gestalt/home/buffett/timbre_transfer_logs/",
+    "model_save_dir": "/mnt/gestalt/home/buffett/timbre_transfer_dict/",
     "sampling_rate": 16000,
     "filter_length": 1280,
     "hop_length": 320,

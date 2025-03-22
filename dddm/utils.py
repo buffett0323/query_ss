@@ -149,13 +149,15 @@ def load_filepaths_and_text(filename, split="|"):
 
 def get_hparams(init=True):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default="./ckpt/config.json",
+    parser.add_argument('-c', '--config', type=str, 
+                        default="./ckpt/config.json",
                         help='JSON file for configuration')
-    parser.add_argument('-m', '--model', type=str, default="MD", #required=True,
+    parser.add_argument('-m', '--model', type=str, 
+                        default="/mnt/gestalt/home/buffett/timbre_transfer_logs/",
                         help='Model name')
 
     args = parser.parse_args()
-    model_dir = os.path.join("./logs", args.model)
+    model_dir = args.model # os.path.join("./logs", args.model)
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)

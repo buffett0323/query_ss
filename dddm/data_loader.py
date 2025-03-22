@@ -37,8 +37,8 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
         self.hop_length = config.data.hop_length
         self.training = training
         self.mel_length = config.train.segment_size // config.data.hop_length
-        if self.training:
-            self.segment_length = config.train.segment_size
+        # if self.training:
+        self.segment_length = config.train.segment_size
         self.sample_rate = config.data.sampling_rate
         
         # Load split files from txt file
@@ -88,9 +88,6 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         audio_path = self.audio_paths[index]
         audio = self.load_audio_to_torch(audio_path)
-
-        if not self.training:  
-            return audio#, f0_norm
         
         if audio.shape[-1] > self.segment_length:
             audio_start = np.random.randint(0, audio.shape[-1] - self.segment_length + 1)
@@ -102,10 +99,13 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
             ).data
             length = torch.LongTensor([audio.shape[-1] // self.hop_length])
         
-        return audio_segment, length
-        # # Get Mel-Spectrogram for Timbre Encoder
-        # mel_audio = self.mel_timbre(audio_segment)
-        # return audio_segment, mel_audio, length
+        # Get Mel-Spectrogram for Timbre Encoder
+        mel_audio = self.mel_timbre(audio_segment)
+        
+        if not self.training:  
+            return audio_segment, mel_audio
+        
+        return audio_segment, mel_audio, length
 
 
     def __len__(self):
@@ -264,20 +264,17 @@ if __name__ == "__main__":
     # net_v.dec.remove_weight_norm()
     
     
+
     
-    for y in test_loader:
-        print(y)
-        y_mel = mel_fn(y).to(device)
-        print(y_mel.shape)
+    for (audio_segment, mel_audio, length) in train_loader:
+        print(audio_segment.shape, mel_audio.shape, length.shape)
         
         # torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
         # torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
         break
     
-    for (y, length) in train_loader:
-        print(y.shape, length.shape)
-        y_mel = mel_fn(y).to(device)
-        print(y_mel.shape)
+    for (audio_segment, mel_audio, length) in test_loader:
+        print(audio_segment.shape, mel_audio.shape, length.shape)
         
         # torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
         # torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)

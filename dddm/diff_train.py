@@ -18,7 +18,7 @@ import utils
 import wandb
 
 from augmentation.aug import Augment
-from model.simple_dddm_mixup import DDDM
+from model.new_dddm_mixup import DDDM
 from data_loader import BP_DDDM_Dataset, MelSpectrogramFixed
 from vocoder.hifigan import HiFi
 from torch.utils.data import DataLoader
@@ -33,14 +33,18 @@ def get_param_num(model):
 def main():
     """Assume Single Node Multi GPUs Training Only"""
     assert torch.cuda.is_available(), "CPU training is not allowed."
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
-    n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
+    hps = utils.get_hparams()
+    
     port = 50000 + random.randint(0, 100)
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = str(port)
-
-    hps = utils.get_hparams()
+    os.environ["CUDA_VISIBLE_DEVICES"] = hps.train.device
+    n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
+    
+    print("Using port:", port)
+    print("Using cuda device:", os.environ["CUDA_VISIBLE_DEVICES"])
+    print("n_gpus: ", n_gpus)
+   
     mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
 
 
@@ -85,7 +89,7 @@ def run(rank, n_gpus, hps):
         test_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
         eval_loader = DataLoader(
             test_dataset, 
-            batch_size=4, 
+            batch_size=1, #hps.train.batch_size, 
             num_workers=hps.train.num_workers, 
             pin_memory=True
         )
@@ -132,7 +136,7 @@ def run(rank, n_gpus, hps):
     model = DDP(model, device_ids=[rank])
 
     try:
-        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), model, optimizer) 
+        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.data.model_save_dir, "G_*.pth"), model, optimizer) 
         global_step = (epoch_str - 1) * len(train_loader)
     except:
         epoch_str = 1
@@ -174,14 +178,15 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     
     # Training
     model.train()
-    for batch_idx, (x, length) in enumerate(tqdm(train_loader)):
+    for batch_idx, (x, mel_x, length) in enumerate(tqdm(train_loader)):
         x = x.cuda(rank, non_blocking=True)
         length = length.cuda(rank, non_blocking=True).squeeze()
-        mel_x = mel_fn(x) # torch.Size([BS, 80, 200])
+        mel_x = mel_x.cuda(rank, non_blocking=True) # torch.Size([BS, 1, 256, 256]) --> Timbre Encoder Input
+        mel_fn_x = mel_fn(x).cuda(rank, non_blocking=True) # torch.Size([BS, 80, 200]) --> Mel Spectrogram
         
         optimizer.zero_grad()
 
-        loss_diff, loss_mel = model.module.compute_loss(mel_x, length)#, hps.model.mixup_ratio)
+        loss_diff, loss_mel = model.module.compute_loss(x, mel_x, mel_fn_x, length)#, hps.model.mixup_ratio)
         loss_gen_all = loss_diff + loss_mel*hps.train.c_mel
 
         if hps.train.fp16_run:
@@ -200,12 +205,13 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 lr = optimizer.param_groups[0]['lr']
                 
                 if hps.wandb.log_wandb:
-                    wandb.log(
-                        {"loss_diff": loss_diff.item(), 
+                    wandb.log({
+                        "loss_diff": loss_diff.item(), 
                         "loss_mel": loss_mel.item(), 
                         "total_loss": loss_gen_all.item(), 
                         "learning_rate": lr, 
-                        "step": global_step})
+                        "step": global_step,
+                    })
                 
                 losses = [loss_diff]
                 logger.info('Train Epoch: {} [{:.0f}%]'.format(
@@ -229,7 +235,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 if global_step % hps.train.save_interval == 0:
                     utils.save_checkpoint(
                         model, optimizer, hps.train.learning_rate, epoch,
-                        os.path.join(hps.model_dir, "G_{}.pth".format(global_step))
+                        os.path.join(hps.data.model_save_dir, "G_{}.pth".format(global_step))
                     )
 
         global_step += 1
@@ -245,16 +251,15 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=Tru
     mel_loss = 0
     enc_loss = 0
     with torch.no_grad():
-        # TODO: Audio & Mel-Spectrogram
-        for batch_idx, y in enumerate(tqdm(eval_loader)):
+        for batch_idx, (y, mel_y) in enumerate(tqdm(eval_loader)):
             y = y.cuda(0)
-            mel_y = mel_fn(y)
-            length = torch.LongTensor([mel_y.size(2)]).cuda(0)
+            mel_fn_y = mel_fn(y)
+            length = torch.LongTensor([mel_fn_y.size(2)]).cuda(0)
 
-            enc_output, mel_rec = model(mel_y, length, n_timesteps=6, mode='ml')
+            enc_output, mel_rec = model(y, mel_y, mel_fn_y, length, n_timesteps=6, mode='ml')
 
-            mel_loss += F.l1_loss(mel_y, mel_rec).item()
-            enc_loss += F.l1_loss(mel_y, enc_output).item()
+            mel_loss += F.l1_loss(mel_fn_y, mel_rec).item()
+            enc_loss += F.l1_loss(mel_fn_y, enc_output).item()
 
             if batch_idx > 100:
                 break
@@ -276,7 +281,12 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=Tru
 
         mel_loss /= 100
         enc_loss /= 100
-        wandb.log({"val_mel_loss": mel_loss, "val_enc_loss": enc_loss, "step": global_step})
+        if hps.wandb.log_wandb:
+            wandb.log({
+                "val_mel_loss": mel_loss, 
+                "val_enc_loss": enc_loss, 
+                "step": global_step,
+            })
 
     scalar_dict = {"val/mel": mel_loss, "val/enc_mel": enc_loss}
     utils.summarize(

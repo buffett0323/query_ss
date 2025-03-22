@@ -74,6 +74,10 @@ def init_timbre_encoder(path):
     model.load_state_dict(new_state_dict)
     model.eval()
     
+    # **Freeze parameters to disable backpropagation**
+    for param in model.parameters():
+        param.requires_grad = False  # This prevents gradients from being computed
+
     return model.encoder
 
 
