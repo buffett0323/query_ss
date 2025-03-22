@@ -21,7 +21,6 @@ from augmentation.aug import Augment
 from model.new_dddm_mixup import DDDM
 from data_loader import BP_DDDM_Dataset, MelSpectrogramFixed
 from vocoder.hifigan import HiFi
-from torch.utils.data import DataLoader
 
 torch.backends.cudnn.benchmark = True
 global_step = 0
@@ -131,7 +130,8 @@ def run(rank, n_gpus, hps):
         model.parameters(),
         hps.train.learning_rate,
         betas=hps.train.betas,
-        eps=hps.train.eps)
+        eps=hps.train.eps
+    )
 
     model = DDP(model, device_ids=[rank])
 

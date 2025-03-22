@@ -10,7 +10,7 @@
     "learning_rate": 5e-5,
     "betas": [0.8, 0.99],
     "eps": 1e-9,
-    "batch_size": 4,
+    "batch_size": 64,
     "fp16_run": true,
     "lr_decay": 0.999875,
     "segment_size": 64000,
@@ -21,10 +21,10 @@
     "aug": true,
     "lambda_commit": 0.02,
     "num_workers": 24,
-    "device": "3"
+    "device": "0"
   },
   "wandb": {
-    "log_wandb": false,
+    "log_wandb": true,
     "project_name": "Timbre_Transfer_DDDM",
     "run_name": "dddm_test"
   },
