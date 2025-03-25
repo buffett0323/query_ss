@@ -125,6 +125,7 @@ class SynthesizerTrn(nn.Module):
         g = self.emb_g(x_mel).unsqueeze(-1)
         f0 = self.emb_p(x)['note'].permute(0, 2, 1)#.unsqueeze(-1)
         f0 = self.proj_dense(f0) # torch.Size([4, 200, 88]) -> [4, 88, 251] -> [4, 88, 200]
+        # f0 = F.interpolate(f0, size=200, mode="nearest")
         
         x_mask = torch.unsqueeze(commons.sequence_mask(length, f0.size(2)), 1).to(f0.dtype)
         # x.shape:  torch.Size([4, 64000]) x_mel.shape:  torch.Size([4, 1, 256, 256]) x_mask.shape:  torch.Size([4, 1, 200])
