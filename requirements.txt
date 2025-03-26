@@ -1,4 +1,5 @@
 numpy
+pandas
 tqdm
 argparse
 wandb
@@ -23,3 +24,5 @@ descript_audiotools==0.7.2
 einops==0.8.0
 encodec==0.1.1
 accelerate
+diffusers
+transformers

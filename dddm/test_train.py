@@ -6,7 +6,7 @@ from torch.nn import functional as F
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-hps = utils.get_hparams()
+hps = utils.get_hparams(model_dir="/home/buffett/nas_home/buffett/timbre_transfer_logs/")
 model = DDDM(
     hps.data.n_mel_channels, hps.diffusion.spk_dim,
     hps.diffusion.dec_dim, hps.diffusion.beta_min, 

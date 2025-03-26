@@ -1,18 +1,20 @@
+import logging
+import warnings
+logging.getLogger("numba").setLevel(logging.WARNING)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
-import random
 import torch
-import numba
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 from torch.amp import GradScaler
+from tqdm import tqdm
 
 import commons
 import utils
 import wandb
 
-from accelerate import Accelerator
 from augmentation.aug import Augment
 from model.new_dddm_mixup import DDDM
 from data_loader import BP_DDDM_Dataset, MelSpectrogramFixed
@@ -29,19 +31,13 @@ def main():
     assert torch.cuda.is_available(), "CUDA GPU is required for training."
 
     hps = utils.get_hparams()
-    accelerator = Accelerator()
-    # device = accelerator.device
+    device = torch.device(f"cuda:{hps.train.device}")
 
-    if accelerator.is_main_process:
-        logger = utils.get_logger(hps.model_dir)
-        logger.info(hps)
-        utils.check_git_hash(hps.model_dir)
-        writer = SummaryWriter(log_dir=hps.model_dir)
-        writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
-    else:
-        logger = None
-        writer = None
-        writer_eval = None
+    logger = utils.get_logger(hps.model_dir)
+    logger.info(hps)
+    # utils.check_git_hash(hps.model_dir)
+    writer = SummaryWriter(log_dir=hps.model_dir)
+    writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
 
     mel_fn = MelSpectrogramFixed(
         sample_rate=hps.data.sampling_rate,
@@ -52,7 +48,7 @@ def main():
         f_max=hps.data.mel_fmax,
         n_mels=hps.data.n_mel_channels,
         window_fn=torch.hann_window
-    )#.to(device)
+    ).to(device)
 
     train_dataset = BP_DDDM_Dataset(hps, split="train", training=True)
     train_loader = DataLoader(
@@ -65,9 +61,9 @@ def main():
         persistent_workers=True,
     )
 
-    test_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
+    eval_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
     eval_loader = DataLoader(
-        test_dataset,
+        eval_dataset,
         batch_size=1,
         num_workers=hps.train.num_workers,
         pin_memory=True
@@ -77,7 +73,7 @@ def main():
         hps.data.n_mel_channels,
         hps.train.segment_size // hps.data.hop_length,
         **hps.model
-    )#.to(device)
+    ).to(device)
     utils.load_checkpoint(hps.data.voc_ckpt_path, net_v, None)
     net_v.eval()
     net_v.dec.remove_weight_norm()
@@ -86,9 +82,9 @@ def main():
         hps.data.n_mel_channels, hps.diffusion.spk_dim,
         hps.diffusion.dec_dim, hps.diffusion.beta_min,
         hps.diffusion.beta_max, hps
-    )#.to(device)
+    ).to(device)
 
-    if accelerator.is_main_process and hps.wandb.log_wandb:
+    if hps.wandb.log_wandb:
         wandb.init(
             project=hps.wandb.project_name,
             name=hps.wandb.run_name,
@@ -96,15 +92,14 @@ def main():
         )
         wandb.watch(model, log="all")
 
+    print('[Encoder] number of Parameters:', get_param_num(model.encoder))
+    print('[Decoder] number of Parameters:', get_param_num(model.decoder))
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         hps.train.learning_rate,
         betas=hps.train.betas,
         eps=hps.train.eps
-    )
-
-    model, optimizer, train_loader, eval_loader, net_v = accelerator.prepare(
-        model, optimizer, train_loader, eval_loader, net_v
     )
 
     if hps.train.resume:
@@ -118,36 +113,41 @@ def main():
         global_step = 0
 
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=hps.train.lr_decay, last_epoch=epoch_str - 2)
-    scaler = GradScaler(enabled=hps.train.fp16_run)
+    scaler = GradScaler(f"cuda:{hps.train.device}", enabled=hps.train.fp16_run)
 
     for epoch in range(epoch_str, hps.train.epochs + 1):
-        train_and_evaluate(accelerator, epoch, hps, model, mel_fn, net_v,
-                           optimizer, scheduler_g, scaler, train_loader, eval_loader,
-                           logger, writer, writer_eval)
+        train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
+                        scheduler_g, scaler, writer, writer_eval, 
+                        hps, epoch, device, logger)
         scheduler_g.step()
 
-def train_and_evaluate(accelerator, epoch, hps, model, mel_fn, net_v, optimizer, scheduler, scaler,
-                       train_loader, eval_loader, logger, writer, writer_eval):
+def train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, scheduler, scaler, writer, writer_eval, hps, epoch, device, logger):
     global global_step
     model.train()
-
     for batch_idx, (x, mel_x, length) in enumerate(tqdm(train_loader)):
-        # x = x.to(accelerator.device, non_blocking=True)
-        # mel_x = mel_x.to(accelerator.device, non_blocking=True)
-        # length = length.to(accelerator.device, non_blocking=True).squeeze()
-        length = length.squeeze()
-        mel_fn_x = mel_fn(x)
+        x = x.to(device)
+        mel_x = mel_x.to(device)
+        length = length.to(device).squeeze()
+        mel_fn_x = mel_fn(x)#.to(device)
 
         optimizer.zero_grad()
         loss_diff, loss_mel = model.compute_loss(x, mel_x, mel_fn_x, length)
         loss_gen_all = loss_diff + loss_mel * hps.train.c_mel
 
-        accelerator.backward(loss_gen_all)
-        grad_norm = commons.clip_grad_value_(model.parameters(), None)
-        optimizer.step()
+        if hps.train.fp16_run:
+            scaler.scale(loss_gen_all).backward()
+            scaler.unscale_(optimizer)
+            grad_norm = commons.clip_grad_value_(model.parameters(), None)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss_gen_all.backward()
+            grad_norm = commons.clip_grad_value_(model.parameters(), None)
+            optimizer.step()
 
-        if accelerator.is_main_process and global_step % hps.train.log_interval == 0:
+        if global_step % hps.train.log_interval == 0:
             lr = optimizer.param_groups[0]['lr']
+            logger.info(f"Epoch {epoch}, Step {global_step}: loss_diff={loss_diff.item():.4f}, loss_mel={loss_mel.item():.4f}, total={loss_gen_all.item():.4f}")
 
             if hps.wandb.log_wandb:
                 wandb.log({
@@ -158,43 +158,41 @@ def train_and_evaluate(accelerator, epoch, hps, model, mel_fn, net_v, optimizer,
                     "step": global_step,
                 })
 
-            logger.info(f"Epoch {epoch}, Step {global_step}: loss_diff={loss_diff.item():.4f}, loss_mel={loss_mel.item():.4f}, total={loss_gen_all.item():.4f}")
-            utils.summarize(writer, global_step, {
+            utils.summarize(
+                writer=writer, 
+                global_step=global_step, 
+                scalars={
                 "loss/g/total": loss_gen_all,
                 "learning_rate": lr,
                 "grad_norm_g": grad_norm,
                 "loss/g/diff": loss_diff,
                 "loss/g/mel": loss_mel,
-            })
+                },
+            )
 
-        if accelerator.is_main_process and global_step % hps.train.eval_interval == 0:
+        if global_step % hps.train.eval_interval == 0:
             torch.cuda.empty_cache()
-            evaluate(accelerator, hps, model, mel_fn, net_v, eval_loader, writer_eval)
+            evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, device)
 
             if global_step % hps.train.save_interval == 0:
-                accelerator.save({
-                    "model": accelerator.unwrap_model(model).state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "epoch": epoch
-                }, os.path.join(hps.data.model_save_dir, f"G_{global_step}.pth"))
+                utils.save_checkpoint(
+                    model, optimizer, hps.train.learning_rate, epoch,
+                    os.path.join(hps.data.model_save_dir, f"G_{global_step}.pth")
+                )
 
         global_step += 1
 
-def evaluate(accelerator, hps, model, mel_fn, net_v, eval_loader, writer_eval):
-    global global_step
+def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, device):
     model.eval()
+    mel_loss, enc_loss = 0, 0
     audio_dict = {}
-    mel_loss = 0
-    enc_loss = 0
-
     with torch.no_grad():
         for batch_idx, (y, mel_y) in enumerate(tqdm(eval_loader)):
-            # y = y.to(accelerator.device)
+            y = y.to(device)
             mel_fn_y = mel_fn(y)
-            length = torch.LongTensor([mel_fn_y.size(2)])#.to(accelerator.device)
+            length = torch.LongTensor([mel_fn_y.size(2)]).to(device)
 
             enc_output, mel_rec = model(y, mel_y, mel_fn_y, length, n_timesteps=6, mode='ml')
-
             mel_loss += F.l1_loss(mel_fn_y, mel_rec).item()
             enc_loss += F.l1_loss(mel_fn_y, enc_output).item()
 
@@ -214,25 +212,23 @@ def evaluate(accelerator, hps, model, mel_fn, net_v, eval_loader, writer_eval):
     mel_loss /= 100
     enc_loss /= 100
 
-    if hps.wandb.log_wandb and accelerator.is_main_process:
+    if hps.wandb.log_wandb:
         wandb.log({
             "val_mel_loss": mel_loss,
             "val_enc_loss": enc_loss,
             "step": global_step,
         })
 
-    if accelerator.is_main_process:
-        utils.summarize(
-            writer=writer_eval,
-            global_step=global_step,
-            audios=audio_dict,
-            audio_sampling_rate=hps.data.sampling_rate,
-            scalars={
-                "val/mel": mel_loss,
-                "val/enc_mel": enc_loss
-            }
-        )
-
+    utils.summarize(
+        writer=writer_eval,
+        global_step=global_step,
+        audio_sampling_rate=hps.data.sampling_rate,
+        audios=audio_dict,
+        scalars={
+            "val/mel": mel_loss, 
+            "val/enc_mel": enc_loss,
+        },
+    )
     model.train()
 
 if __name__ == "__main__":
