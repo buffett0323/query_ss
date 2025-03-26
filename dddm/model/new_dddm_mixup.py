@@ -19,24 +19,7 @@ import commons
 from modules_sf.modules import *
 from commons import init_weights, get_padding  
 from model.basic_pitch_encoder import init_basic_pitch_model, basic_pitch_encoder
-from model.timbre_encoder import init_timbre_encoder, timbre_encoder
-
-class Wav2vec2(torch.nn.Module):
-    def __init__(self, layer=12): 
-        super().__init__() 
-        self.wav2vec2 = transformers.Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-xls-r-300m")
-        for param in self.wav2vec2.parameters():
-            param.requires_grad = False
-            param.grad = None
-        self.wav2vec2.eval()
-        self.feature_layer = layer
-        
-    @torch.no_grad()
-    def forward(self, x): 
-        outputs = self.wav2vec2(x.squeeze(1), output_hidden_states=True)
-        y = outputs.hidden_states[self.feature_layer]    
-        
-        return y.permute((0, 2, 1))    
+from model.timbre_encoder import init_timbre_encoder, timbre_encoder  
 
 
 class Decoder(nn.Module):
@@ -108,28 +91,24 @@ class SynthesizerTrn(nn.Module):
         self.segment_size = segment_size
 
         # Speaker Representation -- Timbre Encoder: Simsiam inference
-        self.emb_g = init_timbre_encoder(
-            path=self.hps.data.timbre_encoder_path
-        )
+        # self.emb_g = init_timbre_encoder(path=self.hps.data.timbre_encoder_path)
+        self.emb_g = StyleEncoder(in_dim=80, hidden_dim=256, out_dim=256)
         
         # Pitch Encoder: Basic Pitch yn
         self.emb_p = init_basic_pitch_model()
-        self.proj_dense = nn.Linear(251, 200)
 
         # Decoder
-        self.dec_s = Decoder(88, 88, 5, 1, 8, mel_size=80, gin_channels=2048) #gin_channels=256)    
-        
+        self.dec_s = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=hps.model.gin_channels) # 256 or 2048
 
-    def forward(self, x, x_mel, length, mixup=False):
-        # TODO: emb_g x_mask
-        # Timbre & Pitch Encoders
-        g = self.emb_g(x_mel).unsqueeze(-1)
-        f0 = self.emb_p(x)['note'].permute(0, 2, 1)#.unsqueeze(-1)
-        f0 = self.proj_dense(f0) # torch.Size([4, 200, 88]) -> [4, 88, 251] -> [4, 88, 200]
-        # f0 = F.interpolate(f0, size=200, mode="nearest")
+    
+    def forward(self, x, x_mel, mel_fn_x, length, mixup=False, time_dim=200):
+        # Basic Pitch Encoder
+        f0 = self.emb_p(x)['note'].permute(0, 2, 1)# torch.Size([4, 251, 88]) -> [4, 88, 251]
+        f0 = F.interpolate(f0, size=time_dim, mode="nearest") # [4, 88, 251] -> [4, 88, 200]
         
-        x_mask = torch.unsqueeze(commons.sequence_mask(length, f0.size(2)), 1).to(f0.dtype)
-        # x.shape:  torch.Size([4, 64000]) x_mel.shape:  torch.Size([4, 1, 256, 256]) x_mask.shape:  torch.Size([4, 1, 200])
+        # Timbre Encoder
+        x_mask = torch.unsqueeze(commons.sequence_mask(length, mel_fn_x.size(2)), 1).to(mel_fn_x.dtype)
+        g = self.emb_g(mel_fn_x, x_mask).unsqueeze(-1)
 
         # Mix-up Training
         if mixup is True:
@@ -144,11 +123,12 @@ class SynthesizerTrn(nn.Module):
         return g, y_s
         
     
-    def voice_conversion(self, x, x_mel, mel_fn_x, x_length, y, y_mel, mel_fn_y, y_length):
-        # TODO: emb_g x_mask
+    def voice_conversion(self, x, x_mel, mel_fn_x, x_length, y, y_mel, mel_fn_y, y_length, time_dim=200):
         # Get x's pitch (w2v, f0_code are x's features)
         f0 = self.emb_p(x)['note'].permute(0, 2, 1) #, x_mask)#.unsqueeze(-1) # V
-        f0 = self.proj_dense(f0) # torch.Size([4, 200, 88]) -> [4, 88, 251] -> [4, 88, 200]
+        # f0 = self.proj_dense(f0) # torch.Size([4, 200, 88]) -> [4, 88, 251] -> [4, 88, 200]
+        f0 = F.interpolate(f0, size=time_dim, mode="nearest") # [4, 88, 251] -> [4, 88, 200]
+        
         x_mask = torch.unsqueeze(commons.sequence_mask(x_length, f0.size(2)), 1).to(x_mel.dtype) # V
         
         # Get y's timbre
@@ -184,7 +164,7 @@ class DDDM(BaseModule):
     def forward(self, x, mel_x, mel_fn_x, x_lengths, n_timesteps, mode='ml'): 
         x_mask = sequence_mask(x_lengths, mel_fn_x.size(2)).unsqueeze(1).to(mel_fn_x.dtype) 
         
-        spk, src_out = self.encoder(x, mel_x, x_lengths)
+        spk, src_out = self.encoder(x, mel_x, mel_fn_x, x_lengths)
         src_mean_x = self.decoder.compute_diffused_mean(mel_fn_x, x_mask, src_out, 1.0)
 
         b = mel_fn_x.shape[0]
@@ -192,15 +172,12 @@ class DDDM(BaseModule):
         max_length_new = fix_len_compatibility(max_length)
         x_mask_new = sequence_mask(x_lengths, max_length_new).unsqueeze(1).to(mel_fn_x.dtype)
         
-        src_new = src_out
-        src_x_new = src_mean_x
-        
-        # src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=mel_fn_x.dtype, device=mel_fn_x.device)
-        # src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=mel_fn_x.dtype, device=mel_fn_x.device)
+        src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=mel_fn_x.dtype, device=mel_fn_x.device)
+        src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=mel_fn_x.dtype, device=mel_fn_x.device)
 
-        # for i in range(b):
-            # src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
-            # src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
+        for i in range(b):
+            src_new[i, :, :x_lengths[i]] = src_out[i, :, :x_lengths[i]]
+            src_x_new[i, :, :x_lengths[i]] = src_mean_x[i, :, :x_lengths[i]]
 
         z_src = src_x_new
         z_src += torch.randn_like(src_x_new, device=src_x_new.device)
@@ -237,7 +214,7 @@ class DDDM(BaseModule):
     def compute_loss(self, x, mel_x, mel_fn_x, x_length): 
         # Encoder
         x_mask = sequence_mask(x_length, mel_fn_x.size(2)).unsqueeze(1).to(mel_fn_x.dtype)
-        spk, src_out = self.encoder(x, mel_x, x_length, mixup=True)
+        spk, src_out = self.encoder(x, mel_x, mel_fn_x, x_length, mixup=True, time_dim=mel_fn_x.size(2))
 
         # Mix-up
         mixup = torch.randint(0, 2, (mel_fn_x.size(0), 1, 1)).to(mel_fn_x.device)

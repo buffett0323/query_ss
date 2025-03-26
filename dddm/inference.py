@@ -1,12 +1,8 @@
 import os
 import torch
 import argparse
-import json
-from glob import glob
-import tqdm
 import numpy as np
 from torch.nn import functional as F
-import commons
 from scipy.io.wavfile import write
 import torchaudio
 import utils
@@ -66,7 +62,7 @@ def mel_timbre(x):
 
 
 def save_audio(wav, out_file, syn_sr=16000):
-    wav = (wav.squeeze() / wav.abs().max() * 0.999 * 32767.0).cpu().numpy().astype('int16')
+    wav = (wav.squeeze() / wav.abs().max() * 0.999 * 32767.0).detach().cpu().numpy().astype('int16') #.cpu().numpy().astype('int16')
     write(out_file, syn_sr, wav) 
         
 
@@ -104,7 +100,7 @@ def inference(a):
     utils.load_checkpoint(a.ckpt_voc, net_v, None)
     net_v.eval().dec.remove_weight_norm()   
  
-    # Convert audio 
+    # Synthesis for original audio
     print('>> Converting each utterance...') 
     src_name = os.path.splitext(os.path.basename(a.src_path))[0]
     audio = load_audio(a.src_path)[:64000].unsqueeze(0)#.to(device)  
@@ -113,18 +109,14 @@ def inference(a):
     audio = audio.to(device)
     src_mel = mel_fn(audio).to(device)#.cuda())
     src_length = torch.LongTensor([src_mel.size(-1)]).to(device)#.cuda()
-    # w2v_x = w2v(F.pad(audio, (40, 40), "reflect").cuda())
-
-    # try:
-    #     f0 = get_yaapt_f0(audio.numpy())
-    # except:
-    #     f0 = np.zeros((1, audio.shape[-1] // 80), dtype=np.float32) 
- 
-    # ii = f0 != 0
-    # f0[ii] = (f0[ii] - f0[ii].mean()) / f0[ii].std() 
-    # f0 = torch.FloatTensor(f0).cuda()
-    # f0_code = f0_quantizer.code_extraction(f0)
-
+    _, mel_rec = model(audio, mel_audio, src_mel, src_length, n_timesteps=6, mode='ml')
+    y_hat = net_v(mel_rec).squeeze(0)#.squeeze(0)
+    
+    # Save original audio
+    save_audio(audio, os.path.join(a.output_dir, 'orig.wav'))
+    save_audio(y_hat, os.path.join(a.output_dir, 'orig_synthesis.wav'))
+    
+    # Synthesis for target audio
     trg_name = os.path.splitext(os.path.basename(a.trg_path))[0] 
     trg_audio = load_audio(a.trg_path)[:64000].unsqueeze(0)#.to(device)    
     mel_trg_audio = mel_timbre(trg_audio).to(device)
@@ -133,6 +125,14 @@ def inference(a):
     trg_mel = mel_fn(trg_audio).to(device)#.cuda())
     trg_length = torch.LongTensor([trg_mel.size(-1)]).to(device)   
 
+    _, mel_rec = model(trg_audio, mel_trg_audio, trg_mel, trg_length, n_timesteps=6, mode='ml')
+    y_hat1 = net_v(mel_rec).squeeze(0)#.squeeze(0)
+    
+    # Save target audio
+    save_audio(trg_audio, os.path.join(a.output_dir, 'trg.wav'))
+    save_audio(y_hat1, os.path.join(a.output_dir, 'trg_synthesis.wav'))
+    
+    # Convert audio
     with torch.no_grad(): 
         c = model.vc(audio, mel_audio, src_mel, src_length, 
                      trg_audio, mel_trg_audio, trg_mel, trg_length, 
@@ -141,10 +141,6 @@ def inference(a):
         
     f_name = f'{src_name}_to_{trg_name}.wav' 
     save_audio(converted_audio, os.path.join(a.output_dir, f_name))
-    
-    # Save original audio
-    save_audio(audio, os.path.join(a.output_dir, 'orig.wav'))
-    save_audio(trg_audio, os.path.join(a.output_dir, 'target.wav'))
     print(">> Done.")
      
 

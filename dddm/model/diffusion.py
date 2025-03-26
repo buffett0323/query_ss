@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 from model.base import BaseModule
 from model.diffusion_module import *
-COND_ADD_DIM = 2048 #256
+COND_ADD_DIM = 256 #2048 #256
 
 class GradLogPEstimator(BaseModule):
     def __init__(self, dim_base, dim_cond, dim_mults=(1, 2, 4)):
