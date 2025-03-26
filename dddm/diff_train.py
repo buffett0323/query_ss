@@ -135,10 +135,10 @@ def run(rank, n_gpus, hps):
 
     model = DDP(model, device_ids=[rank])
 
-    try:
+    if hps.train.resume:
         _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.data.model_save_dir, "G_*.pth"), model, optimizer) 
         global_step = (epoch_str - 1) * len(train_loader)
-    except:
+    else:
         epoch_str = 1
         global_step = 0
 

@@ -22,12 +22,13 @@
     "aug": true,
     "lambda_commit": 0.02,
     "num_workers": 24,
-    "device": "0"
+    "device": "0",
+    "resume": false
   },
   "wandb": {
     "log_wandb": true,
     "project_name": "Timbre_Transfer_DDDM",
-    "run_name": "dddm_test"
+    "run_name": "dddm timbre encoder trained"
   },
   "data": {
     "filelist_path": "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/",
@@ -35,7 +36,7 @@
     "timbre_encoder_path": "/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar",
     "txt_path": "../simsiam/info/",
     "model_log_dir": "/mnt/gestalt/home/buffett/timbre_transfer_logs/",
-    "model_save_dir": "/mnt/gestalt/home/buffett/timbre_transfer_dict/",
+    "model_save_dir": "/mnt/gestalt/home/buffett/tt_training/timbre_transfer_te_train_dict/",
     "sampling_rate": 16000,
     "filter_length": 1280,
     "hop_length": 320,
