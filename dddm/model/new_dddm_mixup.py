@@ -126,14 +126,13 @@ class SynthesizerTrn(nn.Module):
     def voice_conversion(self, x, x_mel, mel_fn_x, x_length, y, y_mel, mel_fn_y, y_length, time_dim=200):
         # Get x's pitch (w2v, f0_code are x's features)
         f0 = self.emb_p(x)['note'].permute(0, 2, 1) #, x_mask)#.unsqueeze(-1) # V
-        # f0 = self.proj_dense(f0) # torch.Size([4, 200, 88]) -> [4, 88, 251] -> [4, 88, 200]
         f0 = F.interpolate(f0, size=time_dim, mode="nearest") # [4, 88, 251] -> [4, 88, 200]
         
         x_mask = torch.unsqueeze(commons.sequence_mask(x_length, f0.size(2)), 1).to(x_mel.dtype) # V
         
         # Get y's timbre
-        y_mask = torch.unsqueeze(commons.sequence_mask(y_length, y_mel.size(2)), 1).to(y_mel.dtype)
-        g_from_y = self.emb_g(y_mel).unsqueeze(-1)
+        y_mask = torch.unsqueeze(commons.sequence_mask(y_length, mel_fn_y.size(2)), 1).to(mel_fn_y.dtype)
+        g_from_y = self.emb_g(mel_fn_y, y_mask).unsqueeze(-1)
 
         # Decoder
         o_s = self.dec_s(f0, x_mask, g=g_from_y)
