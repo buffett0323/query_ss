@@ -16,7 +16,7 @@ import utils
 import wandb
 
 from augmentation.aug import Augment
-from model.new_dddm_mixup import DDDM
+from model.te_dddm_mixup import DDDM
 from data_loader import BP_DDDM_Dataset, MelSpectrogramFixed
 from vocoder.hifigan import HiFi
 
@@ -30,12 +30,15 @@ def main():
     global global_step
     assert torch.cuda.is_available(), "CUDA GPU is required for training."
 
-    hps = utils.get_hparams()
+    hps = utils.get_hparams(
+        config_path="./ckpt/config_te_dit.json",
+        model_dir="/home/buffett/nas_home/buffett/timbre_transfer_logs/",
+    )
     device = torch.device(f"cuda:{hps.train.device}")
 
     logger = utils.get_logger(hps.model_dir)
     logger.info(hps)
-    # utils.check_git_hash(hps.model_dir)
+
     writer = SummaryWriter(log_dir=hps.model_dir)
     writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
 
@@ -182,6 +185,7 @@ def train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
 
         global_step += 1
 
+# TODO: Evaluate
 def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, device):
     model.eval()
     mel_loss, enc_loss = 0, 0
@@ -189,10 +193,11 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, device):
     with torch.no_grad():
         for batch_idx, (y, mel_y) in enumerate(tqdm(eval_loader)):
             y = y.to(device)
+            mel_y = mel_y.to(device)
             mel_fn_y = mel_fn(y)
-            length = torch.LongTensor([mel_fn_y.size(2)]).to(device)
+            length = torch.LongTensor([mel_y.size(2)]).to(device)
 
-            enc_output, mel_rec = model(y, mel_y, mel_fn_y, length, n_timesteps=6, mode='ml')
+            enc_output, mel_rec = model(y, mel_y, mel_fn_y, length)#, n_timesteps=6, mode='ml')
             mel_loss += F.l1_loss(mel_fn_y, mel_rec).item()
             enc_loss += F.l1_loss(mel_fn_y, enc_output).item()
 

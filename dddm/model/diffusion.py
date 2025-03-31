@@ -8,7 +8,7 @@ from model.diffusion_module import *
 COND_ADD_DIM = 256 #2048 #256
 
 class GradLogPEstimator(BaseModule):
-    def __init__(self, dim_base, dim_cond, dim_mults=(1, 2, 4)):
+    def __init__(self, dim_base, dim_cond, dim_mults=(1, 2, 4), cond_add_dim=256):
         super(GradLogPEstimator, self).__init__()
 
         dims = [2 + dim_cond, *map(lambda m: dim_base * m, dim_mults)]
@@ -17,7 +17,7 @@ class GradLogPEstimator(BaseModule):
         self.time_pos_emb = SinusoidalPosEmb(dim_base)
         self.mlp = torch.nn.Sequential(torch.nn.Linear(dim_base, dim_base * 4),
                                        Mish(), torch.nn.Linear(dim_base * 4, dim_base))
-        cond_total = dim_base + COND_ADD_DIM
+        cond_total = dim_base + cond_add_dim #COND_ADD_DIM
         self.cond_block = torch.nn.Sequential(torch.nn.Linear(cond_total, 4 * dim_cond),
                                               Mish(), torch.nn.Linear(4 * dim_cond, dim_cond))
 
@@ -94,9 +94,9 @@ class GradLogPEstimator(BaseModule):
         return (output * x_mask).squeeze(1)
 
 class Diffusion(BaseModule):
-    def __init__(self, n_feats, dim_unet, dim_spk, beta_min, beta_max):
+    def __init__(self, n_feats, dim_unet, dim_spk, beta_min, beta_max, cond_add_dim=256):
         super(Diffusion, self).__init__()
-        self.estimator_src = GradLogPEstimator(dim_unet, dim_spk)
+        self.estimator_src = GradLogPEstimator(dim_unet, dim_spk, cond_add_dim=cond_add_dim)
         # self.estimator_ftr = GradLogPEstimator(dim_unet, dim_spk)
 
         self.n_feats = n_feats

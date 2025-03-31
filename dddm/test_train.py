@@ -1,12 +1,15 @@
 import torch
 import utils
-from model.new_dddm_mixup import DDDM
+from model.te_dddm_mixup import DDDM
 from data_loader import MelSpectrogramFixed
 from torch.nn import functional as F
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-hps = utils.get_hparams(model_dir="/home/buffett/nas_home/buffett/timbre_transfer_logs/")
+hps = utils.get_hparams(
+    config_path="./ckpt/config_te_dit.json",
+    model_dir="/home/buffett/nas_home/buffett/timbre_transfer_logs/",
+)
+device = torch.device(f"cuda:{hps.train.device}")
 model = DDDM(
     hps.data.n_mel_channels, hps.diffusion.spk_dim,
     hps.diffusion.dec_dim, hps.diffusion.beta_min, 
@@ -36,8 +39,11 @@ length = torch.LongTensor([mel_fn_x.size(2)] * 4).to(device)# length = torch.ran
 loss_diff, loss_mel = model.compute_loss(x, mel_x, mel_fn_x, length)
 print(loss_diff, loss_mel)
 
-enc_output, mel_rec = model(x, mel_x, mel_fn_x, length, n_timesteps=6, mode='ml')
-print("Result:", enc_output.shape, mel_rec.shape)
+
+# Run evaluation
+print("Run evaluation:")
+
+enc_output, mel_rec = model(x, mel_x, mel_fn_x, length)
 
 mel_loss = F.l1_loss(mel_fn_x, mel_rec).item()
 enc_loss = F.l1_loss(mel_fn_x, enc_output).item()

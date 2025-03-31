@@ -147,21 +147,24 @@ def load_filepaths_and_text(filename, split="|"):
     return filepaths_and_text
 
 
-def get_hparams(init=True, model_dir="/mnt/gestalt/home/buffett/timbre_transfer_logs/"):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, 
-                        default="./ckpt/config.json",
-                        help='JSON file for configuration')
+def get_hparams(
+        init=True, 
+        config_path="./ckpt/config.json",
+        model_dir="/mnt/gestalt/home/buffett/timbre_transfer_logs/"
+    ):
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-c', '--config', type=str, 
+    #                     default="./ckpt/config.json",
+    #                     help='JSON file for configuration')
     # parser.add_argument('-m', '--model', type=str, 
     #                     default="/mnt/gestalt/home/buffett/timbre_transfer_logs/",
     #                     help='Model name')
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
     # model_dir = args.model # os.path.join("./logs", args.model)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
-    config_path = args.config
     config_save_path = os.path.join(model_dir, "config.json")
     if init:
         with open(config_path, "r") as f:
