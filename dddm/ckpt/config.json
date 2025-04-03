@@ -68,7 +68,8 @@
     "n_layers_q": 3,
     "use_spectral_norm": false,
     "encoder_hidden_size": 88,
-    "gin_channels": 256
+    "gin_channels": 2048,
+    "cond_add_dim": 2048
   },
     "f0_vq_params": {
       "l_bins": 20,
