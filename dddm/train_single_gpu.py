@@ -185,7 +185,7 @@ def train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
 
         global_step += 1
 
-# TODO: Evaluate
+
 def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, device):
     model.eval()
     mel_loss, enc_loss = 0, 0

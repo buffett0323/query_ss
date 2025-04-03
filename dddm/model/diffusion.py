@@ -66,6 +66,7 @@ class GradLogPEstimator(BaseModule):
         hiddens = []
         masks = [x_mask]
 
+        # Diffusion Module
         for resnet1, resnet2, attn, downsample in self.downs:
             mask_down = masks[-1]
             x = resnet1(x, mask_down, t)

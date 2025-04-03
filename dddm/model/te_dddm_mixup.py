@@ -157,8 +157,8 @@ class DDDM(BaseModule):
             hps.train.segment_size // hps.data.hop_length,
             **hps.model
         )
-        # self.decoder = Diffusion(n_feats, dec_dim, spk_dim, beta_min, beta_max, cond_add_dim=hps.model.cond_add_dim)
-        self.decoder = SADiT()
+        self.decoder = Diffusion(n_feats, dec_dim, spk_dim, beta_min, beta_max, cond_add_dim=hps.model.cond_add_dim)
+        # self.decoder = SADiT()
 
 
     @torch.no_grad() # For evaluation
@@ -167,12 +167,12 @@ class DDDM(BaseModule):
         
         spk, src_out = self.encoder(x, mel_x, mel_fn_x, x_lengths, time_dim=mel_fn_x.size(2))
         
-        # DiT
-        generator = torch.Generator(device=x.device).manual_seed(0)
-        y = self.decoder(mel_fn_x, x_mask, src_out, spk, generator=generator)
-        enc_out = src_out
+        # Diffusion
+        # generator = torch.Generator(device=x.device).manual_seed(0)
+        # y = self.decoder(mel_fn_x, x_mask, src_out, spk, generator=generator)
+        y = self.decoder(mel_fn_x, x_mask, src_out, spk, n_timesteps=6, mode='ml')
         
-        return enc_out, y
+        return src_out, y
     
     # TODO: Inference Not Revised
     def vc(self, x, mel_x, mel_fn_x, x_lengths, y, mel_y, mel_fn_y, y_lengths, n_timesteps, mode='ml'): 
@@ -212,7 +212,7 @@ class DDDM(BaseModule):
         enc_out = src_out[:mel_fn_x.size(0), :, :] #+ ftr_out[:x.size(0), :, :]
         mel_loss = F.l1_loss(mel_fn_x, enc_out)
         
-        # Decoder of DiT
+        # Decoder of Diffusion
         diff_loss = self.decoder.compute_loss(mel_fn_x, x_mask, src_out_new, spk)
         
         return diff_loss, mel_loss
