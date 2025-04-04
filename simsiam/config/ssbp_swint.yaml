@@ -11,7 +11,7 @@ wandb_notes: "SSBP SwinT Training Fatcat server"
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
 verse_data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
 model_dict_save_dir: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313"
-resume_training_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313/checkpoint_20.ckpt"
+resume_training_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313/checkpoint_100.ckpt"
 # data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
 # verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
 # model_dict_save_dir: "/home/buffett/NAS_NTU/timbre_encoder_model_dict/swint/"
@@ -25,14 +25,14 @@ melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: True # Random slice enhance model's ability of capturing timbre
 workers: 24 # 24 for terra, 56 for fatcat, 104 for sinica
-gpu: [1] #[0,1,2,3]
+gpu: [0, 1] #[0,1,2,3]
 
 
 # train options
 img_mean: -1.100174903869629
 img_std: 14.353998184204102
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #256 #512 
+batch_size: 128 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100

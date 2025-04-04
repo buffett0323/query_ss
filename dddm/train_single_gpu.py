@@ -31,7 +31,7 @@ def main():
     assert torch.cuda.is_available(), "CUDA GPU is required for training."
 
     hps = utils.get_hparams(
-        config_path="./ckpt/config_te_dit.json",
+        config_path="./ckpt/config.json",
         model_dir="/home/buffett/nas_home/buffett/timbre_transfer_logs/",
     )
     device = torch.device(f"cuda:{hps.train.device}")

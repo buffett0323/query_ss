@@ -26,7 +26,7 @@ import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
 from model import SimSiam
-from dataset import BPDataset
+from dataset import MixedBPDataset, MixedBPDataModule
 from transforms import CLARTransform
 
 model_names = sorted(name for name in models.__dict__
@@ -180,7 +180,7 @@ def main_worker(gpu, ngpus_per_node, args):
                                 weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
-    args.resume = os.path.join(args.model_dict_save_dir, args.resume)
+    args.resume = args.resume_training_path #os.path.join(args.model_dict_save_dir, args.resume)
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
@@ -189,7 +189,7 @@ def main_worker(gpu, ngpus_per_node, args):
             else:
                 # Map model to be loaded to specified single gpu.
                 loc = 'cuda:{}'.format(args.gpu)
-                checkpoint = torch.load(args.resume, map_location=loc)
+                checkpoint = torch.load(args.resume, map_location=loc, weights_only=False)
             args.start_epoch = checkpoint['epoch']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
@@ -201,7 +201,7 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
     
     # Loading dataset
-    train_dataset = BPDataset(
+    train_dataset = MixedBPDataset(
         sample_rate=args.sample_rate, 
         segment_second=args.segment_second, 
         piece_second=args.piece_second,

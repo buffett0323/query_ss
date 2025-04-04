@@ -208,17 +208,6 @@ class MixedBPDataset(Dataset):
         self.random_slice = random_slice
         self.fmax = fmax
         
-        
-        # Mel-spec transform for torch
-        # self.mel_transform = T.MelSpectrogram(
-        #     sample_rate=sample_rate,
-        #     n_mels=n_mels,
-        #     n_fft=n_fft,
-        #     hop_length=hop_length,
-        #     f_max=fmax,
-        # )
-        # self.db_transform = T.AmplitudeToDB(stype="power")
-        
         self.resizer = transforms.Resize((img_size, img_size))
         self.img_mean = img_mean
         self.img_std = img_std
@@ -320,7 +309,7 @@ class MixedBPDataset(Dataset):
             x_i, x_j = self.random_crop(x), self.random_crop(x)
         else:
             x_i, x_j = x[:self.duration], x[self.duration:]
-        
+            
         # Data Augmentation for audio waveform
         if self.data_augmentation:
             x_i, x_j = self.augment(x_i, sample_rate=self.sample_rate), \
