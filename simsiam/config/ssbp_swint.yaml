@@ -25,7 +25,7 @@ melspec_transform: False #Wavegram will transform for us
 data_augmentation: True
 random_slice: True # Random slice enhance model's ability of capturing timbre
 workers: 24 # 24 for terra, 56 for fatcat, 104 for sinica
-gpu: [0, 1] #[0,1,2,3]
+gpu: 3 # [0, 1] #[0,1,2,3]
 
 
 # train options

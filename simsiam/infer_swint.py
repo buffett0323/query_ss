@@ -34,9 +34,9 @@ from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 
 from utils import yaml_config_hook
-from dataset import BPDataset
+from dataset import BPDataset, MixedBPDataset
 from transforms import CLARTransform
-import simsiam.builder
+from train_swint_pl import SimSiamLightning
 
 torch.set_float32_matmul_precision('high')
 warnings.filterwarnings(
@@ -72,136 +72,41 @@ def knn_predict(feature, feature_bank, knn_k=3, knn_t=1.0):
 
     return top_k_indices, top_k_similarities
 
-
 def main():
-    parser = argparse.ArgumentParser(description="SimSiam")
+    parser = argparse.ArgumentParser(description="SimSiam Inference")
 
     config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    
-    # Initial settings
+
     if args.seed is not None:
         random.seed(args.seed)
         torch.manual_seed(args.seed)
         cudnn.deterministic = True
-        warnings.warn('You have chosen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
 
-    if args.gpu is not None:
-        warnings.warn('You have chosen a specific GPU. This will completely '
-                      'disable data parallelism.')
-
-    if args.dist_url == "env://" and args.world_size == -1:
-        args.world_size = int(os.environ["WORLD_SIZE"])
-
-    args.distributed = args.world_size > 1 or args.multiprocessing_distributed
-
-    ngpus_per_node = torch.cuda.device_count() #len(args.gpu.split(',')) #
-    print("ngpus:", ngpus_per_node)
+    # args.gpu = int(args.gpu[0]) if isinstance(args.gpu, list) else int(args.gpu)
+    print("Using single GPU:", args.gpu)
+    main_worker(args.gpu, args)
 
 
-    # Multiprocess
-    if args.multiprocessing_distributed:
-        # Since we have ngpus_per_node processes per node, the total world_size
-        # needs to be adjusted accordingly
-        args.world_size = ngpus_per_node * args.world_size
-        # Use torch.multiprocessing.spawn to launch distributed processes: the
-        # main_worker process function
-        # mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
-        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
+def main_worker(gpu, args):
+    args.gpu = torch.device(f"cuda:{gpu}")
 
-    else:
-        # Simply call main_worker function
-        print("No Multiprocessing")
-        main_worker(args.gpu, ngpus_per_node, args)
-    
-    
-def main_worker(gpu, ngpus_per_node, args):
-    args.gpu = gpu
-    
-    # suppress printing if not master
-    if args.multiprocessing_distributed and args.gpu != 0:
-        def print_pass(*args, **kwargs):  # Allow any extra keyword arguments
-            pass
-        builtins.print = print_pass
-
-    if args.gpu is not None:
-        print("Use GPU: {} for training".format(args.gpu))
-
-    if args.distributed:
-        if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(os.environ["RANK"])
-        if args.multiprocessing_distributed:
-            # For multiprocessing distributed training, rank needs to be the
-            # global rank among all the processes
-            args.rank = args.rank * ngpus_per_node + gpu
-        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank) 
-                                # group_name="my_ddp_group") # Added group name
-        torch.distributed.barrier()
-    
-
-    # Loading model
-    print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
-    model = SimSiam(
+    # Load trained LightningModule
+    print(f"=> Loading model from: {args.resume_training_path}")
+    model = SimSiamLightning.load_from_checkpoint(
+        args.resume_training_path,
         args=args,
-        dim=args.dim,
-        pred_dim=args.pred_dim,
     )
-    checkpoint = torch.load('model_dict/checkpoint_0200.pth.tar')  # Replace with the actual filename
+    model = model.to(gpu)
+    model.eval()
 
-    # Create a new state_dict without 'module.' prefix
-    new_state_dict = OrderedDict()
-    for k, v in checkpoint['state_dict'].items():
-        new_key = k.replace("module.", "")  # Remove 'module.' prefix
-        new_state_dict[new_key] = v
-    model.load_state_dict(new_state_dict)
-
-    cudnn.benchmark = True
-
-    if args.distributed:
-        # Apply SyncBN
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        # For multiprocessing distributed, DistributedDataParallel constructor
-        # should always set the single device scope, otherwise,
-        # DistributedDataParallel will use all available devices.
-        if args.gpu is not None:
-            torch.cuda.set_device(args.gpu)
-            model.cuda(args.gpu)
-            # When using a single GPU per process and per
-            # DistributedDataParallel, we need to divide the batch size
-            # ourselves based on the total number of GPUs we have
-            args.batch_size = int(args.batch_size / ngpus_per_node)
-            args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, 
-                                                              find_unused_parameters=args.find_unused_parameters)
-
-        else:
-            model.cuda()
-            # DistributedDataParallel will divide and allocate batch_size to all
-            # available GPUs if device_ids are not set
-            model = torch.nn.parallel.DistributedDataParallel(model)
-            
-    elif args.gpu is not None:
-        torch.cuda.set_device(args.gpu)
-        model = model.cuda(args.gpu)
-        raise NotImplementedError("Only DistributedDataParallel is supported.")
-    else:
-        raise NotImplementedError("Only DistributedDataParallel is supported.")
-
-    
-
-
-    # Get dataset and data module
-    memory_dataset = BPDataset(
-        sample_rate=args.sample_rate, 
-        segment_second=args.segment_second, 
+    # Datasets
+    memory_dataset = MixedBPDataset(
+        sample_rate=args.sample_rate,
+        segment_second=args.segment_second,
         piece_second=args.piece_second,
         data_dir=args.data_dir,
         augment_func=CLARTransform(
@@ -221,9 +126,10 @@ def main_worker(gpu, ngpus_per_node, args):
         img_mean=args.img_mean,
         img_std=args.img_std,
     )
-    test_dataset = BPDataset(
-        sample_rate=args.sample_rate, 
-        segment_second=args.segment_second, 
+
+    test_dataset = MixedBPDataset(
+        sample_rate=args.sample_rate,
+        segment_second=args.segment_second,
         piece_second=args.piece_second,
         data_dir=args.data_dir,
         augment_func=CLARTransform(
@@ -243,23 +149,16 @@ def main_worker(gpu, ngpus_per_node, args):
         img_mean=args.img_mean,
         img_std=args.img_std,
     )
-    
-    if args.distributed:
-        memory_sampler = torch.utils.data.distributed.DistributedSampler(memory_dataset)
-        test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
-    else:
-        memory_sampler = None
-        test_sampler = None
 
     memory_loader = torch.utils.data.DataLoader(
-        memory_dataset, batch_size=64, shuffle=(memory_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=memory_sampler, drop_last=True)
+        memory_dataset, batch_size=32, shuffle=False,
+        num_workers=args.workers, pin_memory=True, drop_last=True)
+
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=64, shuffle=False,
-        num_workers=args.workers, pin_memory=True, sampler=test_sampler, drop_last=True)
+        test_dataset, batch_size=32, shuffle=False,
+        num_workers=args.workers, pin_memory=True, drop_last=True)
 
     validate(memory_loader, test_loader, model, args)
-    
 
 
 def validate(memory_loader, test_loader, model, args):
@@ -283,7 +182,7 @@ def validate(memory_loader, test_loader, model, args):
         
         # Gather feature_bank across all distributed processes if using DDP
         feature_bank_list = [torch.zeros_like(feature_bank) for _ in range(args.world_size)]
-        torch.distributed.all_gather(feature_bank_list, feature_bank)
+        # torch.distributed.all_gather(feature_bank_list, feature_bank)
         feature_bank = torch.cat(feature_bank_list, dim=0)  # [N, D]
 
         # Transpose to make feature_bank [D, N]
@@ -293,13 +192,13 @@ def validate(memory_loader, test_loader, model, args):
         # Ensure feature paths match feature_bank after DDP
         if args.world_size > 1:
             feature_paths_list = [None] * args.world_size
-            torch.distributed.all_gather_object(feature_paths_list, feature_paths)
+            # torch.distributed.all_gather_object(feature_paths_list, feature_paths)
             feature_paths = sum(feature_paths_list, [])  # Flatten the list
 
 
         # Loop through test data to find top-3 nearest neighbors
         test_bar = tqdm(test_loader, desc='KNN Evaluation')
-        with open('info/test_matches_swint.txt', 'w') as f: 
+        with open('info/test_matches_swint_vox_others.txt', 'w') as f: 
             for x_i, x_j, test_path in test_bar:
                 if args.gpu is not None:
                     x_i = x_i.cuda(args.gpu, non_blocking=True)
@@ -309,7 +208,7 @@ def validate(memory_loader, test_loader, model, args):
                 feature = F.normalize(feature, dim=1)
                     
                 # Get top-3 nearest neighbors
-                top_k_indices, top_k_similarities = knn_predict(
+                top_k_indices, _ = knn_predict(
                     feature, feature_bank, knn_k=args.knn_k, knn_t=args.knn_t
                 )
 
@@ -319,9 +218,11 @@ def validate(memory_loader, test_loader, model, args):
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
                     
                     # Write to file
-                    f.write(f"Test sample: {test_sample_path}\n")
+                    f.write("python npy2mp3.py --output_mp3 target.mp3 \\")
+                    f.write(f"    {test_sample_path}\n")
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
-                        f.write(f"  Neighbor {rank}: {neighbor_path}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3 \\")
+                        f.write(f"    {neighbor_path}\n")
                     f.write("\n")
 
                 print(f"Test sample: {test_sample_path}")

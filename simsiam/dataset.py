@@ -141,6 +141,9 @@ class BPDataset(Dataset):
         else:
             x_i, x_j = x[:self.duration], x[self.duration:]
         
+        x_i_audio = torch.tensor(x_i)#.clone().detach()
+        x_j_audio = torch.tensor(x_j)#.clone().detach()
+        
         # Augmentation
         if self.data_augmentation:
             # x_i, x_j = self.augment_func(x[:self.duration], x[self.duration:])
@@ -151,7 +154,7 @@ class BPDataset(Dataset):
         # TODO: Random Crop for 4 seconds
         x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
         
-        return x_i.float(), x_j.float(), path
+        return x_i.float(), x_j.float(), x_i_audio, x_j_audio, path
 
 
 
