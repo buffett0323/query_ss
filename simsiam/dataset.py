@@ -52,6 +52,7 @@ class BPDataset(Dataset):
         img_size=256,
         img_mean=0,
         img_std=0,
+        clap_use=False,
     ):
         # Load split files from txt file
         with open(f"info/{split}_bp_8secs.txt", "r") as f:
@@ -75,6 +76,7 @@ class BPDataset(Dataset):
         self.melspec_transform = melspec_transform
         self.data_augmentation = data_augmentation
         self.random_slice = random_slice
+        self.clap_use = clap_use
         
         # Mel-spec transform
         self.mel_transform = T.MelSpectrogram(
@@ -141,20 +143,162 @@ class BPDataset(Dataset):
         else:
             x_i, x_j = x[:self.duration], x[self.duration:]
         
-        x_i_audio = torch.tensor(x_i)#.clone().detach()
-        x_j_audio = torch.tensor(x_j)#.clone().detach()
+        if self.clap_use:
+            x_i_audio = torch.tensor(x_i)#.clone().detach()
+            x_j_audio = torch.tensor(x_j)#.clone().detach()
+        else:
+            x_i_audio = None
+            x_j_audio = None
         
         # Augmentation
         if self.data_augmentation:
-            # x_i, x_j = self.augment_func(x[:self.duration], x[self.duration:])
-            x_i = self.augment(x_i, sample_rate=self.sample_rate)
-            x_j = self.augment(x_j, sample_rate=self.sample_rate)
+            x_i, x_j = self.augment(x_i, sample_rate=self.sample_rate), \
+                self.augment(x_j, sample_rate=self.sample_rate)
         
-
-        # TODO: Random Crop for 4 seconds
+        # Mel-spectrogram transformation and Melspec's Augmentation
         x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
         
         return x_i.float(), x_j.float(), x_i_audio, x_j_audio, path
+
+
+
+class NewBPDataset(Dataset):
+    def __init__(
+        self,
+        sample_rate,
+        segment_second,
+        data_dir,
+        piece_second=3,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        split="train",
+        melspec_transform=False,
+        data_augmentation=True,
+        random_slice=False,
+        stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
+        fmax=8000,
+        img_size=256,
+        img_mean=0,
+        img_std=0,
+    ):
+        # Load split files from txt file
+        with open(f"info/{split}_bp_8secs.txt", "r") as f:
+            bp_listdir = [line.strip() for line in f.readlines()]
+
+        self.stems = stems
+        self.data_path_list = [
+            os.path.join(data_dir, folder, f"{stem}.npy")
+            for folder in bp_listdir
+                for stem in stems
+        ]
+
+        self.sample_rate = sample_rate
+        self.segment_second = segment_second
+        self.duration = sample_rate * piece_second # 4 seconds for each piece
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.n_mels = n_mels
+        self.split = split
+        self.melspec_transform = melspec_transform
+        self.data_augmentation = data_augmentation
+        self.random_slice = random_slice
+        self.fmax = fmax
+        
+        self.resizer = transforms.Resize((img_size, img_size))
+        self.img_mean = img_mean
+        self.img_std = img_std
+        self.augment = Compose([
+            AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5), 
+            # TimeMask(min_band_part=0.01, max_band_part=0.125, fade=True, p=0.5),
+            Shift(p=0.5), # Time shift
+            # TimeStretch(min_rate=0.8, max_rate=1.25, leave_length_unchanged=True, p=0.4),
+            # PitchShift(min_semitones=-4, max_semitones=4, p=0.4), # S3T settings
+            # Shift(p=1),
+        ])
+        
+    
+    
+    def __len__(self): #""" Total we got 175698 files * 4 tracks """
+        return len(self.data_path_list)
+    
+    
+    def mel_spec_transform(self, x):
+        x = librosa.feature.melspectrogram(
+            y=x, 
+            sr=self.sample_rate, 
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+            fmax=self.fmax,
+        )
+        x = librosa.power_to_db(np.abs(x))
+        return torch.tensor(x)
+    
+    
+    def data_pipeline(self, x):
+        x = self.mel_spec_transform(x).unsqueeze(0)
+       
+        # Added mel spec augmentation
+        time_warping_para = random.randint(1, 10) # (0, 10)
+        freq_mask_num = random.randint(1, 3) # (1, 5)
+        time_mask_num = random.randint(1, 5) # (1, 10)
+        freq_masking_para = random.randint(5, 15) # (5, 30)
+        time_masking_para = random.randint(5, 15) # (5, 30)
+        p1, p2 = 0.4, 0.5
+        
+        # self.mel_plotting(x, "original mel spectrogram", "visualization/original_mel_spec.png")
+        
+        x = spec_augment(
+            x, 
+            time_warping_para=time_warping_para, 
+            frequency_masking_para=freq_masking_para,
+            time_masking_para=time_masking_para, 
+            frequency_mask_num=freq_mask_num, 
+            time_mask_num=time_mask_num,
+            p1=p1,
+            p2=p2,
+        )
+        # self.mel_plotting(x, "augmented mel spectrogram", "visualization/augmented_mel_spec.png")
+        
+        x = self.resizer(x) # transform to 1, img_size, img_size
+        return (x - self.img_mean) / self.img_std
+    
+
+    def random_crop(self, x):
+        """ Random crop for 4 seconds """
+        max_idx = int(x.shape[0]) - self.duration
+        idx = random.randint(0, max_idx)
+        return x[idx:idx+self.duration]
+
+
+    def __getitem__(self, idx):
+        """ 
+            1. Mel-Spectrogram Transformation
+            2. Resize
+            3. Normalization
+            4. Data Augmentation
+        """
+        # Load audio data
+        path = self.data_path_list[idx]
+        x = np.load(path)
+        
+        
+        # Random Crop
+        if self.random_slice:
+            x_i, x_j = self.random_crop(x), self.random_crop(x)
+        else:
+            x_i, x_j = x[:self.duration], x[self.duration:]
+        
+        # Augmentation
+        if self.data_augmentation:
+            x_i, x_j = self.augment(x_i, sample_rate=self.sample_rate), \
+                self.augment(x_j, sample_rate=self.sample_rate)
+        
+        # Mel-spectrogram transformation and Melspec's Augmentation
+        x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
+        
+        return x_i.float(), x_j.float(), path
 
 
 
@@ -477,24 +621,20 @@ class MixedBPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_swint.yaml")
+    config = yaml_config_hook("config/ssbp_resnet50.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
     
-    train_dataset = MixedBPDataset(
-        sample_rate=args.sample_rate, 
-        segment_second=args.segment_second, 
-        piece_second=args.piece_second,
+    train_dataset = NewBPDataset(
+        sample_rate=args.sample_rate,
+        segment_second=args.segment_second,
         data_dir=args.data_dir,
-        augment_func=CLARTransform(
-            sample_rate=args.sample_rate,
-            duration=int(args.piece_second),
-        ),
-        n_mels=args.n_mels,
+        piece_second=args.piece_second,
         n_fft=args.n_fft,
         hop_length=args.hop_length,
+        n_mels=args.n_mels,
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
@@ -506,7 +646,7 @@ if __name__ == "__main__":
         img_std=args.img_std,
     )
     
-    for i in range(1):
+    for i in range(10):
         ts1, ts2, _ = train_dataset[i]
         print(ts1.shape, ts2.shape)
 

@@ -25,7 +25,7 @@ import torch.utils.data
 import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
-from dataset import BPDataset, BPDataModule
+from dataset import NewBPDataset
 from transforms import CLARTransform
 import simsiam.builder
 
@@ -202,18 +202,14 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
     
     # Loading dataset
-    train_dataset = BPDataset(
+    train_dataset = NewBPDataset(
         sample_rate=args.sample_rate, 
         segment_second=args.segment_second, 
-        piece_second=args.piece_second,
         data_dir=args.data_dir,
-        augment_func=CLARTransform(
-            sample_rate=args.sample_rate,
-            duration=int(args.piece_second),
-        ),
-        n_mels=args.n_mels,
+        piece_second=args.piece_second,
         n_fft=args.n_fft,
         hop_length=args.hop_length,
+        n_mels=args.n_mels,
         split="train",
         melspec_transform=args.melspec_transform,
         data_augmentation=args.data_augmentation,
@@ -223,6 +219,7 @@ def main_worker(gpu, ngpus_per_node, args):
         img_size=args.img_size,
         img_mean=args.img_mean,
         img_std=args.img_std,
+        clap_use=args.clap_use,
     )
     
     
@@ -257,11 +254,16 @@ def main_worker(gpu, ngpus_per_node, args):
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
             if (epoch+1) % 10 == 0:
-                save_checkpoint({
-                    'epoch': epoch + 1,
-                    'state_dict': model.state_dict(),
-                    'optimizer' : optimizer.state_dict(),
-                }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
+                save_checkpoint(
+                    {
+                        'epoch': epoch + 1,
+                        'state_dict': model.state_dict(),
+                        'optimizer' : optimizer.state_dict(),
+                    }, 
+                    is_best=False, 
+                    filename='checkpoint_{:04d}.pth.tar'.format(epoch),
+                    save_dir=args.model_dict_save_dir,
+                )
         
     if args.distributed:
         dist.destroy_process_group()
@@ -280,7 +282,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j, _) in enumerate(train_loader):
+    for i, (x_i, x_j, _, _, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
