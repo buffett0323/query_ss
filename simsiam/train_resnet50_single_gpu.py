@@ -107,7 +107,7 @@ def main():
         pin_memory=args.pin_memory,
         drop_last=args.drop_last,
         persistent_workers=args.persistent_workers,
-        prefetch_factor=4,
+        prefetch_factor=8, #4,
     )
 
     # training loop

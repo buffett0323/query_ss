@@ -206,6 +206,7 @@ class NewBPDataset(Dataset):
         self.fmax = fmax
         
         self.resizer = transforms.Resize((img_size, img_size))
+        self.img_size = img_size
         self.img_mean = img_mean
         self.img_std = img_std
         self.augment = Compose([
@@ -217,6 +218,15 @@ class NewBPDataset(Dataset):
             # Shift(p=1),
         ])
         
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+            f_max=self.fmax,
+        )
+
+        self.db_transform = T.AmplitudeToDB()
     
     
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
@@ -224,17 +234,10 @@ class NewBPDataset(Dataset):
     
     
     def mel_spec_transform(self, x):
-        x = librosa.feature.melspectrogram(
-            y=x, 
-            sr=self.sample_rate, 
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            n_mels=self.n_mels,
-            fmax=self.fmax,
-        )
-        x = librosa.power_to_db(np.abs(x))
-        return torch.tensor(x)
-    
+        x = torch.tensor(x)
+        x = self.mel_transform(x)
+        x = self.db_transform(x)
+        return x
     
     def data_pipeline(self, x):
         x = self.mel_spec_transform(x).unsqueeze(0)
@@ -247,8 +250,6 @@ class NewBPDataset(Dataset):
         time_masking_para = random.randint(5, 15) # (5, 30)
         p1, p2 = 0.4, 0.5
         
-        # self.mel_plotting(x, "original mel spectrogram", "visualization/original_mel_spec.png")
-        
         x = spec_augment(
             x, 
             time_warping_para=time_warping_para, 
@@ -259,9 +260,8 @@ class NewBPDataset(Dataset):
             p1=p1,
             p2=p2,
         )
-        # self.mel_plotting(x, "augmented mel spectrogram", "visualization/augmented_mel_spec.png")
         
-        x = self.resizer(x) # transform to 1, img_size, img_size
+        x = torch.nn.functional.interpolate(x.unsqueeze(0), size=(self.img_size, self.img_size), mode='bilinear', align_corners=False).squeeze(0)
         return (x - self.img_mean) / self.img_std
     
 
@@ -283,7 +283,6 @@ class NewBPDataset(Dataset):
         path = self.data_path_list[idx]
         x = np.load(path)
         
-        
         # Random Crop
         if self.random_slice:
             x_i, x_j = self.random_crop(x), self.random_crop(x)
@@ -295,10 +294,11 @@ class NewBPDataset(Dataset):
             x_i, x_j = self.augment(x_i, sample_rate=self.sample_rate), \
                 self.augment(x_j, sample_rate=self.sample_rate)
         
-        # Mel-spectrogram transformation and Melspec's Augmentation
-        x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
+        return torch.tensor(x_i).float(), torch.tensor(x_j).float(), path
+        # # Mel-spectrogram transformation and Melspec's Augmentation
+        # x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
         
-        return x_i.float(), x_j.float(), path
+        # return x_i.float(), x_j.float(), path
 
 
 
@@ -626,7 +626,7 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     train_dataset = NewBPDataset(
         sample_rate=args.sample_rate,
         segment_second=args.segment_second,
@@ -646,9 +646,24 @@ if __name__ == "__main__":
         img_std=args.img_std,
     )
     
-    for i in range(10):
-        ts1, ts2, _ = train_dataset[i]
-        print(ts1.shape, ts2.shape)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=args.pin_memory,
+        drop_last=args.drop_last,
+        persistent_workers=args.persistent_workers,
+        prefetch_factor=8, #4,
+    )
+    
+    for (x_i, x_j, _) in tqdm(train_loader):
+        x_i = x_i.cuda(non_blocking=True)
+        x_j = x_j.cuda(non_blocking=True)
+
+    # for i in range(10):
+    #     ts1, ts2, _ = train_dataset[i]
+    #     print(ts1.shape, ts2.shape)
 
     # # Experiment 1: Mel-spectrogram
     # mel_transform = T.MelSpectrogram(
