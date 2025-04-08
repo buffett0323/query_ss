@@ -16,8 +16,7 @@ import torch.utils.data
 import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
-from dataset import NewBPDataset
-from transforms import CLARTransform
+from dataset import NewBPDataset, Transform_Pipeline
 import simsiam.builder
 
 torch.set_float32_matmul_precision('high')
@@ -109,11 +108,25 @@ def main():
         persistent_workers=args.persistent_workers,
         prefetch_factor=8, #4,
     )
+    
+    tp = Transform_Pipeline(
+        sample_rate=args.sample_rate,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+        n_mels=args.n_mels,
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
+        device=torch.device("cuda"),
+        p_time_warp=args.p_time_warp, #0.4,
+        p_mask=args.p_mask,
+    )
 
     # training loop
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
-        train_loss = train(train_loader, model, criterion, optimizer, epoch, args)
+        train_loss = train(train_loader, model, criterion, optimizer, epoch, args, tp)
 
         if args.log_wandb:
             wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
@@ -126,7 +139,7 @@ def main():
             }, filename=f'checkpoint_{epoch:04d}.pth.tar', save_dir=args.model_dict_save_dir)
             
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+def train(train_loader, model, criterion, optimizer, epoch, args, tp):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4f')
@@ -140,6 +153,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         x_i = x_i.cuda(non_blocking=True)
         x_j = x_j.cuda(non_blocking=True)
+        
+        x_i = tp(x_i)
+        x_j = tp(x_j)
 
         p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
         loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5

@@ -16,6 +16,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torchaudio.transforms import MelSpectrogram
@@ -30,6 +31,8 @@ from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, 
 from transforms import CLARTransform, RandomFrequencyMasking
 from utils import yaml_config_hook, plot_spec_and_save, resize_spec
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
+from spec_aug.spec_augment_pytorch import SpecAugment
+
 
 # Beatport Dataset
 class BPDataset(Dataset):
@@ -293,8 +296,9 @@ class NewBPDataset(Dataset):
         if self.data_augmentation:
             x_i, x_j = self.augment(x_i, sample_rate=self.sample_rate), \
                 self.augment(x_j, sample_rate=self.sample_rate)
-        
         return torch.tensor(x_i).float(), torch.tensor(x_j).float(), path
+    
+    
         # # Mel-spectrogram transformation and Melspec's Augmentation
         # x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
         
@@ -618,6 +622,82 @@ class MixedBPDataModule(LightningDataModule):
 
 
 
+class Transform_Pipeline(nn.Module):
+    def __init__(
+        self, 
+        sample_rate, 
+        n_fft, 
+        hop_length, 
+        n_mels, 
+        fmax, 
+        img_size, 
+        img_mean, 
+        img_std, 
+        device=torch.device("cuda"),
+        p_time_warp=0.4,
+        p_mask=0.5,
+    ):
+        super(Transform_Pipeline, self).__init__()
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.n_mels = n_mels
+        self.fmax = fmax
+        self.img_size = img_size
+        self.img_mean = img_mean
+        self.img_std = img_std
+        self.device = device
+        self.p_time_warp = p_time_warp
+        self.p_mask = p_mask
+        
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+            f_max=self.fmax,
+        ).to(device)
+
+        self.db_transform = T.AmplitudeToDB().to(device)
+        
+
+    def mel_spec_transform(self, x):
+        x = self.mel_transform(x)
+        x = self.db_transform(x)
+        return x
+    
+    def __call__(self, x):
+        x = self.mel_spec_transform(x) #.unsqueeze(0)
+       
+        # Added mel spec augmentation
+        time_warping_para = random.randint(1, 10) # (0, 10)
+        freq_mask_num = random.randint(1, 3) # (1, 5)
+        time_mask_num = random.randint(1, 5) # (1, 10)
+        freq_masking_para = random.randint(5, 15) # (5, 30)
+        time_masking_para = random.randint(5, 15) # (5, 30)
+        
+        spec_augment = SpecAugment(
+            time_warping_para=time_warping_para,
+            frequency_masking_para=freq_mask_num,
+            time_masking_para=time_mask_num,
+            frequency_mask_num=freq_masking_para,
+            time_mask_num=time_masking_para,
+            p_time_warp=self.p_time_warp,
+            p_mask=self.p_mask,
+        ).to(self.device)
+        
+        x = spec_augment(x)
+        x = x.unsqueeze(1)
+        
+        x = F.interpolate(
+            x, 
+            size=(self.img_size, self.img_size), 
+            mode='bilinear', 
+            align_corners=False
+        )  # x shape: [B, 1, img_size, img_size]
+        return (x - self.img_mean) / self.img_std
+    
+
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
@@ -657,9 +737,29 @@ if __name__ == "__main__":
         prefetch_factor=8, #4,
     )
     
+    
+    tp = Transform_Pipeline(
+        sample_rate=args.sample_rate,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+        n_mels=args.n_mels,
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
+        device=device,
+        p_time_warp=0, #0.4,
+        p_mask=0.5,
+    )
+
+    
     for (x_i, x_j, _) in tqdm(train_loader):
-        x_i = x_i.cuda(non_blocking=True)
-        x_j = x_j.cuda(non_blocking=True)
+        x_i = x_i.to(device)
+        x_j = x_j.to(device)
+
+        x_i = tp(x_i)
+        x_j = tp(x_j)
+
 
     # for i in range(10):
     #     ts1, ts2, _ = train_dataset[i]

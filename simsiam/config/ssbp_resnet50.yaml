@@ -1,17 +1,18 @@
 # Pre-process
 segment_second: 8 # half in 2 seconds
 piece_second: 4
-log_wandb: False #False
+log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "Resnet+4/ALL+224img+Crop+Noise+TS+PS+TM+FM"
-wandb_notes: "SSBP Resnet50 Training Sinica"
+wandb_name: "Resnet+4/ALL+224img+Crop+Noise+TS+TM+FM"
+wandb_notes: "SSBP Resnet50 Training Fatcat (NO_TIME_WARP)"
 
 
 
 # distributed training
-# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
-data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
-model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
+# data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
+model_dict_save_dir: "/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict_0408"
+# model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
@@ -29,7 +30,7 @@ gpu: 3 #[1, 3] #[0,1,2,3]
 img_mean: -1.1041008234024048
 img_std: 14.636213302612305
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 16 #256 #512 
+batch_size: 256 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -44,6 +45,11 @@ resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
 print_freq: 20
 arch: "resnet50"
+
+
+# data augmentation options
+p_time_warp: 0 #0.4
+p_mask: 0.5
 
 # dataset options
 max_length: 64

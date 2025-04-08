@@ -95,7 +95,7 @@ def sparse_image_warp(img_tensor,
 
     batch_size, image_height, image_width = img_tensor.shape
     grid_locations = get_grid_locations(image_height, image_width)
-    flattened_grid_locations = torch.tensor(flatten_grid_locations(grid_locations, image_height, image_width))
+    flattened_grid_locations = torch.tensor(flatten_grid_locations(grid_locations, image_height, image_width), device=img_tensor.device)
 
     flattened_flows = interpolate_spline(
         dest_control_point_locations,
@@ -157,7 +157,8 @@ def solve_interpolation(train_points, train_values, order, regularization_weight
     #         matrix_a += regularization_weight * batch_identity_matrix
 
     # Append ones to the feature values for the bias term in the linear model.
-    ones = torch.ones(1, dtype=train_points.dtype).view([-1, 1, 1])
+    ones = torch.ones(1, dtype=train_points.dtype, device=c.device).view([-1, 1, 1])
+    
     matrix_b = torch.cat((c, ones), 2).float()  # [b, n, d + 1]
 
     # [b, n + d + 1, n]
@@ -167,13 +168,13 @@ def solve_interpolation(train_points, train_values, order, regularization_weight
 
     # In Tensorflow, zeros are used here. Pytorch gesv fails with zeros for some reason we don't understand.
     # So instead we use very tiny randn values (variance of one, zero mean) on one side of our multiplication.
-    lhs_zeros = torch.randn((b, num_b_cols, num_b_cols)) / 1e10
+    lhs_zeros = torch.randn((b, num_b_cols, num_b_cols), device=c.device) / 1e10
     right_block = torch.cat((matrix_b, lhs_zeros),
                             1)  # [b, n + d + 1, d + 1]
     lhs = torch.cat((left_block, right_block),
                     2)  # [b, n + d + 1, n + d + 1]
 
-    rhs_zeros = torch.zeros((b, d + 1, k), dtype=train_points.dtype).float()
+    rhs_zeros = torch.zeros((b, d + 1, k), dtype=train_points.dtype, device=c.device).float()
     rhs = torch.cat((f, rhs_zeros), 1)  # [b, n + d + 1, k]
 
     # Then, solve the linear system and unpack the results.
@@ -303,6 +304,7 @@ def dense_image_warp(image, flow):
 
     batched_grid = stacked_grid.unsqueeze(-1).permute(3, 1, 0, 2)
 
+    batched_grid = batched_grid.to(flow.device)
     query_points_on_grid = batched_grid - flow
     query_points_flattened = torch.reshape(query_points_on_grid,
                                            [batch_size, height * width, 2])
@@ -386,6 +388,7 @@ def interpolate_bilinear(grid,
         grid, [batch_size * height * width, channels])
     batch_offsets = torch.reshape(
         torch.arange(batch_size) * height * width, [batch_size, 1])
+    batch_offsets = batch_offsets.to(query_points.device)
 
     # This wraps array_ops.gather. We reshape the image data such that the
     # batch, y, and x coordinates are pulled into the first dimension.
