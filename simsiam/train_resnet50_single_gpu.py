@@ -39,6 +39,8 @@ def main():
     if args.log_wandb:
         wandb.init(
             project=args.wandb_project_name,
+            id="4y4sb4uh",
+            resume="allow",
             name=args.wandb_name,
             notes=args.wandb_notes,
             config=vars(args),
@@ -67,7 +69,7 @@ def main():
     optimizer = torch.optim.SGD(optim_params, init_lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
-    args.resume = os.path.join(args.model_dict_save_dir, args.resume)
+    args.resume = os.path.join(args.model_dict_save_path, args.resume)
     if os.path.isfile(args.resume):
         print("=> loading checkpoint '{}'".format(args.resume))
         checkpoint = torch.load(args.resume)
