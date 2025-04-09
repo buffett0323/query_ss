@@ -11,7 +11,7 @@ wandb_notes: "SSBP Resnet50 Training Fatcat (NO_TIME_WARP)"
 # distributed training
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
 # data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
-model_dict_save_dir: "/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict_0408"
+model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict_0408"
 # model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
 world_size: 1 #-1
 rank: 0 # -1

@@ -136,7 +136,10 @@ def main():
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-            }, filename=f'checkpoint_{epoch:04d}.pth.tar', save_dir=args.model_dict_save_dir)
+            }, 
+                filename=f'checkpoint_{epoch:04d}.pth.tar', 
+                save_dir=args.model_dict_save_path,
+            )
             
 
 def train(train_loader, model, criterion, optimizer, epoch, args, tp):
