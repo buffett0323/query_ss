@@ -31,11 +31,11 @@ python inference.py \
     --output_name '2' \
     -d 'cuda:1'
     
-# python inference.py \
-#     --src_path '4626ce11-663f-4aca-9934-cf9440a61c8e_1'\
-#     --trg_path '820d80d5-a9ab-4e03-87a8-38cc1262c9a6_3'\
-#     --output_name '3' \
-#     -d 'cuda:1'
+python inference.py \
+    --src_path '55c52190-5911-4067-a15a-afd35da7bd47_6'\
+    --trg_path '3f53b124-0aa5-4de0-91eb-9bdd691415d5_1'\
+    --output_name '3' \
+    -d 'cuda:1'
     
 # python inference.py \
 #     --src_path '55c52190-5911-4067-a15a-afd35da7bd47_6'\
