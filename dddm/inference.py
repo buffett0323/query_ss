@@ -101,7 +101,6 @@ def inference(a):
     net_v.eval().dec.remove_weight_norm()   
  
     # Synthesis for original audio
-    print('>> Converting each utterance...') 
     src_name = os.path.splitext(os.path.basename(a.src_path))[0]
     audio = load_audio(a.src_path)[:64000].unsqueeze(0)#.to(device)  
     mel_audio = mel_timbre(audio).to(device)
@@ -113,8 +112,8 @@ def inference(a):
     y_hat = net_v(mel_rec).squeeze(0)#.squeeze(0)
     
     # Save original audio
-    save_audio(audio, os.path.join(a.output_dir, 'orig.wav'))
-    save_audio(y_hat, os.path.join(a.output_dir, 'orig_synthesis.wav'))
+    save_audio(audio, os.path.join(a.output_dir, f'{a.output_name}_orig.wav'))
+    save_audio(y_hat, os.path.join(a.output_dir, f'{a.output_name}_orig_synth.wav'))
     
     # Synthesis for target audio
     trg_name = os.path.splitext(os.path.basename(a.trg_path))[0] 
@@ -129,8 +128,8 @@ def inference(a):
     y_hat1 = net_v(mel_rec).squeeze(0)#.squeeze(0)
     
     # Save target audio
-    save_audio(trg_audio, os.path.join(a.output_dir, 'trg.wav'))
-    save_audio(y_hat1, os.path.join(a.output_dir, 'trg_synthesis.wav'))
+    save_audio(trg_audio, os.path.join(a.output_dir, f'{a.output_name}_trg.wav'))
+    save_audio(y_hat1, os.path.join(a.output_dir, f'{a.output_name}_trg_synth.wav'))
     
     # Convert audio
     with torch.no_grad(): 
@@ -139,8 +138,8 @@ def inference(a):
                      n_timesteps=a.time_step, mode='ml')
         converted_audio = net_v(c).squeeze(0).squeeze(0)
         
-    f_name = f'{src_name}_to_{trg_name}.wav' 
-    save_audio(converted_audio, os.path.join(a.output_dir, f_name))
+    # Save converted audio
+    save_audio(converted_audio, os.path.join(a.output_dir, f'{a.output_name}_converted.wav' ))
     print(">> Done.")
      
 
@@ -148,12 +147,14 @@ def main():
     print('>> Initializing Inference Process...')
      
     parser = argparse.ArgumentParser()
+    parser.add_argument('--base_path', type=str, default='/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/')  
     parser.add_argument('--src_path', type=str, default='/workspace/ha0/data/src.wav')  
     parser.add_argument('--trg_path', type=str, default='/workspace/ha0/data/tar.wav')  
-    parser.add_argument('--ckpt_model', type=str, default='./logs/MD/G_20000.pth')
-    parser.add_argument('--ckpt_voc', type=str, default='./checkpoints/voc_ckpt.pth') 
-    parser.add_argument('--logs_path', type=str, default='./checkpoints/f0_ckpt.pth')
+    parser.add_argument('--ckpt_model', type=str, default='/mnt/gestalt/home/buffett/tt_training/timbre_transfer_te_train_dict/G_200000.pth')
+    parser.add_argument('--ckpt_voc', type=str, default='/mnt/gestalt/home/buffett/hifigan_ckpt/voc_ckpt.pth') 
+    parser.add_argument('--logs_path', type=str, default='/mnt/gestalt/home/buffett/timbre_transfer_logs')
     parser.add_argument('--output_dir', '-o', type=str, default='./converted')  
+    parser.add_argument('--output_name', type=str, default='1')  
     parser.add_argument('--time_step', '-t', type=int, default=6)
     parser.add_argument('--device', '-d', type=str, default="cuda:0" if torch.cuda.is_available() else "cpu",
                     help="Choose device: 'cpu', 'cuda', or 'cuda:0' for specific GPU")
@@ -161,6 +162,8 @@ def main():
     global hps, device, a
     
     a = parser.parse_args()
+    a.src_path = os.path.join(a.base_path, a.src_path, 'other.npy')
+    a.trg_path = os.path.join(a.base_path, a.trg_path, 'other.npy')
     config = os.path.join(a.logs_path, 'config.json')  
     hps = utils.get_hparams_from_file(config) 
     device = torch.device(a.device)
