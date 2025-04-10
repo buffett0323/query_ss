@@ -29,7 +29,6 @@ dddm/logs/
 dddm/__pycache__/
 dddm/info/
 dddm/checkpoints/
-dddm/converted/
 dddm/examples/
 dddm/pretrained_models/
 DDDM_VC/
