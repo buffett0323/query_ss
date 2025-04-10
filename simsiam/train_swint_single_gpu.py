@@ -17,7 +17,7 @@ import torchvision.models as models
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
 from dataset import NewBPDataset, Transform_Pipeline
-import simsiam.builder
+from model import SimSiam
 
 torch.set_float32_matmul_precision('high')
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -26,7 +26,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def main():
     parser = argparse.ArgumentParser(description="SimSiam Single GPU")
 
-    config = yaml_config_hook("config/ssbp_resnet50.yaml")
+    config = yaml_config_hook("config/ssbp_swint.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
@@ -39,17 +39,14 @@ def main():
     if args.log_wandb:
         wandb.init(
             project=args.wandb_project_name,
-            id="4y4sb4uh",
-            resume="allow",
             name=args.wandb_name,
             notes=args.wandb_notes,
             config=vars(args),
         )
 
     # build model
-    print("=> creating model '{}'".format(args.arch))
-    model = simsiam.builder.SimSiam(
-        base_encoder=models.__dict__[args.arch],
+    print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
+    model = SimSiam(
         args=args,
         dim=args.dim,
         pred_dim=args.pred_dim,
@@ -140,7 +137,7 @@ def main():
                 'optimizer': optimizer.state_dict(),
             }, 
                 filename=f'checkpoint_{epoch:04d}.pth.tar', 
-                save_dir=args.model_dict_save_path,
+                save_dir=args.model_dict_save_path
             )
             
 

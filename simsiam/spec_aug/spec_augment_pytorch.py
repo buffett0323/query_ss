@@ -43,6 +43,75 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from spec_aug.sparse_image_warp_pytorch import sparse_image_warp
 import torch
+import torch.nn as nn
+
+
+
+class SpecAugment(nn.Module):
+    def __init__(self,
+                 time_warping_para=80,
+                 frequency_masking_para=27,
+                 time_masking_para=100,
+                 frequency_mask_num=1,
+                 time_mask_num=1,
+                 p_time_warp=0.4,
+                 p_mask=0.5):
+        super(SpecAugment, self).__init__()
+        self.time_warping_para = time_warping_para
+        self.frequency_masking_para = frequency_masking_para
+        self.time_masking_para = time_masking_para
+        self.frequency_mask_num = frequency_mask_num
+        self.time_mask_num = time_mask_num
+        self.p_time_warp = p_time_warp
+        self.p_mask = p_mask
+
+    def time_warp(self, spec):
+        """Apply sparse image warp on a single [F, T] spectrogram."""
+        F, T = spec.shape
+        y = F // 2
+
+        x_pos = random.randint(self.time_warping_para, T - self.time_warping_para - 1)
+        dist = random.randint(-self.time_warping_para, self.time_warping_para)
+
+        src_pts = torch.tensor([[[y, x_pos]]], dtype=torch.float32, device=spec.device)
+        dst_pts = torch.tensor([[[y, x_pos + dist]]], dtype=torch.float32, device=spec.device)
+
+        # Add batch dimension [1, F, T]
+        spec = spec.unsqueeze(0)
+        warped, _ = sparse_image_warp(spec, src_pts, dst_pts)  # output: [1, F, T]
+        return warped.squeeze(0)
+
+    def forward(self, mel_batch):
+        """
+        Input: mel_batch of shape [B, F, T]
+        Output: same shape [B, F, T] with spec augment applied
+        """
+        B, F, T = mel_batch.shape
+        device = mel_batch.device
+        out = mel_batch.clone()
+
+        # Step 1: Time warp (per sample)
+        if random.random() <= self.p_time_warp:
+            for i in range(B):
+                out[i] = self.time_warp(out[i])
+
+        # Step 2: Frequency masking
+        for _ in range(self.frequency_mask_num):
+            if random.random() <= self.p_mask:
+                f = random.randint(0, self.frequency_masking_para)
+                f0s = torch.randint(0, F - f, (B,), device=device)
+                for i in range(B):
+                    out[i, f0s[i]:f0s[i] + f, :] = 0
+
+        # Step 3: Time masking
+        for _ in range(self.time_mask_num):
+            if random.random() <= self.p_mask:
+                t = random.randint(0, self.time_masking_para)
+                t0s = torch.randint(0, T - t, (B,), device=device)
+                for i in range(B):
+                    out[i, :, t0s[i]:t0s[i] + t] = 0
+
+        return out
 
 
 def time_warp(spec, W=5):

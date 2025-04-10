@@ -3,18 +3,19 @@ segment_second: 8 # half in 2 seconds
 piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "SwinT+4/ALL+256*8win+Crop+Noise+TS+TW+FM+TM"
-wandb_notes: "SSBP SwinT Training Fatcat server"
+wandb_name: "SwinT+4/ALL+224*7win+Crop+Noise+TS+FM+TM"
+wandb_notes: "SSBP SwinT Training Sinica server 0409"
 
 
 # distributed training
+# data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
+# verse_data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
+# model_dict_save_dir: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313"
+# resume_training_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313/checkpoint_100.ckpt"
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_npy"
-verse_data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
-model_dict_save_dir: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313"
-resume_training_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0313/checkpoint_100.ckpt"
-# data_dir: "/home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_npy"
-# verse_data_dir: "/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"
-# model_dict_save_dir: "/home/buffett/NAS_NTU/timbre_encoder_model_dict/swint/"
+# data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
+model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/swint_model_dict_0409"
+
 world_size: 1 #-1
 rank: 0 # -1
 dist_url: 'tcp://localhost:10001' #'tcp://224.66.41.62:23456'
@@ -29,8 +30,10 @@ gpu: 3 # [0, 1] #[0,1,2,3]
 
 
 # train options
-img_mean: -1.100174903869629
-img_std: 14.353998184204102
+# img_mean: -1.100174903869629
+# img_std: 14.353998184204102
+img_mean: -1.1041008234024048
+img_std: 14.636213302612305 # for 224
 seed: 42 # sacred handles automatic seeding when passed in the config
 batch_size: 128 #256 #512 
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
@@ -47,16 +50,20 @@ fix_pred_lr: True
 print_freq: 20
 prefetch_factor: 8
 
+# data augmentation options
+p_time_warp: 0 #0.4
+p_mask: 0.5
+
 # dataset options
 max_length: 64
-n_fft: 1024 #1024 #2048
-hop_length: 256 #188 #320 #512 #1024
+n_fft: 2048 #1024 #2048
+hop_length: 512 #188 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
-n_mels: 256 #256 #128
-img_size: 256 #256
-swint_window_size: 8 #8
-fmin: 0 #20
+n_mels: 128 #256 #128
+img_size: 224 #256
+swint_window_size: 7 #8
+fmin: 20 #20
 fmax: 8000 # 16000/2
 pin_memory: True
 drop_last: True #False

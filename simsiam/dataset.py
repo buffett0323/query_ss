@@ -16,6 +16,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import torch.multiprocessing as mp
 import torchaudio.transforms as T
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torchaudio.transforms import MelSpectrogram
@@ -30,6 +31,8 @@ from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, 
 from transforms import CLARTransform, RandomFrequencyMasking
 from utils import yaml_config_hook, plot_spec_and_save, resize_spec
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
+from spec_aug.spec_augment_pytorch import SpecAugment
+
 
 # Beatport Dataset
 class BPDataset(Dataset):
@@ -206,6 +209,7 @@ class NewBPDataset(Dataset):
         self.fmax = fmax
         
         self.resizer = transforms.Resize((img_size, img_size))
+        self.img_size = img_size
         self.img_mean = img_mean
         self.img_std = img_std
         self.augment = Compose([
@@ -217,6 +221,15 @@ class NewBPDataset(Dataset):
             # Shift(p=1),
         ])
         
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+            f_max=self.fmax,
+        )
+
+        self.db_transform = T.AmplitudeToDB()
     
     
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
@@ -224,17 +237,10 @@ class NewBPDataset(Dataset):
     
     
     def mel_spec_transform(self, x):
-        x = librosa.feature.melspectrogram(
-            y=x, 
-            sr=self.sample_rate, 
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            n_mels=self.n_mels,
-            fmax=self.fmax,
-        )
-        x = librosa.power_to_db(np.abs(x))
-        return torch.tensor(x)
-    
+        x = torch.tensor(x)
+        x = self.mel_transform(x)
+        x = self.db_transform(x)
+        return x
     
     def data_pipeline(self, x):
         x = self.mel_spec_transform(x).unsqueeze(0)
@@ -247,8 +253,6 @@ class NewBPDataset(Dataset):
         time_masking_para = random.randint(5, 15) # (5, 30)
         p1, p2 = 0.4, 0.5
         
-        # self.mel_plotting(x, "original mel spectrogram", "visualization/original_mel_spec.png")
-        
         x = spec_augment(
             x, 
             time_warping_para=time_warping_para, 
@@ -259,9 +263,8 @@ class NewBPDataset(Dataset):
             p1=p1,
             p2=p2,
         )
-        # self.mel_plotting(x, "augmented mel spectrogram", "visualization/augmented_mel_spec.png")
         
-        x = self.resizer(x) # transform to 1, img_size, img_size
+        x = torch.nn.functional.interpolate(x.unsqueeze(0), size=(self.img_size, self.img_size), mode='bilinear', align_corners=False).squeeze(0)
         return (x - self.img_mean) / self.img_std
     
 
@@ -283,7 +286,6 @@ class NewBPDataset(Dataset):
         path = self.data_path_list[idx]
         x = np.load(path)
         
-        
         # Random Crop
         if self.random_slice:
             x_i, x_j = self.random_crop(x), self.random_crop(x)
@@ -294,11 +296,13 @@ class NewBPDataset(Dataset):
         if self.data_augmentation:
             x_i, x_j = self.augment(x_i, sample_rate=self.sample_rate), \
                 self.augment(x_j, sample_rate=self.sample_rate)
+        return torch.tensor(x_i).float(), torch.tensor(x_j).float(), path
+    
+    
+        # # Mel-spectrogram transformation and Melspec's Augmentation
+        # x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
         
-        # Mel-spectrogram transformation and Melspec's Augmentation
-        x_i, x_j = self.data_pipeline(x_i), self.data_pipeline(x_j)
-        
-        return x_i.float(), x_j.float(), path
+        # return x_i.float(), x_j.float(), path
 
 
 
@@ -618,6 +622,82 @@ class MixedBPDataModule(LightningDataModule):
 
 
 
+class Transform_Pipeline(nn.Module):
+    def __init__(
+        self, 
+        sample_rate, 
+        n_fft, 
+        hop_length, 
+        n_mels, 
+        fmax, 
+        img_size, 
+        img_mean, 
+        img_std, 
+        device=torch.device("cuda"),
+        p_time_warp=0.4,
+        p_mask=0.5,
+    ):
+        super(Transform_Pipeline, self).__init__()
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.n_mels = n_mels
+        self.fmax = fmax
+        self.img_size = img_size
+        self.img_mean = img_mean
+        self.img_std = img_std
+        self.device = device
+        self.p_time_warp = p_time_warp
+        self.p_mask = p_mask
+        
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+            f_max=self.fmax,
+        ).to(device)
+
+        self.db_transform = T.AmplitudeToDB().to(device)
+        
+
+    def mel_spec_transform(self, x):
+        x = self.mel_transform(x)
+        x = self.db_transform(x)
+        return x
+    
+    def __call__(self, x):
+        x = self.mel_spec_transform(x) #.unsqueeze(0)
+       
+        # Added mel spec augmentation
+        time_warping_para = random.randint(1, 10) # (0, 10)
+        freq_mask_num = random.randint(1, 3) # (1, 5)
+        time_mask_num = random.randint(1, 5) # (1, 10)
+        freq_masking_para = random.randint(5, 15) # (5, 30)
+        time_masking_para = random.randint(5, 15) # (5, 30)
+        
+        spec_augment = SpecAugment(
+            time_warping_para=time_warping_para,
+            frequency_masking_para=freq_mask_num,
+            time_masking_para=time_mask_num,
+            frequency_mask_num=freq_masking_para,
+            time_mask_num=time_masking_para,
+            p_time_warp=self.p_time_warp,
+            p_mask=self.p_mask,
+        ).to(self.device)
+        
+        x = spec_augment(x)
+        x = x.unsqueeze(1)
+        
+        x = F.interpolate(
+            x, 
+            size=(self.img_size, self.img_size), 
+            mode='bilinear', 
+            align_corners=False
+        )  # x shape: [B, 1, img_size, img_size]
+        return (x - self.img_mean) / self.img_std
+    
+
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
@@ -626,7 +706,7 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     train_dataset = NewBPDataset(
         sample_rate=args.sample_rate,
         segment_second=args.segment_second,
@@ -646,9 +726,44 @@ if __name__ == "__main__":
         img_std=args.img_std,
     )
     
-    for i in range(10):
-        ts1, ts2, _ = train_dataset[i]
-        print(ts1.shape, ts2.shape)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=args.pin_memory,
+        drop_last=args.drop_last,
+        persistent_workers=args.persistent_workers,
+        prefetch_factor=8, #4,
+    )
+    
+    
+    tp = Transform_Pipeline(
+        sample_rate=args.sample_rate,
+        n_fft=args.n_fft,
+        hop_length=args.hop_length,
+        n_mels=args.n_mels,
+        fmax=args.fmax,
+        img_size=args.img_size,
+        img_mean=args.img_mean,
+        img_std=args.img_std,
+        device=device,
+        p_time_warp=0, #0.4,
+        p_mask=0.5,
+    )
+
+    
+    for (x_i, x_j, _) in tqdm(train_loader):
+        x_i = x_i.to(device)
+        x_j = x_j.to(device)
+
+        x_i = tp(x_i)
+        x_j = tp(x_j)
+
+
+    # for i in range(10):
+    #     ts1, ts2, _ = train_dataset[i]
+    #     print(ts1.shape, ts2.shape)
 
     # # Experiment 1: Mel-spectrogram
     # mel_transform = T.MelSpectrogram(
