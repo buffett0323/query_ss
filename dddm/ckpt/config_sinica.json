@@ -11,7 +11,7 @@
     "learning_rate": 5e-5,
     "betas": [0.8, 0.99],
     "eps": 1e-9,
-    "batch_size": 64,
+    "batch_size": 8,
     "fp16_run": true,
     "lr_decay": 0.999875,
     "segment_size": 64000,
@@ -22,7 +22,7 @@
     "aug": true,
     "lambda_commit": 0.02,
     "num_workers": 24,
-    "device": "1",
+    "device": "0",
     "resume": false
   },
   "wandb": {
@@ -31,7 +31,7 @@
     "run_name": "dddm timbre encoder trained"
   },
   "data": {
-    "filelist_path": "/home/buffett/nas_home/ddmanddman/beatport_analyze/chorus_audio_16000_8secs_npy/",
+    "filelist_path": "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy/",
     "voc_ckpt_path": "/home/buffett/nas_home/buffett/hifigan_ckpt/voc_ckpt.pth",
     "timbre_encoder_path": "/home/buffett/nas_home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar",
     "txt_path": "../simsiam/info/",
@@ -68,7 +68,8 @@
     "n_layers_q": 3,
     "use_spectral_norm": false,
     "encoder_hidden_size": 88,
-    "gin_channels": 256
+    "gin_channels": 2048,
+    "cond_add_dim": 2048
   },
     "f0_vq_params": {
       "l_bins": 20,
