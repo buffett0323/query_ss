@@ -34,4 +34,5 @@ dddm/pretrained_models/
 DDDM_VC/
 
 simsiam/model_dict/
+simsiam/preprocess/amt/
 Dockerfile
