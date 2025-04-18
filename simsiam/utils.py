@@ -7,6 +7,10 @@ import librosa.display
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
+from collections import defaultdict
+from tqdm import tqdm
+
+
 
 def yaml_config_hook(config_file):
     """
@@ -52,6 +56,17 @@ def define_param_groups(model, weight_decay, optimizer_name):
    return param_groups
 
 
+# Save to text files
+def save_to_txt(filename, data):
+    with open(filename, "w") as f:
+        for item in data:
+            f.write(f"{item}\n")
+            
+def load_from_txt(filename):
+    with open(filename, "r") as f:
+        return [line.strip() for line in f.readlines()]
+
+
 def train_test_split_BPDataset(path="/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"):
     path_file = os.listdir(path)
     random.shuffle(path_file)
@@ -67,21 +82,70 @@ def train_test_split_BPDataset(path="/home/buffett/NAS_NTU/beatport_analyze/vers
     valid_files = path_file[train_size:train_size + valid_size]
     test_files = path_file[train_size + valid_size:]
 
-    # Save to text files
-    def save_to_txt(filename, data):
-        with open(filename, "w") as f:
-            for item in data:
-                f.write(f"{item}\n")
-
     save_to_txt("info/train_bp_verse_8secs.txt", train_files)
     save_to_txt("info/valid_bp_verse_8secs.txt", valid_files)
     save_to_txt("info/test_bp_verse_8secs.txt", test_files)
     print(f"Dataset split complete: {train_size} train, {valid_size} valid, {test_size} test")
 
 
-def load_from_txt(filename):
-    with open(filename, "r") as f:
-        return [line.strip() for line in f.readlines()]
+def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"):
+    path_file = os.listdir(path)
+    random.shuffle(path_file)
+    
+    song_dict = defaultdict(lambda: "train")
+    song_counter_dict = defaultdict(lambda: [])
+    unique_songs = set()
+    
+    for file in path_file:
+        song_name, song_num = file[:-2], int(file[-1])
+        unique_songs.add(song_name)
+        song_counter_dict[song_name].append(song_num)
+        
+    
+    # Compute split sizes
+    total_files = len(unique_songs)
+    train_size = int(total_files * 9 / 10)
+    valid_size = int(total_files * 0.5 / 10)
+    test_size = total_files - train_size - valid_size  # Ensure all files are allocated
+    print("Size check: ", "train", train_size, "valid", valid_size, "test", test_size)
+    
+    
+    # Split dataset by song name
+    for i, song_name in tqdm(enumerate(unique_songs)):
+        if i < test_size:
+            song_dict[song_name] = "test"
+        elif i >= test_size and i < test_size + valid_size:
+            song_dict[song_name] = "valid"
+        else:
+            song_dict[song_name] = "train"
+            
+
+    # Add song number to the song name
+    train_files, valid_files, test_files = [], [], []
+    
+    for song_name, song_split in tqdm(song_dict.items()):
+        if song_split == "train":
+            for i in song_counter_dict[song_name]:
+                train_files.append(f"{song_name}_{i}")
+        elif song_split == "valid":
+            for i in song_counter_dict[song_name]:
+                valid_files.append(f"{song_name}_{i}")
+        else:
+            for i in song_counter_dict[song_name]:
+                test_files.append(f"{song_name}_{i}")
+    
+
+    random.shuffle(train_files)
+    random.shuffle(valid_files)
+    random.shuffle(test_files)
+
+    save_to_txt("info/split_by_song_name_4secs_train.txt", train_files)
+    save_to_txt("info/split_by_song_name_4secs_valid.txt", valid_files)
+    save_to_txt("info/split_by_song_name_4secs_test.txt", test_files)
+    print(f"Dataset split complete: {len(train_files)} train, {len(valid_files)} valid, {len(test_files)} test")
+
+    
+
     
     
 def plot_spec_and_save(spectrogram, savefig_name, sr=16000):
@@ -148,4 +212,5 @@ class ProgressMeter(object):
     
     
 if __name__ == "__main__":
-    train_test_split_BPDataset()
+    # train_test_split_BPDataset()
+    split_dataset_by_song(path="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy")

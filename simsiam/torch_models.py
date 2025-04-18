@@ -2568,8 +2568,8 @@ class Cnn14_16k(nn.Module):
             freeze_parameters=True)
 
         # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
-            freq_drop_width=8, freq_stripes_num=2)
+        # self.spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+        #     freq_drop_width=8, freq_stripes_num=2)
 
         self.bn0 = nn.BatchNorm2d(64)
 
@@ -2581,14 +2581,14 @@ class Cnn14_16k(nn.Module):
         self.conv_block6 = ConvBlock(in_channels=1024, out_channels=2048)
 
         self.fc1 = nn.Linear(2048, 2048, bias=True)
-        self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
+        # self.fc_audioset = nn.Linear(2048, classes_num, bias=True)
         
         self.init_weight()
 
     def init_weight(self):
         init_bn(self.bn0)
         init_layer(self.fc1)
-        init_layer(self.fc_audioset)
+        # init_layer(self.fc_audioset)
  
     def forward(self, input, mixup_lambda=None):
         """
@@ -2601,8 +2601,8 @@ class Cnn14_16k(nn.Module):
         x = self.bn0(x)
         x = x.transpose(1, 3)
         
-        if self.training:
-            x = self.spec_augmenter(x)
+        # if self.training:
+        #     x = self.spec_augmenter(x)
 
         # Mixup on spectrogram
         if self.training and mixup_lambda is not None:
@@ -2626,13 +2626,16 @@ class Cnn14_16k(nn.Module):
         x2 = torch.mean(x, dim=2)
         x = x1 + x2
         x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu_(self.fc1(x))
-        embedding = F.dropout(x, p=0.5, training=self.training)
-        clipwise_output = torch.sigmoid(self.fc_audioset(x))
+        x = self.fc1(x)
+        return x
         
-        output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
+        # x = F.relu_(self.fc1(x))
+        # embedding = F.dropout(x, p=0.5, training=self.training)
+        # clipwise_output = torch.sigmoid(self.fc_audioset(x))
+        
+        # output_dict = {'clipwise_output': clipwise_output, 'embedding': embedding}
 
-        return output_dict
+        # return output_dict
 
 
 class Cnn14_8k(nn.Module):
@@ -3313,3 +3316,37 @@ class Cnn14_DecisionLevelAtt(nn.Module):
             'clipwise_output': clipwise_output}
 
         return output_dict
+    
+if __name__ == "__main__":
+    
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    model = Cnn14_16k(
+        sample_rate=16000, 
+        window_size=512, 
+        hop_size=160, 
+        mel_bins=64, 
+        fmin=50, 
+        fmax=8000, 
+        classes_num=0
+    ).to(device)
+    
+    print("Before modification:")
+    print(model)
+    dim=2048
+    prev_dim = model.fc1.weight.shape[1]
+    model.fc1 = nn.Sequential(nn.Linear(prev_dim, prev_dim, bias=False),
+                                        nn.BatchNorm1d(prev_dim),
+                                        nn.ReLU(inplace=True), # first layer
+                                        nn.Linear(prev_dim, prev_dim, bias=False),
+                                        nn.BatchNorm1d(prev_dim),
+                                        nn.ReLU(inplace=True), # second layer
+                                        model.fc1,
+                                        nn.BatchNorm1d(dim, affine=False)) # output layer
+    model.fc1[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
+    model = model.to(device)
+    print("After modification:")
+    print(model)
+    
+    x = torch.randn(4, int(16000*0.95)).to(device)
+    output = model(x)
+    print(output.shape)

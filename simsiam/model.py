@@ -1,4 +1,6 @@
+import re
 import math
+import logging
 import argparse
 import torch
 import torch.nn as nn
@@ -7,9 +9,12 @@ import torch.nn.functional as F
 import torchaudio.transforms as T
 import torchvision.transforms as transforms
 
-from torch_models import Wavegram_Logmel128_Cnn14
+from pathlib import Path
 from swin_transformer import SwinTransformer
 from utils import *
+from audio_ntt import AudioNTT2020Task6X
+from torch_models import Cnn14_16k
+from conv_next import ConvNeXt
 
 
 class SimSiam(nn.Module):
@@ -26,20 +31,27 @@ class SimSiam(nn.Module):
         self.args = args
 
         # ** Encoders **
-        if self.args.encoder_name == "Wavegram_Logmel128_Cnn14":
-            self.encoder = Wavegram_Logmel128_Cnn14(
-                sample_rate=self.args.sample_rate,
-                window_size=self.args.window_size,
-                hop_size=self.args.hop_length,
-                mel_bins=self.args.n_mels,
-                fmin=self.args.fmin,
-                fmax=self.args.fmax,
-                classes_num=dim  # Output embedding dimension
+        if self.args.encoder_name == "AudioNTT2022Encoder":
+            self.encoder = AudioNTT2020Task6X(
+                n_mels=self.args.n_mels,
+                d=dim,
             )
-            # Remove the classification head to use raw feature embeddings
-            prev_dim = self.encoder.fc1.weight.shape[1] # Extracting feature dimension # 2048
-            self.encoder.fc1 = nn.Identity() 
-        
+            prev_dim = self.encoder.d
+
+            self.encoder.fc2 = nn.Sequential(
+                nn.Dropout(p=0.3, inplace=False),
+                nn.Linear(prev_dim, prev_dim, bias=False),
+                nn.BatchNorm1d(prev_dim),
+                nn.ReLU(inplace=True), # first layer
+                nn.Linear(prev_dim, prev_dim, bias=False),
+                nn.BatchNorm1d(prev_dim),
+                nn.ReLU(inplace=True), # second layer
+                nn.Linear(prev_dim, prev_dim, bias=True),
+                nn.BatchNorm1d(dim, affine=False)
+            ) # output layer
+            self.encoder.fc2[7].bias.requires_grad = False # hack: not use bias as it is followed by BN
+
+            
         elif self.args.encoder_name == "SwinTransformer":
             self.encoder = SwinTransformer(
                 img_size=args.img_size, 
@@ -49,24 +61,64 @@ class SimSiam(nn.Module):
             )
             prev_dim = self.encoder.num_features
             
+            # **Build a separate 3-layer projector**
+            self.encoder.head = nn.Sequential(
+                nn.Linear(prev_dim, prev_dim, bias=False),
+                nn.BatchNorm1d(prev_dim),
+                nn.ReLU(inplace=True), # first layer
+                nn.Linear(prev_dim, prev_dim, bias=False),
+                nn.BatchNorm1d(prev_dim),
+                nn.ReLU(inplace=True), # second layer
+                self.encoder.head,
+                nn.BatchNorm1d(dim, affine=False)
+            ) # output layer
+            self.encoder.head[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
+            
+        
+        elif self.args.encoder_name == "ConvNeXt":
+            if args.convnext_model == "tiny":
+                depths = [3, 3, 9, 3]
+                dims = [96, 192, 384, 768]
+            elif args.convnext_model == "small":
+                depths = [3, 3, 27, 3]
+                dims = [96, 192, 384, 768]
+            elif args.convnext_model == "base":
+                depths = [3, 3, 27, 3]
+                dims = [128, 256, 512, 1024]
+            elif args.convnext_model == "large":
+                depths = [3, 3, 27, 3]
+                dims = [192, 384, 768, 1536]
+            else:
+                raise ValueError(f"Invalid model: {args.convnext_model}")
+            
+            print("Using ConvNeXt model: {}".format(args.convnext_model))
+                
+            self.encoder = ConvNeXt(
+                in_chans=args.channels,
+                num_classes=dim,
+                depths=depths,
+                dims=dims,
+            )
+            prev_dim = self.encoder.head.weight.shape[1]
+            print("prev_dim", prev_dim)
+            # **Build a separate 3-layer projector**
+            self.encoder.head = nn.Sequential(
+                nn.Linear(prev_dim, prev_dim, bias=False),
+                nn.BatchNorm1d(prev_dim),
+                nn.ReLU(inplace=True), # first layer
+                nn.Linear(prev_dim, prev_dim, bias=False),
+                nn.BatchNorm1d(prev_dim),
+                nn.ReLU(inplace=True), # second layer
+                self.encoder.head,
+                nn.BatchNorm1d(dim, affine=False)
+            ) # output layer
+            self.encoder.head[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
+
+            
         else:
             self.encoder = nn.Identity()
         
-        print("prev_dim:", prev_dim) 
-                
-        # **Build a separate 3-layer projector**
-        self.encoder.head = nn.Sequential(
-            nn.Linear(prev_dim, prev_dim, bias=False),
-            nn.BatchNorm1d(prev_dim),
-            nn.ReLU(inplace=True), # first layer
-            nn.Linear(prev_dim, prev_dim, bias=False),
-            nn.BatchNorm1d(prev_dim),
-            nn.ReLU(inplace=True), # second layer
-            self.encoder.head,
-            nn.BatchNorm1d(dim, affine=False)
-        ) # output layer
-        self.encoder.head[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
-
+        
         # **Build a 2-layer predictor**
         self.predictor = nn.Sequential(
             nn.Linear(dim, pred_dim, bias=False),
@@ -89,19 +141,20 @@ class SimSiam(nn.Module):
 
 
 if __name__ == "__main__":
-    
     parser = argparse.ArgumentParser(description="SimCLR Encoder")
 
-    config = yaml_config_hook("config/ssbp_swint.yaml")
+    config = yaml_config_hook("config/ssbp_byola.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
     
     # Load models
-    model = SimSiam(args)#.to(device)
-    print(model)
-    
-    #x = torch.randn([16, 1, 256, 256])#.to(device)
-    #res = model(x, x)
-    #print(res[0].shape, res[2].shape)
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    model = SimSiam(args).to(device)
+
+    x = torch.randn([16, 1, 64, 96]).to(device)
+    print("x.shape", x.shape)
+    p1, p2, z1, z2 = model(x, x)
+    print("result:", p1.shape, p2.shape, z1.shape, z2.shape)
+

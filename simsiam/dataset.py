@@ -10,6 +10,7 @@ import librosa.display
 import argparse
 import scipy.interpolate
 import scipy.stats
+import nnAudio.features
 
 import numpy as np
 import torch.nn as nn
@@ -35,6 +36,65 @@ from spec_aug.spec_augment_pytorch import SpecAugment
 
 
 # Beatport Dataset
+class SimpleBPDataset(Dataset):
+    """ For 4 seconds audio data """
+    def __init__(
+        self,
+        sample_rate,
+        data_dir,
+        piece_second=4,
+        segment_second=0.95,
+        split="train",
+        random_slice=True,
+        stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
+    ):
+        # Load split files from txt file
+        with open(f"info/{split}_by_song_name_4secs.txt", "r") as f:
+            bp_listdir = [line.strip() for line in f.readlines()]
+
+        self.stems = stems
+        self.data_path_list = [
+            os.path.join(data_dir, folder, f"{stem}.npy")
+            for folder in bp_listdir
+                for stem in stems
+        ]
+
+        self.sample_rate = sample_rate
+        self.segment_second = segment_second
+        self.piece_length = int(piece_second * sample_rate)
+        self.duration = int(segment_second * sample_rate)
+        self.split = split
+        self.random_slice = random_slice
+
+
+    def __len__(self): #""" Total we got 175698 files * 4 tracks """
+        return len(self.data_path_list)
+ 
+    def random_crop(self, x):
+        """ Random crop for given segmented seconds """
+        # TODO: Sound Event Detection / voice activity detection (VAD)
+        max_idx = self.piece_length - self.duration
+        idx = random.randint(0, max_idx)
+        return x[idx : idx+self.duration]
+
+
+    def __getitem__(self, idx):
+        # Load audio data from .npy
+        path = self.data_path_list[idx]
+        x = np.load(path, mmap_mode='r')
+
+        # Random Crop
+        if self.random_slice:
+            x_i, x_j = self.random_crop(x), self.random_crop(x)
+        else:
+            x_i, x_j = x[:self.duration], x[self.duration:self.duration+self.duration]
+
+        # Faster conversion if .npy is already float32
+        return torch.from_numpy(x_i), torch.from_numpy(x_j), path
+
+
+
+
 class BPDataset(Dataset):
     def __init__(
         self,
@@ -701,34 +761,23 @@ class Transform_Pipeline(nn.Module):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_resnet50.yaml")
+    config = yaml_config_hook("config/ssbp_byola.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    train_dataset = NewBPDataset(
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    train_dataset = SimpleBPDataset(
         sample_rate=args.sample_rate,
-        segment_second=args.segment_second,
         data_dir=args.data_dir,
         piece_second=args.piece_second,
-        n_fft=args.n_fft,
-        hop_length=args.hop_length,
-        n_mels=args.n_mels,
-        split="train",
-        melspec_transform=args.melspec_transform,
-        data_augmentation=args.data_augmentation,
+        segment_second=args.segment_second,
         random_slice=args.random_slice,
-        stems=['other'],
-        fmax=args.fmax,
-        img_size=args.img_size,
-        img_mean=args.img_mean,
-        img_std=args.img_std,
     )
     
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=128, #args.batch_size,
         shuffle=True,
         num_workers=args.workers,
         pin_memory=args.pin_memory,
@@ -737,28 +786,34 @@ if __name__ == "__main__":
         prefetch_factor=8, #4,
     )
     
-    
-    tp = Transform_Pipeline(
-        sample_rate=args.sample_rate,
+    to_spec = nnAudio.features.MelSpectrogram(
+        sr=args.sample_rate,
         n_fft=args.n_fft,
+        win_length=args.window_size,
         hop_length=args.hop_length,
         n_mels=args.n_mels,
+        fmin=args.fmin,
         fmax=args.fmax,
-        img_size=args.img_size,
-        img_mean=args.img_mean,
-        img_std=args.img_std,
-        device=device,
-        p_time_warp=0, #0.4,
-        p_mask=0.5,
-    )
+        center=True,
+        power=2,
+        verbose=False,
+    ).to(device)
 
-    
+    X = []
     for (x_i, x_j, _) in tqdm(train_loader):
         x_i = x_i.to(device)
         x_j = x_j.to(device)
 
-        x_i = tp(x_i)
-        x_j = tp(x_j)
+        lms_i = (to_spec(x_i) + torch.finfo().eps).log().unsqueeze(1)
+        lms_j = (to_spec(x_j) + torch.finfo().eps).log().unsqueeze(1)
+        X.extend([x for x in lms_i.detach().cpu().numpy()])
+        X.extend([x for x in lms_j.detach().cpu().numpy()])
+        
+
+    X = np.stack(X)
+    norm_stats = np.array([X.mean(), X.std()])
+    print(norm_stats)
+
 
 
     # for i in range(10):
