@@ -41,7 +41,7 @@ momentum: 0.9
 warmup_epochs: 10
 dim: 2048
 pred_dim: 512
-resume: 'checkpoint_0119.pth.tar' # path to latest checkpoint (default: none)
+resume: 'checkpoint_0139.pth.tar' # path to latest checkpoint (default: none)
 fix_pred_lr: True
 print_freq: 20
 arch: "resnet50"
