@@ -126,6 +126,8 @@ def main():
 
 
     # training loop
+    os.makedirs(args.model_dict_save_path, exist_ok=True)
+    
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
         train_loss = train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm)
@@ -202,7 +204,6 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
             param_group['lr'] = lr
 
 def save_checkpoint(state, filename, save_dir):
-    os.makedirs(save_dir, exist_ok=True)
     torch.save(state, os.path.join(save_dir, filename))
 
 if __name__ == "__main__":

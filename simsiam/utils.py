@@ -97,7 +97,9 @@ def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_aud
     unique_songs = set()
     
     for file in path_file:
-        song_name, song_num = file[:-2], int(file[-1])
+        song_name, song_num = file.split("_")[0], int(file.split("_")[-1])
+        if song_name == "ae7633e8-27df-4980-812c-9c6dacfb1d22":
+            print(song_num)
         unique_songs.add(song_name)
         song_counter_dict[song_name].append(song_num)
         
@@ -139,9 +141,9 @@ def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_aud
     random.shuffle(valid_files)
     random.shuffle(test_files)
 
-    save_to_txt("info/split_by_song_name_4secs_train.txt", train_files)
-    save_to_txt("info/split_by_song_name_4secs_valid.txt", valid_files)
-    save_to_txt("info/split_by_song_name_4secs_test.txt", test_files)
+    save_to_txt("info/train_by_song_name_4secs.txt", train_files)
+    save_to_txt("info/valid_by_song_name_4secs.txt", valid_files)
+    save_to_txt("info/test_by_song_name_4secs.txt", test_files)
     print(f"Dataset split complete: {len(train_files)} train, {len(valid_files)} valid, {len(test_files)} test")
 
     

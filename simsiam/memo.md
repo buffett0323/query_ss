@@ -16,3 +16,10 @@ Mean: -1.100174903869629, Std: 14.353998184204102
 
 BP Dataset 8 secs slice 4 secs + resize 224
 Mean: -1.100771427154541, Std: 14.373129844665527
+
+
+Simple BP Dataset 4 secs
+norm_stats: [-5.36902,  3.7100384]
+
+Best ResNet Dict path:
+/mnt/gestalt/home/buffett/simsiam_model_dict/resnet_model_dict/checkpoint_0199.pth.tar
