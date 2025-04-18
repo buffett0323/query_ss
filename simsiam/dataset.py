@@ -2,6 +2,7 @@
 import os
 import random
 import math
+import pickle
 import torch
 import torchaudio
 import json
@@ -44,9 +45,12 @@ class SimpleBPDataset(Dataset):
         data_dir,
         piece_second=4,
         segment_second=0.95,
+        window_size=1024,
+        hop_length=160,
         split="train",
         random_slice=True,
         stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
+        top_k=1, #2,
     ):
         # Load split files from txt file
         with open(f"info/{split}_by_song_name_4secs.txt", "r") as f:
@@ -61,14 +65,33 @@ class SimpleBPDataset(Dataset):
 
         self.sample_rate = sample_rate
         self.segment_second = segment_second
+        self.window_size = window_size
+        self.hop_length = hop_length
         self.piece_length = int(piece_second * sample_rate)
         self.duration = int(segment_second * sample_rate)
         self.split = split
         self.random_slice = random_slice
-
+        self.top_k = top_k
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
+    
+    
+    
+    def cal_high_energy_crop(self, x):
+        # TODO: Process it before loading
+        """Return top-k high-energy segments (non-overlapping)"""
+        
+        # Frame RMS energy (center=False to align frame with start)
+        rms = librosa.feature.rms(
+            y=x, center=False, 
+            frame_length=self.window_size, hop_length=self.hop_length
+        )[0]
+        
+        # Find top-k indices with highest energy
+        top_indices = np.argsort(rms)[-self.top_k:][::-1][0]
+        return top_indices * self.hop_length
+
  
     def random_crop(self, x):
         """ Random crop for given segmented seconds """
@@ -87,10 +110,14 @@ class SimpleBPDataset(Dataset):
         if self.random_slice:
             x_i, x_j = self.random_crop(x), self.random_crop(x)
         else:
-            x_i, x_j = x[:self.duration], x[self.duration:self.duration+self.duration]
+            half = int(x.shape[0] // 2)
+            segment1 = self.cal_high_energy_crop(x[:half])
+            segment2 = self.cal_high_energy_crop(x[half:self.piece_length-self.duration])
+            return segment1, half+segment2, path.split("/")[-2]
 
         # Faster conversion if .npy is already float32
-        return torch.from_numpy(x_i), torch.from_numpy(x_j), path
+        # return torch.from_numpy(x_i), torch.from_numpy(x_j), path
+        return torch.from_numpy(x_i.copy()), torch.from_numpy(x_j.copy()), path
 
 
 
@@ -761,7 +788,7 @@ class Transform_Pipeline(nn.Module):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_byola.yaml")
+    config = yaml_config_hook("config/ssbp_convnext.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -772,18 +799,16 @@ if __name__ == "__main__":
         data_dir=args.data_dir,
         piece_second=args.piece_second,
         segment_second=args.segment_second,
-        random_slice=args.random_slice,
+        window_size=args.window_size,
+        hop_length=args.hop_length,
+        random_slice=False, #args.random_slice,
     )
     
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=128, #args.batch_size,
+        batch_size=16, #args.batch_size,
         shuffle=True,
         num_workers=args.workers,
-        pin_memory=args.pin_memory,
-        drop_last=args.drop_last,
-        persistent_workers=args.persistent_workers,
-        prefetch_factor=8, #4,
     )
     
     to_spec = nnAudio.features.MelSpectrogram(
@@ -799,20 +824,35 @@ if __name__ == "__main__":
         verbose=False,
     ).to(device)
 
-    X = []
-    for (x_i, x_j, _) in tqdm(train_loader):
-        x_i = x_i.to(device)
-        x_j = x_j.to(device)
 
-        lms_i = (to_spec(x_i) + torch.finfo().eps).log().unsqueeze(1)
-        lms_j = (to_spec(x_j) + torch.finfo().eps).log().unsqueeze(1)
-        X.extend([x for x in lms_i.detach().cpu().numpy()])
-        X.extend([x for x in lms_j.detach().cpu().numpy()])
+
+    segment_dict = dict()
+    for start1, start2, song_name in tqdm(train_loader):
+        segment_dict[song_name] = [start1, start2]
+    
+    
+    with open("info/segment_dict_train.pkl", "wb") as f:
+        pickle.dump(segment_dict, f)
+        
+        
+    # Later loading
+    with open("data.pkl", "rb") as f:
+        my_dict = pickle.load(f)
+    
+    # X = []
+    # for (x_i, x_j, _) in tqdm(train_loader):
+    #     x_i = x_i.to(device)
+    #     x_j = x_j.to(device)
+
+    #     lms_i = (to_spec(x_i) + torch.finfo().eps).log().unsqueeze(1)
+    #     lms_j = (to_spec(x_j) + torch.finfo().eps).log().unsqueeze(1)
+    #     X.extend([x for x in lms_i.detach().cpu().numpy()])
+    #     X.extend([x for x in lms_j.detach().cpu().numpy()])
         
 
-    X = np.stack(X)
-    norm_stats = np.array([X.mean(), X.std()])
-    print(norm_stats)
+    # X = np.stack(X)
+    # norm_stats = np.array([X.mean(), X.std()])
+    # print(norm_stats)
 
 
 
