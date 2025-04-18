@@ -24,11 +24,9 @@ from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torchaudio.transforms import MelSpectrogram
 from pytorch_lightning import LightningDataModule
 from typing import Optional
-from librosa import effects
 from tqdm import tqdm
-from torchaudio.functional import pitch_shift
+from scipy.stats import entropy
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, TimeMask
-
 
 from transforms import CLARTransform, RandomFrequencyMasking
 from utils import yaml_config_hook, plot_spec_and_save, resize_spec
@@ -84,14 +82,47 @@ class SimpleBPDataset(Dataset):
         
         # Frame RMS energy (center=False to align frame with start)
         rms = librosa.feature.rms(
-            y=x, center=False, 
-            frame_length=self.window_size, hop_length=self.hop_length
-        )[0]
-        
-        # Find top-k indices with highest energy
-        top_indices = np.argsort(rms)[-self.top_k:][::-1][0]
-        return top_indices * self.hop_length
+            y=x, 
+            center=False, 
+            frame_length=self.window_size, 
+            hop_length=self.hop_length
+        )[0]        
+        rms_db = librosa.amplitude_to_db(rms, ref=np.max)
 
+        return np.max(rms_db) * self.hop_length
+
+
+    def detect_informative_segment(self, x, threshold=5.0):
+        # 1. Check flatness
+        S = librosa.feature.melspectrogram(y=x, sr=self.sample_rate, n_fft=1024, hop_length=160)
+        flatness = librosa.feature.spectral_flatness(S=S)
+
+        
+        # Mean flatness threshold (e.g., < 0.2 = informative)
+        if flatness.mean() < 0.2:
+            status1 = True
+        else:
+            status1 = False
+        
+        # 2. Check mel-spec variance
+        mel = librosa.feature.melspectrogram(y=x, sr=self.sample_rate)
+        mel_db = librosa.power_to_db(mel, ref=np.max)
+        if mel_db.std() > threshold:  # e.g., threshold = 5.0
+            status2 = True
+        else:
+            status2 = False
+        
+        # 3. Check entropy of mel-spec
+        mel = librosa.feature.melspectrogram(y=x, sr=self.sample_rate)
+        mel_norm = mel / np.sum(mel, axis=0, keepdims=True)
+        ent = entropy(mel_norm, base=2, axis=0)  # entropy per time step
+        if np.mean(ent) > 3.0:
+            status3 = True
+        else:
+            status3 = False
+            
+        return status1, status2, status3
+    
  
     def random_crop(self, x):
         """ Random crop for given segmented seconds """
@@ -110,6 +141,8 @@ class SimpleBPDataset(Dataset):
         if self.random_slice:
             x_i, x_j = self.random_crop(x), self.random_crop(x)
         else:
+            # st1, st2, st3 = self.detect_informative_segment(x)
+            # return st1, st2, st3, path.split("/")[-2]
             half = int(x.shape[0] // 2)
             segment1 = self.cal_high_energy_crop(x[:half])
             segment2 = self.cal_high_energy_crop(x[half:self.piece_length-self.duration])
@@ -806,7 +839,7 @@ if __name__ == "__main__":
     
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=16, #args.batch_size,
+        batch_size=32, #args.batch_size,
         shuffle=True,
         num_workers=args.workers,
     )
@@ -827,17 +860,48 @@ if __name__ == "__main__":
 
 
     segment_dict = dict()
-    for start1, start2, song_name in tqdm(train_loader):
-        segment_dict[song_name] = [start1, start2]
+    energy_track, eliminated_track = [], []
     
+    for st1, st2, st3, path in tqdm(train_loader):
+        for st1i, st2i, st3i, pathi in zip(st1, st2, st3, path):
+            energy = False
+            
+            if st1i and st2i and st3i:
+                energy = True
+                energy_track.append(pathi)
+            else:
+                eliminated_track.append(pathi)
+            
+            segment_dict[pathi] = [energy, st1i, st2i, st3i]
+
+    print(len(energy_track), len(eliminated_track))
     
-    with open("info/segment_dict_train.pkl", "wb") as f:
+    with open("info/energy_track.txt", "w") as f:
+        for path in energy_track:
+            f.write(f"{path}\n")
+            
+    with open("info/eliminated_track.txt", "w") as f:
+        for path in eliminated_track:
+            f.write(f"{path}\n")
+
+    with open("info/segment_dict_3status.pkl", "wb") as f:
         pickle.dump(segment_dict, f)
         
+    with open("info/thres_result.txt", "w") as f:
+        for key, value in segment_dict.items():
+            f.write(f"{key} --- {value}\n")
         
-    # Later loading
-    with open("data.pkl", "rb") as f:
-        my_dict = pickle.load(f)
+    # for start1, start2, song_name in tqdm(train_loader):
+    #     segment_dict[song_name] = [start1, start2]
+    #     break
+    
+    # with open("info/segment_dict_train.pkl", "wb") as f:
+    #     pickle.dump(segment_dict, f)
+        
+        
+    # # Later loading
+    # with open("data.pkl", "rb") as f:
+    #     my_dict = pickle.load(f)
     
     # X = []
     # for (x_i, x_j, _) in tqdm(train_loader):
