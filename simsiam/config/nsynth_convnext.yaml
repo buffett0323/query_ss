@@ -1,7 +1,7 @@
 # Pre-process
 segment_second: 0.95
 piece_second: 4
-log_wandb: False #False
+log_wandb: True #False
 wandb_project_name: "SimSiam Training"
 wandb_name: "NSynth ConvNeXt-Tiny+0.95/4+SeqPert"
 wandb_notes: "Nsynth ConvNeXt Training Terra no activity detection"
