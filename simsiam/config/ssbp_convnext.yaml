@@ -46,8 +46,8 @@ hop_length: 160 #320 #512 #1024
 sample_rate: 16000 #44100 Temporarily transform to 16000
 window_size: 1024 #512
 n_mels: 64 #128
-fmin: 20
-fmax: 8000 # 16000/2
+fmin: 60 #20
+fmax: 7800 #8000 # 16000/2
 pin_memory: True
 drop_last: True #False
 persistent_workers: True

@@ -20,9 +20,9 @@ gpu: 1 #[1, 3] #[0,1,2,3]
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 16 #256 #512 
+batch_size: 256 #256 #512 
 start_epoch: 0
-epochs: 500 # 200
+epochs: 200 # 200
 early_stop_patience: 5 #10
 lr: 0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
