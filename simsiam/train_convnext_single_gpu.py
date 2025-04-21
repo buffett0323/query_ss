@@ -17,7 +17,7 @@ import torchvision.models as models
 import nnAudio.features
 import numpy as np
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
-from dataset import SimpleBPDataset
+from dataset import SegmentBPDataset, SimpleBPDataset
 from model import SimSiam
 from augmentation import SequencePerturbation, PrecomputedNorm
 
@@ -82,12 +82,10 @@ def main():
     cudnn.benchmark = True
 
     # dataset
-    train_dataset = SimpleBPDataset(
-        sample_rate=args.sample_rate,
-        data_dir=args.data_dir,
-        piece_second=args.piece_second,
-        segment_second=args.segment_second,
-        random_slice=args.random_slice,
+    train_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
+        split="train",
+        stem="other",
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -202,6 +200,10 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
             param_group['lr'] = init_lr
         else:
             param_group['lr'] = lr
+    
+    # Log learning rate to WandB
+    if args.log_wandb:
+        wandb.log({"learning_rate": lr, "epoch": epoch})
 
 def save_checkpoint(state, filename, save_dir):
     torch.save(state, os.path.join(save_dir, filename))

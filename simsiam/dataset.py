@@ -29,12 +29,53 @@ from scipy.stats import entropy
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, TimeMask
 
 from transforms import CLARTransform, RandomFrequencyMasking
-from utils import yaml_config_hook, plot_spec_and_save, resize_spec
+from utils import yaml_config_hook, plot_and_save_logmel_spectrogram, plot_spec_and_save, resize_spec
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
 from spec_aug.spec_augment_pytorch import SpecAugment
+from augmentation import SequencePerturbation, PrecomputedNorm
 
 
 # Beatport Dataset
+class SegmentBPDataset(Dataset):
+    """ For 4 seconds audio data """
+    def __init__(
+        self,
+        data_dir,
+        split="train",
+        stem="other", #["vocals", "bass", "drums", "other"], # VBDO
+    ):
+        # Load segment info list
+        with open(f"info/{split}_seg_counter.json", "r") as f:
+            self.seg_counter = json.load(f)
+            self.bp_listdir = list(self.seg_counter.keys())
+
+        self.data_dir = data_dir
+        self.split = split
+        self.stem = stem
+
+
+    def __len__(self): #""" Total we got 175698 files * 4 tracks """
+        return len(self.bp_listdir)
+    
+
+    def __getitem__(self, idx):
+        # Load audio data from .npy
+        song_name = self.bp_listdir[idx]
+        segment_count =self.seg_counter[song_name]
+        
+        # Randomly select two different segment indices
+        idx1, idx2 = random.sample(range(segment_count), 2)
+
+        # Load two segments
+        x_i = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy"), mmap_mode='r')
+        x_j = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy"), mmap_mode='r')
+        
+        return torch.from_numpy(x_i.copy()), torch.from_numpy(x_j.copy()), song_name
+        
+
+
+
+
 class SimpleBPDataset(Dataset):
     """ For 4 seconds audio data """
     def __init__(
@@ -826,49 +867,106 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
-    train_dataset = SimpleBPDataset(
-        sample_rate=args.sample_rate,
-        data_dir=args.data_dir,
-        piece_second=args.piece_second,
-        segment_second=args.segment_second,
-        window_size=args.window_size,
-        hop_length=args.hop_length,
-        random_slice=False, #args.random_slice,
+    train_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
+        split="train",
+        stem="other",
     )
-    
-    dataloader = DataLoader(train_dataset, batch_size=16, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=args.pin_memory,
+        drop_last=args.drop_last,
+        persistent_workers=args.persistent_workers,
+        prefetch_factor=8, #4,
+    )
 
-    segment_dict = dict()
-    energy_track, eliminated_track = [], []
-    
-    for i in tqdm(range(len(train_dataset))):
-        st1i, st2i, st3i, pathi = train_dataset[i]
+    # MelSpectrogram
+    to_spec = nnAudio.features.MelSpectrogram(
+        sr=args.sample_rate,
+        n_fft=args.n_fft,
+        win_length=args.window_size,
+        hop_length=args.hop_length,
+        n_mels=args.n_mels,
+        fmin=args.fmin,
+        fmax=args.fmax,
+        center=True,
+        power=2,
+        verbose=False,
+    ).to(device)
 
-        energy = False
-        if st1i and st2i and st3i:
-            energy = True
-            energy_track.append(pathi)
-        else:
-            eliminated_track.append(pathi)
+
+    # Augmentation: SequencePerturbation
+    tfms = SequencePerturbation(
+        method=args.sp_method,
+        sample_rate=args.sample_rate,
+    ).to(device)
+
+    pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(device)
+    
+
+    output_dir = "visualization" 
+    os.makedirs(output_dir, exist_ok=True)
+
+    for i in range(len(train_dataset)):
+        x_i, x_j, song_name = train_dataset[i]
         
-        segment_dict[pathi] = [energy, st1i, st2i, st3i]
+        # Move to device
+        x_i = x_i.to(device)
+        x_j = x_j.to(device)
+        
+        # Original transformed spectrograms
+        x_i_transformed = (to_spec(x_i) + torch.finfo().eps).log()
+        x_j_transformed = (to_spec(x_j) + torch.finfo().eps).log()
+        print(x_i_transformed)
 
-    print(len(energy_track), len(eliminated_track))
+        # Plot and save the original transformed spectrograms
+        plot_and_save_logmel_spectrogram(x_i_transformed, x_j_transformed, song_name, output_dir, stage="original")
+        
+        # Apply pre-norm and plot normed spectrograms
+        x_i_normed = pre_norm(x_i_transformed)
+        x_j_normed = pre_norm(x_j_transformed)
+        plot_and_save_logmel_spectrogram(x_i_normed, x_j_normed, song_name, output_dir, stage="normed")
+        
+        # Apply augmentation and plot augmented spectrograms
+        x_i_aug = tfms(x_i_normed)
+        x_j_aug = tfms(x_j_normed)
+        plot_and_save_logmel_spectrogram(x_i_aug, x_j_aug, song_name, output_dir, stage="augmented")
     
-    with open("info/energy_track.txt", "w") as f:
-        for path in energy_track:
-            f.write(f"{path}\n")
+        break
+    # segment_dict = dict()
+    # energy_track, eliminated_track = [], []
+    
+    # for i in tqdm(range(len(train_dataset))):
+    #     st1i, st2i, st3i, pathi = train_dataset[i]
+
+    #     energy = False
+    #     if st1i and st2i and st3i:
+    #         energy = True
+    #         energy_track.append(pathi)
+    #     else:
+    #         eliminated_track.append(pathi)
+        
+    #     segment_dict[pathi] = [energy, st1i, st2i, st3i]
+
+    # print(len(energy_track), len(eliminated_track))
+    
+    # with open("info/energy_track.txt", "w") as f:
+    #     for path in energy_track:
+    #         f.write(f"{path}\n")
             
-    with open("info/eliminated_track.txt", "w") as f:
-        for path in eliminated_track:
-            f.write(f"{path}\n")
+    # with open("info/eliminated_track.txt", "w") as f:
+    #     for path in eliminated_track:
+    #         f.write(f"{path}\n")
 
-    with open("info/segment_dict_3status.pkl", "wb") as f:
-        pickle.dump(segment_dict, f)
+    # with open("info/segment_dict_3status.pkl", "wb") as f:
+    #     pickle.dump(segment_dict, f)
         
-    with open("info/thres_result.txt", "w") as f:
-        for key, value in segment_dict.items():
-            f.write(f"{key} --- {value}\n")
+    # with open("info/thres_result.txt", "w") as f:
+    #     for key, value in segment_dict.items():
+    #         f.write(f"{key} --- {value}\n")
         
     # for start1, start2, song_name in tqdm(train_loader):
     #     segment_dict[song_name] = [start1, start2]
