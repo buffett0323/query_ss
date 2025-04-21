@@ -101,7 +101,7 @@ if __name__ == "__main__":
     energy_track, eliminated_track = [], []
     
     for i in tqdm(range(len(train_dataset))):
-        x_i, x_j, path = train_dataset[i]
-        print(x_i.shape, x_j.shape, path)
+        x, path = train_dataset[i]
+        print(x.shape, path)
         break
         
