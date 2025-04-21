@@ -1,10 +1,10 @@
 # Pre-process
 segment_second: 0.95
 piece_second: 4
-log_wandb: False #False
+log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "ConvNeXt-Tiny+0.95/4+SeqPert"
-wandb_notes: "SSBP ConvNeXt Training Terra no activity detection"
+wandb_name: "ConvNeXt-Base+Top2-0.95sec+SeqPert"
+wandb_notes: "SSBP ConvNeXt Training Fatcat (with Segment)"
 
 
 
@@ -12,20 +12,19 @@ wandb_notes: "SSBP ConvNeXt Training Terra no activity detection"
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
 seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy"
 # data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
-model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0418"
+model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422"
 # model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
-random_slice: True # Random slice enhance model's ability of capturing timbre
 workers: 8 # 24 for terra, 56 for fatcat
 gpu: 1 #[1, 3] #[0,1,2,3]
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 16 #256 #512 
+batch_size: 512 #256 
 start_epoch: 0
 epochs: 500 # 200
 early_stop_patience: 5 #10
-lr: 0.05 #0.001 # 0.03  # 0.0003
+lr: 0.005 # 0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
 warmup_epochs: 10
 dim: 2048
@@ -36,7 +35,6 @@ print_freq: 20
 encoder_name: "ConvNeXt"
 sp_method: "fixed" # "random", "fixed", "adaptive", "reverse"
 norm_stats: [-5.36902,  3.7100384]
-
 
 
 
@@ -60,8 +58,6 @@ AMP_THRES: 0.5
 
 # model options
 channels: 1
-encoder_output_dim: 512
-projection_dim: 128
 convnext_model: "base" # "tiny", "small", "base", "large"
 
 # loss options
