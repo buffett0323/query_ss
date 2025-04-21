@@ -4,7 +4,7 @@ piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
 wandb_name: "ConvNeXt-Base+Top2-0.95sec+SeqPert"
-wandb_notes: "SSBP ConvNeXt Training Fatcat (with Segment)"
+wandb_notes: "SSBP ConvNeXt Training Fatcat lr1e-3, "
 
 
 
@@ -14,17 +14,16 @@ seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_n
 # data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
 model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422"
 # model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
-workers: 8 # 24 for terra, 56 for fatcat
+workers: 24 # 24 for terra, 56 for fatcat
 gpu: 1 #[1, 3] #[0,1,2,3]
 
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 512 #256 
+batch_size: 256 #256 
 start_epoch: 0
 epochs: 500 # 200
-early_stop_patience: 5 #10
-lr: 0.005 # 0.05 #0.001 # 0.03  # 0.0003
+lr: 0.001 # 0.05 #0.001 # 0.03  # 0.0003
 momentum: 0.9
 warmup_epochs: 10
 dim: 2048
