@@ -13,25 +13,6 @@ from tqdm import tqdm
 import logging
 import nnAudio.features
 from pathlib import Path
-import json
-
-
-
-class AugmentationModuleTT:
-    """
-    Mel spectrogram augmentation: Sequence Mel Spectrogram Shuffle
-    """
-    def __init__(self, cfg):
-        self.train_transform_sp = SequencePerturbation(
-            method=cfg.sp_method, 
-            sample_rate=cfg.sample_rate
-        )
-
-
-    def __call__(self, x1, x2):
-        x1 = self.train_transform_sp(x1)
-        x2 = self.train_transform_sp(x2)
-        return x1, x2
     
 
 

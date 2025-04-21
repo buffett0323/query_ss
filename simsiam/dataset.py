@@ -97,7 +97,6 @@ class SimpleBPDataset(Dataset):
         S = librosa.feature.melspectrogram(y=x, sr=self.sample_rate, n_fft=1024, hop_length=160)
         flatness = librosa.feature.spectral_flatness(S=S)
 
-        
         # Mean flatness threshold (e.g., < 0.2 = informative)
         if flatness.mean() < 0.2:
             status1 = True
@@ -135,18 +134,18 @@ class SimpleBPDataset(Dataset):
     def __getitem__(self, idx):
         # Load audio data from .npy
         path = self.data_path_list[idx]
-        x = np.load(path, mmap_mode='r')
+        x = np.load(path) #, mmap_mode='r')
 
         # Random Crop
         if self.random_slice:
             x_i, x_j = self.random_crop(x), self.random_crop(x)
         else:
-            # st1, st2, st3 = self.detect_informative_segment(x)
-            # return st1, st2, st3, path.split("/")[-2]
-            half = int(x.shape[0] // 2)
-            segment1 = self.cal_high_energy_crop(x[:half])
-            segment2 = self.cal_high_energy_crop(x[half:self.piece_length-self.duration])
-            return segment1, half+segment2, path.split("/")[-2]
+            st1, st2, st3 = self.detect_informative_segment(x)
+            return st1, st2, st3, path.split("/")[-2]
+            # half = int(x.shape[0] // 2)
+            # segment1 = self.cal_high_energy_crop(x[:half])
+            # segment2 = self.cal_high_energy_crop(x[half:self.piece_length-self.duration])
+            # return segment1, half+segment2, path.split("/")[-2]
 
         # Faster conversion if .npy is already float32
         # return torch.from_numpy(x_i), torch.from_numpy(x_j), path
@@ -837,42 +836,22 @@ if __name__ == "__main__":
         random_slice=False, #args.random_slice,
     )
     
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=32, #args.batch_size,
-        shuffle=True,
-        num_workers=args.workers,
-    )
-    
-    to_spec = nnAudio.features.MelSpectrogram(
-        sr=args.sample_rate,
-        n_fft=args.n_fft,
-        win_length=args.window_size,
-        hop_length=args.hop_length,
-        n_mels=args.n_mels,
-        fmin=args.fmin,
-        fmax=args.fmax,
-        center=True,
-        power=2,
-        verbose=False,
-    ).to(device)
-
-
+    dataloader = DataLoader(train_dataset, batch_size=16, shuffle=False)
 
     segment_dict = dict()
     energy_track, eliminated_track = [], []
     
-    for st1, st2, st3, path in tqdm(train_loader):
-        for st1i, st2i, st3i, pathi in zip(st1, st2, st3, path):
-            energy = False
-            
-            if st1i and st2i and st3i:
-                energy = True
-                energy_track.append(pathi)
-            else:
-                eliminated_track.append(pathi)
-            
-            segment_dict[pathi] = [energy, st1i, st2i, st3i]
+    for i in tqdm(range(len(train_dataset))):
+        st1i, st2i, st3i, pathi = train_dataset[i]
+
+        energy = False
+        if st1i and st2i and st3i:
+            energy = True
+            energy_track.append(pathi)
+        else:
+            eliminated_track.append(pathi)
+        
+        segment_dict[pathi] = [energy, st1i, st2i, st3i]
 
     print(len(energy_track), len(eliminated_track))
     

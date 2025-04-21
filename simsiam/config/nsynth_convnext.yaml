@@ -1,0 +1,72 @@
+# Pre-process
+segment_second: 0.95
+piece_second: 4
+log_wandb: False #False
+wandb_project_name: "SimSiam Training"
+wandb_name: "NSynth ConvNeXt-Tiny+0.95/4+SeqPert"
+wandb_notes: "Nsynth ConvNeXt Training Terra no activity detection"
+
+
+
+# distributed training
+data_dir: "/mnt/gestalt/home/ddmanddman/nsynth_dataset/nsynth-train/npy"
+# data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
+model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_nsynth_model_dict_0421"
+# model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
+random_slice: True # Random slice enhance model's ability of capturing timbre
+workers: 24 # 24 for terra, 56 for fatcat
+gpu: 1 #[1, 3] #[0,1,2,3]
+
+
+# train options
+seed: 42 # sacred handles automatic seeding when passed in the config
+batch_size: 16 #256 #512 
+start_epoch: 0
+epochs: 500 # 200
+early_stop_patience: 5 #10
+lr: 0.05 #0.001 # 0.03  # 0.0003
+momentum: 0.9
+warmup_epochs: 10
+dim: 2048
+pred_dim: 512
+resume: '' # path to latest checkpoint (default: none)
+fix_pred_lr: True
+print_freq: 20
+encoder_name: "ConvNeXt"
+sp_method: "fixed" # "random", "fixed", "adaptive", "reverse"
+norm_stats: [-9.183992385864258, 6.013678073883057] #[-5.36902,  3.7100384]
+
+
+# dataset options
+max_length: 64
+n_fft: 1024 #2048
+hop_length: 160 #320 #512 #1024
+sample_rate: 16000 #44100 Temporarily transform to 16000
+window_size: 1024 #512
+n_mels: 64 #128
+fmin: 60 #20
+fmax: 7800 #8000 # 16000/2
+pin_memory: True
+drop_last: True #False
+persistent_workers: True
+
+# model options
+channels: 1
+encoder_output_dim: 512
+projection_dim: 128
+convnext_model: "base" # "tiny", "small", "base", "large"
+
+# loss options
+optimizer: "Adam" # or LARS (experimental)
+weight_decay: 1.0e-4 #1.0e-4 #1.0e-6 # "optimized using LARS [...] and weight decay of 10−6"
+temperature: 0.1 #0.5 # see appendix B.7.: Optimal temperature under different batch sizes
+lr_decay_factor: 0.05 #0.01
+
+
+# reload options
+model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+reload: False
+
+# knn options
+knn_k: 3 #200
+knn_t: 1.0 #0.2

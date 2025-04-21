@@ -2,7 +2,6 @@ import argparse
 import math
 import os
 import random
-import shutil
 import time
 import warnings
 import wandb
@@ -12,11 +11,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.optim
+import nnAudio.features
 import torch.utils.data
 import torchvision.models as models
+import numpy as np
 
 from utils import yaml_config_hook, AverageMeter, ProgressMeter
-from dataset import NewBPDataset, Transform_Pipeline
+from dataset import SimpleBPDataset #NewBPDataset, Transform_Pipeline
+from augmentation import SequencePerturbation, PrecomputedNorm
 import simsiam.builder
 
 torch.set_float32_matmul_precision('high')
@@ -39,8 +41,8 @@ def main():
     if args.log_wandb:
         wandb.init(
             project=args.wandb_project_name,
-            id="4y4sb4uh",
-            resume="allow",
+            # id="4y4sb4uh",
+            # resume="allow",
             name=args.wandb_name,
             notes=args.wandb_notes,
             config=vars(args),
@@ -81,23 +83,12 @@ def main():
     cudnn.benchmark = True
 
     # dataset
-    train_dataset = NewBPDataset(
+    train_dataset = SimpleBPDataset(
         sample_rate=args.sample_rate,
-        segment_second=args.segment_second,
         data_dir=args.data_dir,
         piece_second=args.piece_second,
-        n_fft=args.n_fft,
-        hop_length=args.hop_length,
-        n_mels=args.n_mels,
-        split="train",
-        melspec_transform=args.melspec_transform,
-        data_augmentation=args.data_augmentation,
+        segment_second=args.segment_second,
         random_slice=args.random_slice,
-        stems=['other'],
-        fmax=args.fmax,
-        img_size=args.img_size,
-        img_mean=args.img_mean,
-        img_std=args.img_std,
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -110,25 +101,37 @@ def main():
         persistent_workers=args.persistent_workers,
         prefetch_factor=8, #4,
     )
-    
-    tp = Transform_Pipeline(
-        sample_rate=args.sample_rate,
+
+    # MelSpectrogram
+    to_spec = nnAudio.features.MelSpectrogram(
+        sr=args.sample_rate,
         n_fft=args.n_fft,
+        win_length=args.window_size,
         hop_length=args.hop_length,
         n_mels=args.n_mels,
+        fmin=args.fmin,
         fmax=args.fmax,
-        img_size=args.img_size,
-        img_mean=args.img_mean,
-        img_std=args.img_std,
-        device=torch.device("cuda"),
-        p_time_warp=args.p_time_warp, #0.4,
-        p_mask=args.p_mask,
-    )
+        center=True,
+        power=2,
+        verbose=False,
+    ).cuda()
+
+    # Augmentation: SequencePerturbation
+    tfms = SequencePerturbation(
+        method=args.sp_method,
+        sample_rate=args.sample_rate,
+    ).cuda()
+
+    # Normalization: PrecomputedNorm
+    pre_norm = PrecomputedNorm(np.array(args.norm_stats)).cuda()
+
 
     # training loop
+    os.makedirs(args.model_dict_save_path, exist_ok=True)
+    
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
-        train_loss = train(train_loader, model, criterion, optimizer, epoch, args, tp)
+        train_loss = train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm)
 
         if args.log_wandb:
             wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
@@ -140,11 +143,11 @@ def main():
                 'optimizer': optimizer.state_dict(),
             }, 
                 filename=f'checkpoint_{epoch:04d}.pth.tar', 
-                save_dir=args.model_dict_save_path,
+                save_dir=args.model_dict_save_path
             )
             
 
-def train(train_loader, model, criterion, optimizer, epoch, args, tp):
+def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4f')
@@ -159,8 +162,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args, tp):
         x_i = x_i.cuda(non_blocking=True)
         x_j = x_j.cuda(non_blocking=True)
         
-        x_i = tp(x_i)
-        x_j = tp(x_j)
+        # Mel-spec transform and normalize
+        x_i = (to_spec(x_i) + torch.finfo().eps).log()
+        x_j = (to_spec(x_j) + torch.finfo().eps).log()
+        x_i = pre_norm(x_i)
+        x_j = pre_norm(x_j)
+
+        # Augmentation
+        x_i = tfms(x_i).unsqueeze(1)
+        x_j = tfms(x_j).unsqueeze(1)
 
         p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
         loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
