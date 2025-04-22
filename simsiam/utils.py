@@ -312,7 +312,7 @@ def plot_and_save_logmel_spectrogram(x_i, x_j, song_name, output_dir, stage="ori
     x_j = x_j.cpu().numpy()
 
     # Create figure and axis
-    fig, axes = plt.subplots(2, 1, figsize=(10, 6), dpi=150)
+    fig, axes = plt.subplots(2, 1, figsize=(6, 12), dpi=300)
     fig.suptitle(f"Log-Mel Spectrograms for {song_name} ({stage})", fontsize=16)
 
     # Plot for x_i (e.g., transformed or original)
@@ -335,6 +335,25 @@ def plot_and_save_logmel_spectrogram(x_i, x_j, song_name, output_dir, stage="ori
     plot_filename = f"{song_name}_{stage}.png"
     plt.savefig(f"{output_dir}/{plot_filename}")
     plt.close()
+
+def plot_mel_spectrogram_librosa(log_mel_spec, output_dir, song_name, stage="original", sample_rate=16000):
+    log_mel_spec = log_mel_spec.cpu().numpy().squeeze()
+
+    # Plot Mel Spectrogram
+    plt.figure(figsize=(10, 6), dpi=150)
+    librosa.display.specshow(log_mel_spec, x_axis='time', y_axis='mel', sr=sample_rate, 
+                             hop_length=160, n_fft=1024, n_mels=64, fmin=60, fmax=7800, cmap='inferno')
+    plt.colorbar(format="%+2.0f dB")
+    plt.title(f"{song_name} - {stage} Mel Spectrogram")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Mel Frequency Bands")
+    
+    # Save the plot
+    plt.tight_layout()
+    plot_filename = f"{song_name}_{stage}_mel_spec_librosa.png"
+    plt.savefig(f"{output_dir}/{plot_filename}")
+    plt.close()
+
 
 
 class AverageMeter(object):

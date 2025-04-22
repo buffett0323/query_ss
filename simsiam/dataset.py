@@ -29,7 +29,7 @@ from scipy.stats import entropy
 from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, TimeMask
 
 from transforms import CLARTransform, RandomFrequencyMasking
-from utils import yaml_config_hook, plot_and_save_logmel_spectrogram, plot_spec_and_save, resize_spec
+from utils import yaml_config_hook, plot_and_save_logmel_spectrogram, plot_mel_spectrogram_librosa, plot_spec_and_save, resize_spec
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
 from spec_aug.spec_augment_pytorch import SpecAugment
 from augmentation import SequencePerturbation, PrecomputedNorm
@@ -918,9 +918,13 @@ if __name__ == "__main__":
         x_j = x_j.to(device)
         
         # Original transformed spectrograms
-        x_i_transformed = (to_spec(x_i) + torch.finfo().eps).log()
-        x_j_transformed = (to_spec(x_j) + torch.finfo().eps).log()
-        print(x_i_transformed)
+        spec_i = to_spec(x_i)
+        spec_j = to_spec(x_j)
+        plot_mel_spectrogram_librosa(spec_i, output_dir, song_name, stage="orig_1")
+        plot_mel_spectrogram_librosa(spec_j, output_dir, song_name, stage="orig_2")
+        
+        x_i_transformed = (spec_i + torch.finfo().eps).log()
+        x_j_transformed = (spec_j + torch.finfo().eps).log()
 
         # Plot and save the original transformed spectrograms
         plot_and_save_logmel_spectrogram(x_i_transformed, x_j_transformed, song_name, output_dir, stage="original")

@@ -15,7 +15,7 @@ import torchvision.models as models
 import nnAudio.features
 
 from utils import yaml_config_hook
-from dataset import SimpleBPDataset
+from dataset import SimpleBPDataset, SegmentBPDataset
 from model import SimSiam
 from augmentation import PrecomputedNorm
 
@@ -56,7 +56,7 @@ def main():
         pred_dim=args.pred_dim,
     ).to(device)
 
-    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0418/checkpoint_0399.pth.tar')
+    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422/checkpoint_0399.pth.tar')
     new_state_dict = OrderedDict()
     for k, v in checkpoint['state_dict'].items():
         new_key = k.replace("module.", "")
@@ -66,21 +66,16 @@ def main():
     cudnn.benchmark = True
     model.eval()
 
-    memory_dataset = SimpleBPDataset(
-        sample_rate=args.sample_rate,
-        data_dir=args.data_dir,
-        piece_second=args.piece_second,
-        segment_second=args.segment_second,
-        random_slice=args.random_slice,
+    memory_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
+        split="train",
+        stem="other",
     )
 
-    test_dataset = SimpleBPDataset(
-        sample_rate=args.sample_rate,
-        data_dir=args.data_dir,
-        piece_second=args.piece_second,
-        segment_second=args.segment_second,
-        random_slice=args.random_slice,
+    test_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
         split="test",
+        stem="other",
     )
 
     memory_loader = torch.utils.data.DataLoader(
