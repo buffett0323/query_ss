@@ -43,6 +43,7 @@ class SegmentBPDataset(Dataset):
         data_dir,
         split="train",
         stem="other", #["vocals", "bass", "drums", "other"], # VBDO
+        eval_mode=False,
     ):
         # Load segment info list
         with open(f"info/{split}_seg_counter.json", "r") as f:
@@ -52,27 +53,32 @@ class SegmentBPDataset(Dataset):
         self.data_dir = data_dir
         self.split = split
         self.stem = stem
-
+        self.eval_mode = eval_mode
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.bp_listdir)
     
 
     def __getitem__(self, idx):
-        # Load audio data from .npy
-        song_name = self.bp_listdir[idx]
-        segment_count =self.seg_counter[song_name]
-        
-        # Randomly select two different segment indices
-        idx1, idx2 = random.sample(range(segment_count), 2)
+        if not self.eval_mode:
+            # Load audio data from .npy
+            song_name = self.bp_listdir[idx]
+            segment_count =self.seg_counter[song_name]
+            
+            # Randomly select two different segment indices
+            idx1, idx2 = random.sample(range(segment_count), 2)
 
-        # Load two segments
-        x_i = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy"), mmap_mode='r')
-        x_j = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy"), mmap_mode='r')
+            # Load two segments
+            x_i = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy"), mmap_mode='r')
+            x_j = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy"), mmap_mode='r')
+            
+            return torch.from_numpy(x_i.copy()), torch.from_numpy(x_j.copy()), song_name
         
-        return torch.from_numpy(x_i.copy()), torch.from_numpy(x_j.copy()), song_name
-        
-
+        else:
+            # Load audio data from .npy from index 0
+            song_name = self.bp_listdir[idx]
+            x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_0.npy"), mmap_mode='r')
+            return torch.from_numpy(x.copy()), song_name
 
 
 

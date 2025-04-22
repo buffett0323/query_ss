@@ -1,4 +1,4 @@
-python npy2mp3.py --output_mp3 target.mp3    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy/a73fb816-3209-43cf-9f09-cc597b0fc21b_1/other.npy
-python npy2mp3.py --output_mp3 top1.mp3    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy/49eba016-c8de-4047-a8d5-f35676b50247_2/other.npy
-python npy2mp3.py --output_mp3 top2.mp3    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy/13411226-5eb8-4735-aa3e-7785df56c44c_3/other.npy
-python npy2mp3.py --output_mp3 top3.mp3    /mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy/6ed0819f-6577-4c09-96ec-61b50c0e76dc_3/other.npy
+python npy2mp3.py --output_mp3 target.mp3    dfcf0af5-3a9c-4c33-8a49-ec66c04e405a_2
+python npy2mp3.py --output_mp3 top1.mp3    9a39e43d-6196-4e5f-b601-7ca8a21c3f00_1
+python npy2mp3.py --output_mp3 top2.mp3    81138435-e6fd-4d98-9448-a7584b7a69fc_2
+python npy2mp3.py --output_mp3 top3.mp3    fe37e55c-d85a-43ce-a9e0-89b9b4bd3df4_4

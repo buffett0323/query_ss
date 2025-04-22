@@ -70,6 +70,7 @@ def main():
         data_dir=args.seg_dir,
         split="train",
         stem="other",
+        eval_mode=True,
     )
 
     test_dataset = SegmentBPDataset(
@@ -110,7 +111,7 @@ def validate(memory_loader, test_loader, model, device, args, to_spec, pre_norm)
     feature_bank, feature_paths = [], []
 
     with torch.no_grad():
-        for x_i, _, path in tqdm(memory_loader, desc='Feature extracting'):
+        for x_i, path in tqdm(memory_loader, desc='Feature extracting'):
             x_i = x_i.to(device, non_blocking=True)
             
             # Mel-spec transform and normalize
@@ -127,7 +128,7 @@ def validate(memory_loader, test_loader, model, device, args, to_spec, pre_norm)
 
         test_bar = tqdm(test_loader, desc='KNN Evaluation')
         with open('info/test_matches_convnext.txt', 'w') as f:
-            for x_i, _, test_path in test_bar:
+            for x_i, test_path in test_bar:
                 x_i = x_i.to(device, non_blocking=True)
                 
                 # Mel-spec transform and normalize
@@ -144,9 +145,9 @@ def validate(memory_loader, test_loader, model, device, args, to_spec, pre_norm)
                 for i in range(len(test_path)):
                     test_sample_path = test_path[i]
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
-                    f.write(f"python npy2mp3.py --output_mp3 target.mp3    {test_sample_path}\n")
+                    f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, "other_seg_0.npy")}\n")
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
-                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {neighbor_path}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, "other_seg_0.npy")}\n")
                     f.write("\n")
 
                 print(f"Test sample: {test_sample_path}")
