@@ -56,7 +56,7 @@ def main():
         pred_dim=args.pred_dim,
     ).to(device)
 
-    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422/checkpoint_0399.pth.tar')
+    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422/checkpoint_0199.pth.tar')
     new_state_dict = OrderedDict()
     for k, v in checkpoint['state_dict'].items():
         new_key = k.replace("module.", "")

@@ -86,6 +86,7 @@ def main():
         data_dir=args.seg_dir,
         split="train",
         stem="other",
+        eval_mode=False,
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -166,8 +167,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms,
         x_j = pre_norm(x_j)
 
         # Augmentation
-        x_i = tfms(x_i).unsqueeze(1)
-        x_j = tfms(x_j).unsqueeze(1)
+        x_i = x_i.unsqueeze(1) #tfms(x_i).unsqueeze(1)
+        x_j = x_j.unsqueeze(1) #tfms(x_j).unsqueeze(1)
 
         p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
         loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
