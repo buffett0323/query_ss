@@ -77,6 +77,7 @@ def main():
         data_dir=args.seg_dir,
         split="test",
         stem="other",
+        eval_mode=True,
     )
 
     memory_loader = torch.utils.data.DataLoader(
