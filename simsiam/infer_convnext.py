@@ -145,9 +145,9 @@ def validate(memory_loader, test_loader, model, device, args, to_spec, pre_norm)
                 for i in range(len(test_path)):
                     test_sample_path = test_path[i]
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
-                    f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, "other_seg_0.npy")}\n")
+                    f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, 'other_seg_0.npy')}\n")
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
-                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, "other_seg_0.npy")}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
                     f.write("\n")
 
                 print(f"Test sample: {test_sample_path}")
