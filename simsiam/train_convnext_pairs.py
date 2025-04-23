@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def main():
     parser = argparse.ArgumentParser(description="SimSiam Single GPU")
 
-    config = yaml_config_hook("config/ssbp_convnext.yaml")
+    config = yaml_config_hook("config/ssbp_convnext_pairs.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
@@ -228,8 +228,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
 
 
     elif args.train_mode == "aug+sel":
-        losses_pair1 = AverageMeter('Loss1', ':.4f')
-        losses_pair2 = AverageMeter('Loss2', ':.4f')
+        losses_pair1 = AverageMeter('Loss-Sel', ':.4f')
+        losses_pair2 = AverageMeter('Loss-Aug', ':.4f')
         progress = ProgressMeter(
             len(train_loader), 
             [batch_time, data_time, losses_pair1, losses_pair2], 
@@ -276,14 +276,18 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
             p1, p2, z1, z2 = model(x1=x_1, x2=x_2)  
             loss_pair1 = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
             
+            z1_std1 = F.normalize(z1, dim=1).std(dim=0).mean()
+            z2_std1 = F.normalize(z2, dim=1).std(dim=0).mean()
+            
             # Pair 2: Same segment but different augmentation
             p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
             loss_pair2 = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
 
+            z1_std2 = F.normalize(z1, dim=1).std(dim=0).mean()
+            z2_std2 = F.normalize(z2, dim=1).std(dim=0).mean()
+            
             # Calculate Avg_std_train
-            z1_std = F.normalize(z1, dim=1).std(dim=0).mean()
-            z2_std = F.normalize(z2, dim=1).std(dim=0).mean()
-            avg_std = (z1_std + z2_std) / 2
+            avg_std = (z1_std1 + z2_std1 + z1_std2 + z2_std2) / 4
 
             losses_pair1.update(loss_pair1.item(), x_1.size(0))
             losses_pair2.update(loss_pair2.item(), x_i.size(0))

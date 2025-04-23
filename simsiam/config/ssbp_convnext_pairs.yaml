@@ -3,17 +3,16 @@ segment_second: 0.95
 piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "ConvNeXt-Base + Aug + w/o SeqPert"
+wandb_name: "ConvNeXt-Base + 2-pairs(aug+sel) + w/o SeqPert"
 wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Time shift -> Time mask -> Pitch shift -> Time stretch, lr:1e-3"
-train_mode: "augmentation" # "aug+sel"
+train_mode: "aug+sel"
 
 
 # distributed training
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
 seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy"
 # data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
-model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0423"
-model_lincls_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_lincls_model_dict_0423"
+model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_2pairs_0423"
+model_lincls_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_lincls_model_dict_2pairs_0423"
 # model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
 workers: 24 # 24 for terra, 56 for fatcat
 gpu: 1 #[1, 3] #[0,1,2,3]

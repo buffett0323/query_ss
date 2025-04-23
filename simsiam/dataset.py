@@ -45,6 +45,7 @@ class SegmentBPDataset(Dataset):
         split="train",
         stem="other", #["vocals", "bass", "drums", "other"], # VBDO
         eval_mode=False,
+        train_mode="augmentation", # "aug+sel"
         sample_rate=16000,
         p_ts=0.5,
         p_ps=0.5, # 0.4
@@ -67,6 +68,7 @@ class SegmentBPDataset(Dataset):
         self.stem = stem
         self.eval_mode = eval_mode
         self.sample_rate = sample_rate
+        self.train_mode = train_mode
         
         # Augmentation
         self.augment = Compose([
@@ -102,24 +104,26 @@ class SegmentBPDataset(Dataset):
         if not self.eval_mode:
             segment_count = self.seg_counter[song_name]
             
-            idx = random.randint(0, segment_count-1)
-            x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
-            x_i = self.augment(x, sample_rate=self.sample_rate)
-            x_j = self.augment(x, sample_rate=self.sample_rate)
-            return torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
+            if self.train_mode == "augmentation":
+                idx = random.randint(0, segment_count-1)
+                x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
+                x_i = self.augment(x, sample_rate=self.sample_rate)
+                x_j = self.augment(x, sample_rate=self.sample_rate)
+                return torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
             
-            # # Pair 1: No Augmentation but different segment
-            # # Randomly select two different segment indices
-            # idx1, idx2 = random.sample(range(segment_count), 2)
-            # x_1 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy")) #, mmap_mode='r')
-            # x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
-            
-            # # Pair 2: Augmentation
-            # x_i = self.augment(x_1, sample_rate=self.sample_rate)
-            # x_j = self.augment(x_1, sample_rate=self.sample_rate)
-            
-            # return torch.from_numpy(x_1), torch.from_numpy(x_2), \
-            #     torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
+            elif self.train_mode == "aug+sel":
+                # Pair 1: No Augmentation but different segment
+                # Randomly select two different segment indices
+                idx1, idx2 = random.sample(range(segment_count), 2)
+                x_1 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy")) #, mmap_mode='r')
+                x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
+                
+                # Pair 2: Augmentation
+                x_i = self.augment(x_1, sample_rate=self.sample_rate)
+                x_j = self.augment(x_1, sample_rate=self.sample_rate)
+                
+                return torch.from_numpy(x_1), torch.from_numpy(x_2), \
+                    torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
         
         else:
             # Load audio data from .npy from index 0
@@ -837,7 +841,7 @@ class MixedBPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_convnext.yaml")
+    config = yaml_config_hook("config/ssbp_convnext_pairs.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -848,6 +852,15 @@ if __name__ == "__main__":
         split="train",
         stem="other",
         eval_mode=False,
+        train_mode=args.train_mode,
+        p_ts=args.p_ts,
+        p_ps=args.p_ps,
+        p_tm=args.p_tm,
+        p_tstr=args.p_tstr,
+        semitone_range=args.semitone_range,
+        tm_min_band_part=args.tm_min_band_part,
+        tm_max_band_part=args.tm_max_band_part,
+        tm_fade=args.tm_fade,
     )
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -889,20 +902,14 @@ if __name__ == "__main__":
     # os.makedirs(output_dir, exist_ok=True)
     
     
-    for i, (x_i, x_j, _) in enumerate(train_loader):
+    for i, (x_1, x_2, x_i, x_j, _) in enumerate(train_loader):
 
+        x_1 = x_1.to(device)
+        x_2 = x_2.to(device)
         x_i = x_i.to(device)
         x_j = x_j.to(device)
         
-        spec_i = tf_mask(to_spec(x_i))
-        spec_j = tf_mask(to_spec(x_j))
-
-        x_i = (spec_i + torch.finfo().eps).log()
-        x_j = (spec_j + torch.finfo().eps).log()
-
-        x_i = pre_norm(x_i)
-        x_j = pre_norm(x_j)
-
+        print(x_1.shape, x_2.shape, x_i.shape, x_j.shape)
         if i >= 5: break
         
         
