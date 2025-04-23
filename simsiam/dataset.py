@@ -102,18 +102,24 @@ class SegmentBPDataset(Dataset):
         if not self.eval_mode:
             segment_count = self.seg_counter[song_name]
             
-            # Pair 1: No Augmentation but different segment
-            # Randomly select two different segment indices
-            idx1, idx2 = random.sample(range(segment_count), 2)
-            x_1 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy")) #, mmap_mode='r')
-            x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
+            idx = random.randint(0, segment_count-1)
+            x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
+            x_i = self.augment(x, sample_rate=self.sample_rate)
+            x_j = self.augment(x, sample_rate=self.sample_rate)
+            return torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
             
-            # Pair 2: Augmentation
-            x_i = self.augment(x_1, sample_rate=self.sample_rate)
-            x_j = self.augment(x_1, sample_rate=self.sample_rate)
+            # # Pair 1: No Augmentation but different segment
+            # # Randomly select two different segment indices
+            # idx1, idx2 = random.sample(range(segment_count), 2)
+            # x_1 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy")) #, mmap_mode='r')
+            # x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
             
-            return torch.from_numpy(x_1), torch.from_numpy(x_2), \
-                torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
+            # # Pair 2: Augmentation
+            # x_i = self.augment(x_1, sample_rate=self.sample_rate)
+            # x_j = self.augment(x_1, sample_rate=self.sample_rate)
+            
+            # return torch.from_numpy(x_1), torch.from_numpy(x_2), \
+            #     torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
         
         else:
             # Load audio data from .npy from index 0
@@ -836,7 +842,7 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     train_dataset = SegmentBPDataset(
         data_dir=args.seg_dir,
         split="train",
