@@ -90,27 +90,29 @@ class SpecAugment(nn.Module):
         device = mel_batch.device
         out = mel_batch.clone()
 
-        # Step 1: Time warp (per sample)
-        if random.random() <= self.p_time_warp:
-            for i in range(B):
-                out[i] = self.time_warp(out[i])
+        # # Step 1: Time warp (per sample)
+        # TODO: Add time warp, due to implement issues, we skip this step
+        # if random.random() <= self.p_time_warp:
+        #     for i in range(B):
+        #         out[i] = self.time_warp(out[i])
 
-        # Step 2: Frequency masking
-        for _ in range(self.frequency_mask_num):
-            if random.random() <= self.p_mask:
-                f = random.randint(0, self.frequency_masking_para)
-                f0s = torch.randint(0, F - f, (B,), device=device)
-                for i in range(B):
-                    out[i, f0s[i]:f0s[i] + f, :] = 0
+        # # Step 2: Frequency masking
+        # TODO: Remove this since it might affect timbre learning
+        # if random.random() <= self.p_mask:
+        #     for _ in range(self.frequency_mask_num):
+        #         f = random.randint(0, self.frequency_masking_para)
+        #         f0s = torch.randint(0, F - f, (B,), device=device)
+        #         for i in range(B):
+        #             out[i, f0s[i]:f0s[i] + f, :] = 0
 
         # Step 3: Time masking
-        for _ in range(self.time_mask_num):
-            if random.random() <= self.p_mask:
+        if random.random() <= self.p_mask:
+            for _ in range(self.time_mask_num):
                 t = random.randint(0, self.time_masking_para)
                 t0s = torch.randint(0, T - t, (B,), device=device)
                 for i in range(B):
                     out[i, :, t0s[i]:t0s[i] + t] = 0
-
+        
         return out
 
 

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch
 import torchaudio
 import torchaudio.functional as AF
-import torchaudio.transforms as AT
+import torchaudio.transforms as T
 import pytorch_lightning as pl
 import torch.nn as nn
 import numpy as np
@@ -14,6 +14,8 @@ import logging
 import nnAudio.features
 from pathlib import Path
     
+from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
+from spec_aug.spec_augment_pytorch import SpecAugment
 
 
 
@@ -135,7 +137,7 @@ class SequencePerturbation(torch.nn.Module):
         return f"{self.__class__.__name__}(method={self.method}, kwargs={self.kwargs})"
 
 
-
+# Pre-norm
 class PrecomputedNorm(nn.Module):
     """Normalization using Pre-computed Mean/Std.
 
@@ -154,3 +156,138 @@ class PrecomputedNorm(nn.Module):
     def __repr__(self):
         format_string = self.__class__.__name__ + f'(mean={self.mean}, std={self.std})'
         return format_string
+    
+    
+# Post-norm
+class NormalizeBatch(nn.Module):
+    """Normalization of Input Batch.
+
+    Note:
+        Unlike other blocks, use this with *batch inputs*.
+
+    Args:
+        axis: Axis setting used to calculate mean/variance.
+    """
+
+    def __init__(self, axis=[0, 2, 3]):
+        super().__init__()
+        self.axis = axis
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        _mean = X.mean(dim=self.axis, keepdims=True)
+        _std = torch.clamp(X.std(dim=self.axis, keepdims=True), torch.finfo().eps, torch.finfo().max)
+        return ((X - _mean) / _std)
+
+    def __repr__(self):
+        format_string = self.__class__.__name__ + f'(axis={self.axis})'
+        return format_string
+    
+
+# ------------------------------------------------------------
+class Time_Freq_Masking(nn.Module):
+    def __init__(
+        self, 
+        p_mask=0.5,
+    ):
+        super(Time_Freq_Masking, self).__init__()
+        self.p_mask = p_mask
+        
+    def __call__(self, x):
+        """
+        Input: x shape: [B, F, T]
+        """
+
+        # freq_mask_num = random.randint(1, 3) # (1, 5)
+        # freq_masking_para = random.randint(1, 5) # (5, 30)
+        time_mask_num = random.randint(1, 5) # (1, 10)
+        time_masking_para = random.randint(1, 10) # (5, 30)
+        
+        spec_augment = SpecAugment(
+            # time_warping_para=0,
+            # frequency_masking_para=freq_mask_num,
+            # frequency_mask_num=freq_masking_para,
+            time_masking_para=time_mask_num,
+            time_mask_num=time_masking_para,
+            p_mask=self.p_mask,
+        ).to(x.device)
+        
+        x = spec_augment(x)
+        return x
+    
+        
+
+class Transform_Pipeline(nn.Module):
+    def __init__(
+        self, 
+        sample_rate, 
+        n_fft, 
+        hop_length, 
+        n_mels, 
+        fmax, 
+        img_size, 
+        img_mean, 
+        img_std, 
+        device=torch.device("cuda"),
+        p_time_warp=0.4,
+        p_mask=0.5,
+    ):
+        super(Transform_Pipeline, self).__init__()
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.n_mels = n_mels
+        self.fmax = fmax
+        self.img_size = img_size
+        self.img_mean = img_mean
+        self.img_std = img_std
+        self.device = device
+        self.p_time_warp = p_time_warp
+        self.p_mask = p_mask
+        
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=self.sample_rate,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            n_mels=self.n_mels,
+            f_max=self.fmax,
+        ).to(device)
+
+        self.db_transform = T.AmplitudeToDB().to(device)
+        
+
+    def mel_spec_transform(self, x):
+        x = self.mel_transform(x)
+        x = self.db_transform(x)
+        return x
+    
+    def __call__(self, x):
+        x = self.mel_spec_transform(x) #.unsqueeze(0)
+       
+        # Added mel spec augmentation
+        time_warping_para = random.randint(1, 10) # (0, 10)
+        freq_mask_num = random.randint(1, 3) # (1, 5)
+        time_mask_num = random.randint(1, 5) # (1, 10)
+        freq_masking_para = random.randint(5, 15) # (5, 30)
+        time_masking_para = random.randint(5, 15) # (5, 30)
+        
+        spec_augment = SpecAugment(
+            time_warping_para=time_warping_para,
+            frequency_masking_para=freq_mask_num,
+            time_masking_para=time_mask_num,
+            frequency_mask_num=freq_masking_para,
+            time_mask_num=time_masking_para,
+            p_time_warp=self.p_time_warp,
+            p_mask=self.p_mask,
+        ).to(self.device)
+        
+        x = spec_augment(x)
+        x = x.unsqueeze(1)
+        
+        x = F.interpolate(
+            x, 
+            size=(self.img_size, self.img_size), 
+            mode='bilinear', 
+            align_corners=False
+        )  # x shape: [B, 1, img_size, img_size]
+        return (x - self.img_mean) / self.img_std
+    

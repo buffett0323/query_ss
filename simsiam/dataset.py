@@ -30,9 +30,10 @@ from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, 
 
 from transforms import CLARTransform, RandomFrequencyMasking
 from utils import yaml_config_hook, plot_and_save_logmel_spectrogram, plot_mel_spectrogram_librosa, plot_spec_and_save, resize_spec
-from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
+from augmentation import SequencePerturbation, PrecomputedNorm, Time_Freq_Masking, Transform_Pipeline
 from spec_aug.spec_augment_pytorch import SpecAugment
-from augmentation import SequencePerturbation, PrecomputedNorm
+from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
+
 
 
 # Beatport Dataset
@@ -44,6 +45,17 @@ class SegmentBPDataset(Dataset):
         split="train",
         stem="other", #["vocals", "bass", "drums", "other"], # VBDO
         eval_mode=False,
+        sample_rate=16000,
+        p_ts=0.5,
+        p_ps=0.5, # 0.4
+        p_tm=0.5,
+        p_tstr=0.5,
+        semitone_range=[-2, 2], #[-4, 4],
+        tm_min_band_part=0.1,
+        tm_max_band_part=0.15,
+        tm_fade=True,
+        tstr_min_rate=0.8,
+        tstr_max_rate=1.25,
     ):
         # Load segment info list
         with open(f"info/{split}_seg_counter.json", "r") as f:
@@ -54,29 +66,57 @@ class SegmentBPDataset(Dataset):
         self.split = split
         self.stem = stem
         self.eval_mode = eval_mode
+        self.sample_rate = sample_rate
+        
+        # Augmentation
+        self.augment = Compose([
+            Shift(
+                p=p_ts
+            ), # Time shift: Shift the samples forwards or backwards, with rollover
+            TimeMask(
+                min_band_part=tm_min_band_part,
+                max_band_part=tm_max_band_part,
+                fade=tm_fade,
+                p=p_tm,
+            ), # Make a randomly chosen part of the audio silent.
+            PitchShift(
+                min_semitones=semitone_range[0], 
+                max_semitones=semitone_range[1], 
+                p=p_ps
+            ), # Pitch Shift # S3T settings: Pitch shift the sound up or down without changing the tempo.
+            TimeStretch(
+                min_rate=tstr_min_rate,
+                max_rate=tstr_max_rate,
+                p=p_tstr,
+            ), # Time Stretch: Stretch the audio in time without changing the pitch.
+        ])
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.bp_listdir)
     
 
     def __getitem__(self, idx):
+        # Load audio data from .npy
+        song_name = self.bp_listdir[idx]
+        
         if not self.eval_mode:
-            # Load audio data from .npy
-            song_name = self.bp_listdir[idx]
-            segment_count =self.seg_counter[song_name]
+            segment_count = self.seg_counter[song_name]
             
+            # Pair 1: No Augmentation but different segment
             # Randomly select two different segment indices
             idx1, idx2 = random.sample(range(segment_count), 2)
-
-            # Load two segments
-            x_i = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy"), mmap_mode='r')
-            x_j = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy"), mmap_mode='r')
+            x_1 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy")) #, mmap_mode='r')
+            x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
             
-            return torch.from_numpy(x_i.copy()), torch.from_numpy(x_j.copy()), song_name
+            # Pair 2: Augmentation
+            x_i = self.augment(x_1, sample_rate=self.sample_rate)
+            x_j = self.augment(x_1, sample_rate=self.sample_rate)
+            
+            return torch.from_numpy(x_1), torch.from_numpy(x_2), \
+                torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
         
         else:
             # Load audio data from .npy from index 0
-            song_name = self.bp_listdir[idx]
             x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_0.npy"), mmap_mode='r')
             return torch.from_numpy(x.copy()), song_name
 
@@ -786,82 +826,6 @@ class MixedBPDataModule(LightningDataModule):
         return len(self.train_dataset)
 
 
-
-
-class Transform_Pipeline(nn.Module):
-    def __init__(
-        self, 
-        sample_rate, 
-        n_fft, 
-        hop_length, 
-        n_mels, 
-        fmax, 
-        img_size, 
-        img_mean, 
-        img_std, 
-        device=torch.device("cuda"),
-        p_time_warp=0.4,
-        p_mask=0.5,
-    ):
-        super(Transform_Pipeline, self).__init__()
-        self.sample_rate = sample_rate
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.n_mels = n_mels
-        self.fmax = fmax
-        self.img_size = img_size
-        self.img_mean = img_mean
-        self.img_std = img_std
-        self.device = device
-        self.p_time_warp = p_time_warp
-        self.p_mask = p_mask
-        
-        self.mel_transform = T.MelSpectrogram(
-            sample_rate=self.sample_rate,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            n_mels=self.n_mels,
-            f_max=self.fmax,
-        ).to(device)
-
-        self.db_transform = T.AmplitudeToDB().to(device)
-        
-
-    def mel_spec_transform(self, x):
-        x = self.mel_transform(x)
-        x = self.db_transform(x)
-        return x
-    
-    def __call__(self, x):
-        x = self.mel_spec_transform(x) #.unsqueeze(0)
-       
-        # Added mel spec augmentation
-        time_warping_para = random.randint(1, 10) # (0, 10)
-        freq_mask_num = random.randint(1, 3) # (1, 5)
-        time_mask_num = random.randint(1, 5) # (1, 10)
-        freq_masking_para = random.randint(5, 15) # (5, 30)
-        time_masking_para = random.randint(5, 15) # (5, 30)
-        
-        spec_augment = SpecAugment(
-            time_warping_para=time_warping_para,
-            frequency_masking_para=freq_mask_num,
-            time_masking_para=time_mask_num,
-            frequency_mask_num=freq_masking_para,
-            time_mask_num=time_masking_para,
-            p_time_warp=self.p_time_warp,
-            p_mask=self.p_mask,
-        ).to(self.device)
-        
-        x = spec_augment(x)
-        x = x.unsqueeze(1)
-        
-        x = F.interpolate(
-            x, 
-            size=(self.img_size, self.img_size), 
-            mode='bilinear', 
-            align_corners=False
-        )  # x shape: [B, 1, img_size, img_size]
-        return (x - self.img_mean) / self.img_std
     
 
 if __name__ == "__main__":    
@@ -877,16 +841,13 @@ if __name__ == "__main__":
         data_dir=args.seg_dir,
         split="train",
         stem="other",
+        eval_mode=False,
     )
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=16, #args.batch_size,
         shuffle=True,
         num_workers=args.workers,
-        pin_memory=args.pin_memory,
-        drop_last=args.drop_last,
-        persistent_workers=args.persistent_workers,
-        prefetch_factor=8, #4,
     )
 
     # MelSpectrogram
@@ -909,43 +870,59 @@ if __name__ == "__main__":
         method=args.sp_method,
         sample_rate=args.sample_rate,
     ).to(device)
+    
+    # Augmentation: Time_Freq_Masking
+    tf_mask = Time_Freq_Masking(
+        p_mask=args.p_mask,
+    ).to(device)
 
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(device)
     
 
-    output_dir = "visualization" 
-    os.makedirs(output_dir, exist_ok=True)
+    # output_dir = "visualization" 
+    # os.makedirs(output_dir, exist_ok=True)
+    
+    
+    for i, (x_i, x_j, _) in enumerate(train_loader):
 
-    for i in range(len(train_dataset)):
-        x_i, x_j, song_name = train_dataset[i]
-        
-        # Move to device
         x_i = x_i.to(device)
         x_j = x_j.to(device)
         
-        # Original transformed spectrograms
-        spec_i = to_spec(x_i)
-        spec_j = to_spec(x_j)
-        plot_mel_spectrogram_librosa(spec_i, output_dir, song_name, stage="orig_1")
-        plot_mel_spectrogram_librosa(spec_j, output_dir, song_name, stage="orig_2")
-        
-        x_i_transformed = (spec_i + torch.finfo().eps).log()
-        x_j_transformed = (spec_j + torch.finfo().eps).log()
+        spec_i = tf_mask(to_spec(x_i))
+        spec_j = tf_mask(to_spec(x_j))
 
-        # Plot and save the original transformed spectrograms
-        plot_and_save_logmel_spectrogram(x_i_transformed, x_j_transformed, song_name, output_dir, stage="original")
+        x_i = (spec_i + torch.finfo().eps).log()
+        x_j = (spec_j + torch.finfo().eps).log()
+
+        x_i = pre_norm(x_i)
+        x_j = pre_norm(x_j)
+
+        if i >= 5: break
         
-        # Apply pre-norm and plot normed spectrograms
-        x_i_normed = pre_norm(x_i_transformed)
-        x_j_normed = pre_norm(x_j_transformed)
-        plot_and_save_logmel_spectrogram(x_i_normed, x_j_normed, song_name, output_dir, stage="normed")
         
-        # Apply augmentation and plot augmented spectrograms
-        x_i_aug = tfms(x_i_normed)
-        x_j_aug = tfms(x_j_normed)
-        plot_and_save_logmel_spectrogram(x_i_aug, x_j_aug, song_name, output_dir, stage="augmented")
-    
-        break
+    #     # torchaudio.save(
+    #     #     f"sample_audio/sample_{i}_x.wav",
+    #     #     torch.tensor(x.numpy()).unsqueeze(0),
+    #     #     args.sample_rate
+    #     # )
+    #     # torchaudio.save(
+    #     #     f"sample_audio/sample_{i}_xi.wav",
+    #     #     torch.tensor(x_i.numpy()).unsqueeze(0),
+    #     #     args.sample_rate
+    #     # )
+    #     # torchaudio.save(
+    #     #     f"sample_audio/sample_{i}_xj.wav",
+    #     #     torch.tensor(x_j.numpy()).unsqueeze(0),
+    #     #     args.sample_rate
+    #     # )
+        
+
+        
+        
+        
+        
+        
+        
     # segment_dict = dict()
     # energy_track, eliminated_track = [], []
     

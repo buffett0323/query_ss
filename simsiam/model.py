@@ -101,6 +101,7 @@ class SimSiam(nn.Module):
             )
             prev_dim = self.encoder.head.weight.shape[1]
             print("prev_dim", prev_dim)
+            
             # **Build a separate 3-layer projector**
             self.encoder.head = nn.Sequential(
                 nn.Linear(prev_dim, prev_dim, bias=False),
