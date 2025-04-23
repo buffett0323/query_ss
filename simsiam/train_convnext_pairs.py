@@ -299,7 +299,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
 
             batch_time.update(time.time() - end)
             end = time.time()
-            total_loss = loss_pair1.item() + loss_pair2.item()
+            total_loss = (loss_pair1.item() + loss_pair2.item()) / 2
 
             if i % args.print_freq == 0:
                 progress.display(i)
