@@ -138,7 +138,10 @@ def main():
     print(f"Training for {args.epochs} epochs in '{args.train_mode}' mode")
     
     for epoch in range(args.start_epoch, args.epochs):
+        # Adjust learning rate
         adjust_learning_rate(optimizer, init_lr, epoch, args)
+        
+        # Training
         train_loss = train(train_loader, model, criterion, optimizer, epoch, 
                            args, to_spec, seq_pert, pre_norm, post_norm)
 
@@ -146,11 +149,12 @@ def main():
             wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
 
         if (epoch + 1) % 10 == 0:
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-            }, 
+            save_checkpoint(
+                {
+                    'epoch': epoch + 1,
+                    'state_dict': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                }, 
                 filename=f'checkpoint_{epoch:04d}.pth.tar', 
                 save_dir=args.model_dict_save_path
             )
@@ -300,7 +304,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
 
 
 def adjust_learning_rate(optimizer, init_lr, epoch, args):
-    lr = init_lr * 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
+    """Adjust the learning rate with warm-up for the first 20 epochs."""
+    # Warm-up phase: Linearly increase learning rate from 0 to the base learning rate
+    if epoch < args.warmup_epochs:
+        lr = init_lr * (epoch + 1) / args.warmup_epochs  # Linear warm-up
+    else:
+        # After warm-up, use cosine decay
+        lr = init_lr * 0.5 * (1. + math.cos(math.pi * (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)))
+    
+    # Update learning rate for optimizer
     for param_group in optimizer.param_groups:
         if param_group.get('fix_lr', False):
             param_group['lr'] = init_lr

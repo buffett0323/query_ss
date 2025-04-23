@@ -3,8 +3,8 @@ segment_second: 0.95
 piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "ConvNeXt-Base + Amp_Seg-0.95sec + No SeqPert + Only Augmentation"
-wandb_notes: "SSBP ConvNeXt Training Fatcat training (Only Augmentation)"
+wandb_name: "ConvNeXt-Base + Aug + w/o SeqPert"
+wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Time shift -> Time mask -> Pitch shift -> Time stretch, lr:1e-3"
 train_mode: "augmentation" # "aug+sel"
 
 
@@ -26,6 +26,7 @@ start_epoch: 0
 epochs: 500 # 200
 lr: 0.001 # 0.05 #0.001
 momentum: 0.9
+warmup_epochs: 20 # 10
 dim: 2048
 pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
