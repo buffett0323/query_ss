@@ -59,9 +59,30 @@ class SegmentBPDataset(Dataset):
         tstr_max_rate=1.25,
     ):
         # Load segment info list
-        with open(f"info/{split}_seg_counter.json", "r") as f:
-            self.seg_counter = json.load(f)
-            self.bp_listdir = list(self.seg_counter.keys())
+        if split != "total":
+            with open(f"info/{split}_seg_counter.json", "r") as f:
+                self.seg_counter = json.load(f)
+                self.bp_listdir = list(self.seg_counter.keys())
+        else:
+            with open(f"info/train_seg_counter.json", "r") as f:
+                train_counter = json.load(f)
+                train_listdir = list(train_counter.keys())
+            with open(f"info/valid_seg_counter.json", "r") as f:
+                valid_counter = json.load(f)
+                valid_listdir = list(valid_counter.keys())
+            with open(f"info/test_seg_counter.json", "r") as f:
+                test_counter = json.load(f)
+                test_listdir = list(test_counter.keys())
+            
+            self.bp_listdir = train_listdir + valid_listdir + test_listdir
+            self.seg_counter = {**train_counter, **valid_counter, **test_counter}
+        
+        print(f"Total {len(self.bp_listdir)} songs")
+        
+        if eval_mode:
+            self.label_dict = {song: i for i, song in enumerate(self.bp_listdir)}
+        else:
+            self.label_dict = {}
 
         self.data_dir = data_dir
         self.split = split
@@ -128,7 +149,7 @@ class SegmentBPDataset(Dataset):
         else:
             # Load audio data from .npy from index 0
             x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_0.npy"), mmap_mode='r')
-            return torch.from_numpy(x.copy()), song_name
+            return torch.from_numpy(x.copy()), self.label_dict[song_name], song_name
 
 
 
