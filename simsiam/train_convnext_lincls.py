@@ -16,13 +16,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.optim
+import wandb
 
 from collections import OrderedDict
 from utils import yaml_config_hook, AverageMeter
 from model import SimSiam
 from augmentation import PrecomputedNorm, NormalizeBatch
 from dataset import SegmentBPDataset
-
+from tqdm import tqdm
 
 
 class LinearClassifier(nn.Module):
@@ -36,16 +37,18 @@ class LinearClassifier(nn.Module):
 
 
 # Training loop for the linear classifier
-def train_linear_classifier(epoch, lin_cls, train_loader, device, to_spec, pre_norm, post_norm, model, criterion, optimizer):
+def train_linear_classifier(lin_cls, train_loader, device, to_spec, pre_norm, post_norm, model, criterion, optimizer):
     lin_cls.train()  # Set classifier to training mode
     total = 0
     correct = 0
     losses = []
     
-    for x, labels in train_loader:
+    for x, labels, _ in train_loader: #tqdm(train_loader, desc="Train Loader"):
         optimizer.zero_grad()
         
         x = x.to(device)
+        labels = labels.to(device)
+        
         x = (to_spec(x) + torch.finfo().eps).log()
         x = pre_norm(x).unsqueeze(1)
         x = post_norm(x)
@@ -82,10 +85,19 @@ def main():
         cudnn.deterministic = True
 
     """ Config settings """
-    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args.pretrained = '/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422/checkpoint_0499.pth.tar'
     train_batch_size = 64 # 4096
-    epochs = 1000
+    epochs = 1000 #1000
+    wandb_log = True
+    split = "train"
+    # wandb
+    if wandb_log:
+        wandb.init(
+            project="simsiam_lincls",
+            name=f"convnext_lincls_{split}_0422_ckpt_0499",
+            config=vars(args),
+        )
     
     # build model
     print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
@@ -129,7 +141,7 @@ def main():
     # Dataset settings
     train_dataset = SegmentBPDataset(
         data_dir=args.seg_dir,
-        split="train",
+        split=split,
         stem="other",
         eval_mode=True,
         train_mode=args.train_mode,
@@ -147,19 +159,30 @@ def main():
         num_classes=len(train_dataset.label_dict)
     ).to(device)
     
-    return 
+    
     # Define optimizer and loss function
     optimizer = torch.optim.SGD(lin_cls.parameters(), lr=0.01, momentum=0.9)
     criterion = nn.CrossEntropyLoss()
     
-    
     # Train the classifier
-    for epoch in range(epochs):
+    for epoch in range(epochs): #, desc="Epochs"):
         acc, losses = train_linear_classifier(
-            epoch, lin_cls, train_loader, device, to_spec, 
+            lin_cls, train_loader, device, to_spec, 
             pre_norm, post_norm, model, criterion, optimizer
         )
-        print(f"Epoch {epoch} -- Accuracy: {acc}% -- Loss: {np.mean(losses)}")
+        avg_loss = np.mean(losses)
+        print(f"Epoch {epoch} -- Accuracy: {acc}% -- Loss: {avg_loss}")
+        
+        # Log metrics to wandb
+        if wandb_log:   
+            wandb.log({
+                "epoch": epoch,
+                "accuracy": acc,
+                "loss": avg_loss
+            })
     
+    # Finish wandb run
+    wandb.finish()
+
 if __name__ == '__main__':
     main()
