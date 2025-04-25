@@ -1,14 +1,11 @@
-# Pre-process
-segment_second: 0.95
-piece_second: 4
+# W&B settings
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "ConvNeXt-Base + Aug + w/o SeqPert"
-wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Time shift -> Time mask -> Pitch shift -> Time stretch, lr:1e-3"
-train_mode: "augmentation" # "aug+sel"
+wandb_name: "ConvNeXt-Base + 4 Augs"
+wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Seq Perturb + Reverse 0.8 -> Time mask -> Pitch shift -> Time stretch, lr:5e-2"
 
 
-# distributed training
+# Directory settings
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
 seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy"
 # data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
@@ -16,7 +13,6 @@ model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_mod
 model_lincls_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_lincls_model_dict_0423"
 # model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
 workers: 24 # 24 for terra, 56 for fatcat
-gpu: 1 #[1, 3] #[0,1,2,3]
 
 
 # train options
@@ -27,7 +23,7 @@ epochs: 500 # 200
 lr: 0.05 # 0.05 #0.001
 momentum: 0.9
 warmup_epochs: 20 # 10
-dim: 2048
+dim: 1024 # 2048 # TODO: Try different dimensions
 pred_dim: 512
 resume: '' # path to latest checkpoint (default: none)
 fix_pred_lr: True
@@ -39,6 +35,9 @@ lars: True
 
 
 # dataset options
+train_mode: "augmentation" # "aug+sel"
+segment_second: 0.95
+piece_second: 4
 max_length: 64
 n_fft: 1024 #2048
 hop_length: 160 #320 #512 #1024
@@ -56,14 +55,16 @@ AMP_THRES: 0.5
 fixed_second: 0.3
 num_seq_segments: 5
 p_ts: 0.8 # 0.5 # Sequence Perturbation
-p_ps: 0.5 # 0.4
-p_tm: 0.5
-p_tstr: 0.5
+p_ps: 0.5 # 0.4 # Pitch Shift
+p_tm: 0.5 # 0.5 # Time Mask
+p_tstr: 0.5 # 0.5 # Time Stretch
 tm_min_band_part: 0.05 #0.1
 tm_max_band_part: 0.1 #0.15
 tm_fade: True
-p_mask: 0.5
+p_mask: 0.5 # 0.5 # Time Mask
 semitone_range: [-2, 2] # [-4, 4]
+tstr_min_rate: 0.8
+tstr_max_rate: 1.25
 
 
 # model options

@@ -129,7 +129,8 @@ class SegmentBPDataset(Dataset):
                 x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
                 x_i = self.augment_func(x, sample_rate=self.sample_rate)
                 x_j = self.augment_func(x, sample_rate=self.sample_rate)
-                return torch.from_numpy(x),torch.from_numpy(x_i), torch.from_numpy(x_j), self.label_dict[song_name], song_name
+                return torch.from_numpy(x_i), torch.from_numpy(x_j), \
+                    self.label_dict[song_name], song_name
             
             elif self.train_mode == "aug+sel":
                 # Pair 1: No Augmentation but different segment
@@ -908,33 +909,32 @@ if __name__ == "__main__":
     ).to(device)
 
 
+    for (x_i, x_j, _, _) in train_loader:
+        pass
 
-
-    # output_dir = "visualization" 
-    # os.makedirs(output_dir, exist_ok=True)
-    counter, test_amount = 0, 10
-    for (x, x_i, x_j, _, _) in train_loader:
-        print("Shape check:", x.shape, x_i.shape, x_j.shape)
+    # counter, test_amount = 0, 10
+    # for (x, x_i, x_j, _, _) in train_loader:
+    #     print("Shape check:", x.shape, x_i.shape, x_j.shape)
         
-        for i in range(BATCH_SIZE):
-            torchaudio.save(
-                f"sample_audio/sample_{counter}_x.wav",
-                torch.tensor(x[i].numpy()).unsqueeze(0),
-                args.sample_rate
-            )
-            torchaudio.save(
-                f"sample_audio/sample_{counter}_xi.wav",
-                torch.tensor(x_i[i].numpy()).unsqueeze(0),
-                args.sample_rate
-            )
-            torchaudio.save(
-                f"sample_audio/sample_{counter}_xj.wav",
-                torch.tensor(x_j[i].numpy()).unsqueeze(0),
-                args.sample_rate
-            )
-            counter += 1
-            if counter >= test_amount: break
-        if counter >= test_amount: break
+    #     for i in range(BATCH_SIZE):
+    #         torchaudio.save(
+    #             f"sample_audio/sample_{counter}_x.wav",
+    #             torch.tensor(x[i].numpy()).unsqueeze(0),
+    #             args.sample_rate
+    #         )
+    #         torchaudio.save(
+    #             f"sample_audio/sample_{counter}_xi.wav",
+    #             torch.tensor(x_i[i].numpy()).unsqueeze(0),
+    #             args.sample_rate
+    #         )
+    #         torchaudio.save(
+    #             f"sample_audio/sample_{counter}_xj.wav",
+    #             torch.tensor(x_j[i].numpy()).unsqueeze(0),
+    #             args.sample_rate
+    #         )
+    #         counter += 1
+    #         if counter >= test_amount: break
+    #     if counter >= test_amount: break
 
 
 

@@ -30,7 +30,7 @@ class SeqPerturb_Reverse(BaseWaveformTransform):
         self.method = method
         self.num_segments = num_segments
         self.fixed_second = fixed_second
-        print(f"SeqPerturb_Reverse: {self.method}, {self.num_segments} segments, {self.fixed_second} second")
+        print(f"Sequence Perturbation + Reverse: {self.method}, {self.num_segments} segments, {self.fixed_second} second")
         
 
     def randomize_parameters(self, samples: NDArray[np.float32], sample_rate: int):

@@ -88,6 +88,10 @@ def main():
         stem="other",
         eval_mode=False,
         train_mode=args.train_mode,
+        sample_rate=args.sample_rate,
+        sp_method=args.sp_method,
+        num_seq_segments=args.num_seq_segments,
+        fixed_second=args.fixed_second,
         p_ts=args.p_ts,
         p_ps=args.p_ps,
         p_tm=args.p_tm,
@@ -96,6 +100,8 @@ def main():
         tm_min_band_part=args.tm_min_band_part,
         tm_max_band_part=args.tm_max_band_part,
         tm_fade=args.tm_fade,
+        tstr_min_rate=args.tstr_min_rate,
+        tstr_max_rate=args.tstr_max_rate,
     )
 
     train_loader = torch.utils.data.DataLoader(
@@ -122,20 +128,6 @@ def main():
         power=2,
         verbose=False,
     ).cuda()
-
-
-    """ Augmentations """
-    # Aug1. Time_Freq_Masking
-    # tf_mask = Time_Freq_Masking(
-    #     p_mask=args.p_mask,
-    # ).cuda()
-    
-    # Aug2. SequencePerturbation
-    seq_pert = SequencePerturbation(
-        method=args.sp_method,
-        sample_rate=args.sample_rate,
-    ).cuda()
-    
     
     # Normalization: PrecomputedNorm
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).cuda()
@@ -151,8 +143,8 @@ def main():
         adjust_learning_rate(optimizer, init_lr, epoch, args)
         
         # Training
-        train_loss = train(train_loader, model, criterion, optimizer, epoch, 
-                           args, to_spec, seq_pert, pre_norm, post_norm)
+        train_loss, no_nan_exists = train(train_loader, model, criterion, optimizer, epoch, 
+                           args, to_spec, pre_norm, post_norm)
 
         if args.log_wandb:
             wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
@@ -167,12 +159,15 @@ def main():
                 filename=f'checkpoint_{epoch:04d}.pth.tar', 
                 save_dir=args.model_dict_save_path
             )
-            
+        
+        if not no_nan_exists:
+            print(f"Found NaN in the model at epoch {epoch}")
+            break
 
-def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_pert, pre_norm, post_norm):
+def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_norm, post_norm):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    
+    no_nan_exists = True
     
     if args.train_mode == "augmentation":
         losses = AverageMeter('Loss', ':.4f')
@@ -201,6 +196,23 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
             
             # Forward pass
             p1, p2, z1, z2 = model(x1=paired_inputs[:bs], x2=paired_inputs[bs:])
+            
+            # Check for NaN values in z1 and z2
+            if i % 100 == 0:
+                print("z1:", z1)
+                print("z2:", z2)
+            
+            if torch.isnan(z1).any() or torch.isnan(z2).any():
+                no_nan_exists = False
+                print(f"NaN detected in batch {i}")
+                print("z1 contains NaN:", torch.isnan(z1).any().item())
+                print("z2 contains NaN:", torch.isnan(z2).any().item())
+                # Optional: print the full tensors to see where NaNs occur
+                print("z1:", z1)
+                print("z2:", z2)
+                break
+            
+            # Calculate Loss
             loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
     
             # Calculate Avg_std_train
@@ -223,7 +235,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
                     step = epoch * len(train_loader) + i
                     wandb.log({"train_loss_step": loss.item(), "avg_std_train": avg_std, "step": step})
     
-        return losses.avg
+        return losses.avg, no_nan_exists
 
 
 

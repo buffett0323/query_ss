@@ -64,6 +64,7 @@ class SimSiam(nn.Module):
                 num_classes=dim,  # num_classes = 0 --> self.head = nn.Identity
             )
             prev_dim = self.encoder.num_features
+            print("self.encoder.head", self.encoder.head)
             
             # **Build a separate 3-layer projector**
             self.encoder.head = nn.Sequential(
@@ -103,10 +104,9 @@ class SimSiam(nn.Module):
                 depths=depths,
                 dims=dims,
             )
-            prev_dim = self.encoder.head.weight.shape[1]
-            print("prev_dim", prev_dim)
             
             # **Build a separate 3-layer projector**
+            prev_dim = self.encoder.head.weight.shape[1]; print("prev_dim", prev_dim)
             self.encoder.head = nn.Sequential(
                 nn.Linear(prev_dim, prev_dim, bias=False),
                 nn.BatchNorm1d(prev_dim),
@@ -169,6 +169,10 @@ if __name__ == "__main__":
         stem="other",
         eval_mode=False,
         train_mode=args.train_mode,
+        sample_rate=args.sample_rate,
+        sp_method=args.sp_method,
+        num_seq_segments=args.num_seq_segments,
+        fixed_second=args.fixed_second,
         p_ts=args.p_ts,
         p_ps=args.p_ps,
         p_tm=args.p_tm,
@@ -177,6 +181,8 @@ if __name__ == "__main__":
         tm_min_band_part=args.tm_min_band_part,
         tm_max_band_part=args.tm_max_band_part,
         tm_fade=args.tm_fade,
+        tstr_min_rate=args.tstr_min_rate,
+        tstr_max_rate=args.tstr_max_rate,
     )
     
     train_loader = torch.utils.data.DataLoader(
