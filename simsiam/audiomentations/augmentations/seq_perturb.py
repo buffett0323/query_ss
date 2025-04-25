@@ -72,10 +72,14 @@ class SeqPerturb_Reverse(BaseWaveformTransform):
         segments = list(np.split(x_back, indices_or_sections=self.num_segments, axis=-1))
         
 
-        # Do the random reverse 
-        reverse_id = random.randint(0, self.num_segments-1)
-        reverse = Reverse(p=1)
-        segments[reverse_id] = reverse(segments[reverse_id], sample_rate)
+        # Randomly pick some segments to reverse
+        reverse_amount = random.randint(1, self.num_segments-1)
+        reverse_ids = random.sample(range(self.num_segments), reverse_amount)
+        
+        # Reverse the segments
+        rev_func = Reverse(p=1)
+        for reverse_id in reverse_ids:
+            segments[reverse_id] = rev_func(segments[reverse_id], sample_rate)
         
         # Shuffle the segments
         random.shuffle(segments)

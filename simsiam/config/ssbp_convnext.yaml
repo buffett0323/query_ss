@@ -55,7 +55,7 @@ SAMPLE_RATE: 16000
 AMP_THRES: 0.5
 fixed_second: 0.3
 num_seq_segments: 5
-p_ts: 0.5
+p_ts: 0.8 # 0.5 # Sequence Perturbation
 p_ps: 0.5 # 0.4
 p_tm: 0.5
 p_tstr: 0.5

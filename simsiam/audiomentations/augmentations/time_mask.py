@@ -77,6 +77,9 @@ class TimeMaskBack(BaseWaveformTransform):
                 mask[-fade_length:] = fade_in
 
         new_samples[..., t0 : t0 + t] *= mask
+        if t0 < self.min_mask_start_time * sample_rate:
+            raise ValueError("t0 cannot be less than min_mask_start_time * sample_rate")
+            print("T0 < min_mask_start_time * sample_rate")
         return new_samples
     
     

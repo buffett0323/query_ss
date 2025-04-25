@@ -912,32 +912,31 @@ if __name__ == "__main__":
 
     # output_dir = "visualization" 
     # os.makedirs(output_dir, exist_ok=True)
-    
-    # TODO: Test augmentation results
+    counter, test_amount = 0, 10
     for (x, x_i, x_j, _, _) in train_loader:
         print("Shape check:", x.shape, x_i.shape, x_j.shape)
         
         for i in range(BATCH_SIZE):
-            
-            print("Shape check:", x[i].shape, x_i[i].shape, x_j[i].shape)
             torchaudio.save(
-                f"sample_audio/sample_{i}_x.wav",
+                f"sample_audio/sample_{counter}_x.wav",
                 torch.tensor(x[i].numpy()).unsqueeze(0),
                 args.sample_rate
             )
             torchaudio.save(
-                f"sample_audio/sample_{i}_xi.wav",
+                f"sample_audio/sample_{counter}_xi.wav",
                 torch.tensor(x_i[i].numpy()).unsqueeze(0),
                 args.sample_rate
             )
             torchaudio.save(
-                f"sample_audio/sample_{i}_xj.wav",
+                f"sample_audio/sample_{counter}_xj.wav",
                 torch.tensor(x_j[i].numpy()).unsqueeze(0),
                 args.sample_rate
             )
-        
-            if i >= 5: break
-        break
+            counter += 1
+            if counter >= test_amount: break
+        if counter >= test_amount: break
+
+
 
         
         
