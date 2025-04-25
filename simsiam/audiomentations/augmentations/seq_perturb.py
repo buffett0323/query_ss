@@ -15,8 +15,6 @@ class SeqPerturb_Reverse(BaseWaveformTransform):
     The input is expected to be an audio waveform (samples).
     """
 
-    supports_multichannel = True
-
     def __init__(
         self, 
         method: str = 'fixed', 
