@@ -17,8 +17,7 @@ from pathlib import Path
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
 from spec_aug.spec_augment_pytorch import SpecAugment
 from audiomentations import Compose, SeqPerturb_Reverse, TimeMaskBack
-import audiomentations
-print("Audiomentations:", audiomentations.__file__)
+
 
 class SequencePerturbation(torch.nn.Module):
     def __init__(self, method='random', sample_rate=16000, **kwargs):

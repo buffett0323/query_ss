@@ -34,7 +34,7 @@ from augmentation import SequencePerturbation, PrecomputedNorm, Time_Freq_Maskin
 from spec_aug.spec_augment_pytorch import SpecAugment
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
 import audiomentations
-print("Audiomentations:", audiomentations.__file__) # Check importing my own audiomentations
+print("Audiomentations Loaded in Dataset.py:", audiomentations.__file__) # Check importing my own audiomentations
 
 
 # Beatport Dataset
@@ -129,7 +129,7 @@ class SegmentBPDataset(Dataset):
                 x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
                 x_i = self.augment_func(x, sample_rate=self.sample_rate)
                 x_j = self.augment_func(x, sample_rate=self.sample_rate)
-                return torch.from_numpy(x_i), torch.from_numpy(x_j), self.label_dict[song_name], song_name
+                return torch.from_numpy(x),torch.from_numpy(x_i), torch.from_numpy(x_j), self.label_dict[song_name], song_name
             
             elif self.train_mode == "aug+sel":
                 # Pair 1: No Augmentation but different segment
@@ -865,6 +865,7 @@ if __name__ == "__main__":
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
+    BATCH_SIZE = 4 #16, #args.batch_size,
     args = parser.parse_args()
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     train_dataset = SegmentBPDataset(
@@ -887,7 +888,7 @@ if __name__ == "__main__":
     )
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
-        batch_size=16, #args.batch_size,
+        batch_size=BATCH_SIZE, #16, #args.batch_size,
         shuffle=True,
         num_workers=args.workers,
     )
@@ -913,30 +914,30 @@ if __name__ == "__main__":
     # os.makedirs(output_dir, exist_ok=True)
     
     # TODO: Test augmentation results
-    for i, (x_i, x_j, _, _) in enumerate(train_loader):
-        x_i = x_i.to(device)
-        x_j = x_j.to(device)
+    for (x, x_i, x_j, _, _) in train_loader:
+        print("Shape check:", x.shape, x_i.shape, x_j.shape)
         
-        print(x_i.shape, x_j.shape)
-        if i >= 5: break
+        for i in range(BATCH_SIZE):
+            
+            print("Shape check:", x[i].shape, x_i[i].shape, x_j[i].shape)
+            torchaudio.save(
+                f"sample_audio/sample_{i}_x.wav",
+                torch.tensor(x[i].numpy()).unsqueeze(0),
+                args.sample_rate
+            )
+            torchaudio.save(
+                f"sample_audio/sample_{i}_xi.wav",
+                torch.tensor(x_i[i].numpy()).unsqueeze(0),
+                args.sample_rate
+            )
+            torchaudio.save(
+                f"sample_audio/sample_{i}_xj.wav",
+                torch.tensor(x_j[i].numpy()).unsqueeze(0),
+                args.sample_rate
+            )
         
-        
-        # torchaudio.save(
-        #     f"sample_audio/sample_{i}_x.wav",
-        #     torch.tensor(x.numpy()).unsqueeze(0),
-        #     args.sample_rate
-        # )
-        # torchaudio.save(
-        #     f"sample_audio/sample_{i}_xi.wav",
-        #     torch.tensor(x_i.numpy()).unsqueeze(0),
-        #     args.sample_rate
-        # )
-        # torchaudio.save(
-        #     f"sample_audio/sample_{i}_xj.wav",
-        #     torch.tensor(x_j.numpy()).unsqueeze(0),
-        #     args.sample_rate
-        # )
-        
+            if i >= 5: break
+        break
 
         
         
