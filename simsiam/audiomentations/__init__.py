@@ -41,4 +41,8 @@ from .core.composition import Compose, SpecCompose, OneOf, SomeOf
 from .spec_augmentations.spec_channel_shuffle import SpecChannelShuffle
 from .spec_augmentations.spec_frequency_mask import SpecFrequencyMask
 
+# Buffett added
+from .augmentations.seq_perturb import SeqPerturb_Reverse
+from .augmentations.time_mask import TimeMaskBack
+
 __version__ = "0.40.0"

@@ -26,14 +26,15 @@ from pytorch_lightning import LightningDataModule
 from typing import Optional
 from tqdm import tqdm
 from scipy.stats import entropy
-from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, TimeMask
 
-from transforms import CLARTransform, RandomFrequencyMasking
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, TimeMask, TimeMaskBack, SeqPerturb_Reverse
+from transforms import CLARTransform
 from utils import yaml_config_hook, plot_and_save_logmel_spectrogram, plot_mel_spectrogram_librosa, plot_spec_and_save, resize_spec
 from augmentation import SequencePerturbation, PrecomputedNorm, Time_Freq_Masking, Transform_Pipeline
 from spec_aug.spec_augment_pytorch import SpecAugment
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
-
+import audiomentations
+print("Audiomentations:", audiomentations.__file__) # Check importing my own audiomentations
 
 
 # Beatport Dataset
@@ -47,43 +48,28 @@ class SegmentBPDataset(Dataset):
         eval_mode=False,
         train_mode="augmentation", # "aug+sel"
         sample_rate=16000,
+        sp_method="fixed", # "random", "fixed"
+        num_seq_segments=5,
+        fixed_second=0.3,
         p_ts=0.5,
         p_ps=0.5, # 0.4
         p_tm=0.5,
         p_tstr=0.5,
         semitone_range=[-2, 2], #[-4, 4],
-        tm_min_band_part=0.1,
-        tm_max_band_part=0.15,
+        tm_min_band_part=0.05, #0.1,
+        tm_max_band_part=0.1, #0.15,
         tm_fade=True,
         tstr_min_rate=0.8,
         tstr_max_rate=1.25,
     ):
         # Load segment info list
-        if split != "total":
-            with open(f"info/{split}_seg_counter.json", "r") as f:
-                self.seg_counter = json.load(f)
-                self.bp_listdir = list(self.seg_counter.keys())
-        else:
-            with open(f"info/train_seg_counter.json", "r") as f:
-                train_counter = json.load(f)
-                train_listdir = list(train_counter.keys())
-            with open(f"info/valid_seg_counter.json", "r") as f:
-                valid_counter = json.load(f)
-                valid_listdir = list(valid_counter.keys())
-            with open(f"info/test_seg_counter.json", "r") as f:
-                test_counter = json.load(f)
-                test_listdir = list(test_counter.keys())
-            
-            self.bp_listdir = train_listdir + valid_listdir + test_listdir
-            self.seg_counter = {**train_counter, **valid_counter, **test_counter}
-        
-        print(f"Total {len(self.bp_listdir)} songs")
-        
-        if eval_mode:
-            self.label_dict = {song: i for i, song in enumerate(self.bp_listdir)}
-        else:
-            self.label_dict = {}
 
+        with open(f"info/{split}_seg_counter.json", "r") as f:
+            self.seg_counter = json.load(f)
+            self.bp_listdir = list(self.seg_counter.keys())
+            print(f"{split} Mode: {len(self.bp_listdir)} songs")
+
+        self.label_dict = {song: i for i, song in enumerate(self.bp_listdir)}
         self.data_dir = data_dir
         self.split = split
         self.stem = stem
@@ -92,16 +78,23 @@ class SegmentBPDataset(Dataset):
         self.train_mode = train_mode
         
         # Augmentation
-        self.augment = Compose([
-            Shift(
+        self.pre_augment = Compose([
+            SeqPerturb_Reverse(
+                method=sp_method,
+                num_segments=num_seq_segments,
+                fixed_second=fixed_second,
                 p=p_ts
-            ), # Time shift: Shift the samples forwards or backwards, with rollover
-            TimeMask(
+            ), # Sequence Perturbation + Reverse
+
+            TimeMaskBack(
                 min_band_part=tm_min_band_part,
                 max_band_part=tm_max_band_part,
                 fade=tm_fade,
                 p=p_tm,
+                min_mask_start_time=fixed_second,
             ), # Make a randomly chosen part of the audio silent.
+        ])
+        self.post_augment = Compose([
             PitchShift(
                 min_semitones=semitone_range[0], 
                 max_semitones=semitone_range[1], 
@@ -117,6 +110,12 @@ class SegmentBPDataset(Dataset):
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.bp_listdir)
     
+    
+    def augment_func(self, x, sample_rate):
+        x = self.pre_augment(x, sample_rate=sample_rate)
+        x = self.post_augment(x, sample_rate=sample_rate)
+        return x
+    
 
     def __getitem__(self, idx):
         # Load audio data from .npy
@@ -128,9 +127,9 @@ class SegmentBPDataset(Dataset):
             if self.train_mode == "augmentation":
                 idx = random.randint(0, segment_count-1)
                 x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
-                x_i = self.augment(x, sample_rate=self.sample_rate)
-                x_j = self.augment(x, sample_rate=self.sample_rate)
-                return torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
+                x_i = self.augment_func(x, sample_rate=self.sample_rate)
+                x_j = self.augment_func(x, sample_rate=self.sample_rate)
+                return torch.from_numpy(x_i), torch.from_numpy(x_j), self.label_dict[song_name], song_name
             
             elif self.train_mode == "aug+sel":
                 # Pair 1: No Augmentation but different segment
@@ -140,8 +139,8 @@ class SegmentBPDataset(Dataset):
                 x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
                 
                 # Pair 2: Augmentation
-                x_i = self.augment(x_1, sample_rate=self.sample_rate)
-                x_j = self.augment(x_1, sample_rate=self.sample_rate)
+                x_i = self.post_augment(x_1, sample_rate=self.sample_rate)
+                x_j = self.post_augment(x_1, sample_rate=self.sample_rate)
                 
                 return torch.from_numpy(x_1), torch.from_numpy(x_2), \
                     torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
@@ -862,7 +861,7 @@ class MixedBPDataModule(LightningDataModule):
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
-    config = yaml_config_hook("config/ssbp_convnext_pairs.yaml")
+    config = yaml_config_hook("config/ssbp_convnext.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
@@ -874,6 +873,9 @@ if __name__ == "__main__":
         stem="other",
         eval_mode=False,
         train_mode=args.train_mode,
+        num_seq_segments=args.num_seq_segments,
+        fixed_second=args.fixed_second,
+        sp_method=args.sp_method,
         p_ts=args.p_ts,
         p_ps=args.p_ps,
         p_tm=args.p_tm,
@@ -905,50 +907,35 @@ if __name__ == "__main__":
     ).to(device)
 
 
-    # Augmentation: SequencePerturbation
-    tfms = SequencePerturbation(
-        method=args.sp_method,
-        sample_rate=args.sample_rate,
-    ).to(device)
-    
-    # Augmentation: Time_Freq_Masking
-    tf_mask = Time_Freq_Masking(
-        p_mask=args.p_mask,
-    ).to(device)
 
-    pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(device)
-    
 
     # output_dir = "visualization" 
     # os.makedirs(output_dir, exist_ok=True)
     
-    
-    for i, (x_1, x_2, x_i, x_j, _) in enumerate(train_loader):
-
-        x_1 = x_1.to(device)
-        x_2 = x_2.to(device)
+    # TODO: Test augmentation results
+    for i, (x_i, x_j, _, _) in enumerate(train_loader):
         x_i = x_i.to(device)
         x_j = x_j.to(device)
         
-        print(x_1.shape, x_2.shape, x_i.shape, x_j.shape)
+        print(x_i.shape, x_j.shape)
         if i >= 5: break
         
         
-    #     # torchaudio.save(
-    #     #     f"sample_audio/sample_{i}_x.wav",
-    #     #     torch.tensor(x.numpy()).unsqueeze(0),
-    #     #     args.sample_rate
-    #     # )
-    #     # torchaudio.save(
-    #     #     f"sample_audio/sample_{i}_xi.wav",
-    #     #     torch.tensor(x_i.numpy()).unsqueeze(0),
-    #     #     args.sample_rate
-    #     # )
-    #     # torchaudio.save(
-    #     #     f"sample_audio/sample_{i}_xj.wav",
-    #     #     torch.tensor(x_j.numpy()).unsqueeze(0),
-    #     #     args.sample_rate
-    #     # )
+        # torchaudio.save(
+        #     f"sample_audio/sample_{i}_x.wav",
+        #     torch.tensor(x.numpy()).unsqueeze(0),
+        #     args.sample_rate
+        # )
+        # torchaudio.save(
+        #     f"sample_audio/sample_{i}_xi.wav",
+        #     torch.tensor(x_i.numpy()).unsqueeze(0),
+        #     args.sample_rate
+        # )
+        # torchaudio.save(
+        #     f"sample_audio/sample_{i}_xj.wav",
+        #     torch.tensor(x_j.numpy()).unsqueeze(0),
+        #     args.sample_rate
+        # )
         
 
         

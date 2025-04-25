@@ -181,7 +181,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, seq_p
         model.train()
         end = time.time()
     
-        for i, (x_i, x_j, _) in enumerate(train_loader):
+        for i, (x_i, x_j, _, _) in enumerate(train_loader):
             data_time.update(time.time() - end)
     
             x_i = x_i.cuda(non_blocking=True)

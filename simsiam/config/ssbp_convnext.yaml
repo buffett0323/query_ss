@@ -24,7 +24,7 @@ seed: 42 # sacred handles automatic seeding when passed in the config
 batch_size: 256 #256 
 start_epoch: 0
 epochs: 500 # 200
-lr: 0.001 # 0.05 #0.001
+lr: 0.05 # 0.05 #0.001
 momentum: 0.9
 warmup_epochs: 20 # 10
 dim: 2048
@@ -53,12 +53,14 @@ persistent_workers: True
 SEGMENT_TIME: 0.95
 SAMPLE_RATE: 16000
 AMP_THRES: 0.5
+fixed_second: 0.3
+num_seq_segments: 5
 p_ts: 0.5
 p_ps: 0.5 # 0.4
 p_tm: 0.5
 p_tstr: 0.5
-tm_min_band_part: 0.1
-tm_max_band_part: 0.15
+tm_min_band_part: 0.05 #0.1
+tm_max_band_part: 0.1 #0.15
 tm_fade: True
 p_mask: 0.5
 semitone_range: [-2, 2] # [-4, 4]

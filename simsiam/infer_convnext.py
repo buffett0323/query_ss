@@ -15,9 +15,9 @@ import torchvision.models as models
 import nnAudio.features
 
 from utils import yaml_config_hook
-from dataset import SimpleBPDataset, SegmentBPDataset
+from dataset import SegmentBPDataset
 from model import SimSiam
-from augmentation import PrecomputedNorm
+from augmentation import PrecomputedNorm, NormalizeBatch
 
 
 torch.set_float32_matmul_precision('high')
@@ -56,7 +56,7 @@ def main():
         pred_dim=args.pred_dim,
     ).to(device)
 
-    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422/checkpoint_0199.pth.tar')
+    checkpoint = torch.load('/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0423/checkpoint_0009.pth.tar')
     new_state_dict = OrderedDict()
     for k, v in checkpoint['state_dict'].items():
         new_key = k.replace("module.", "")
@@ -70,14 +70,16 @@ def main():
         data_dir=args.seg_dir,
         split="train",
         stem="other",
-        eval_mode=True,
+        eval_mode=False,
+        train_mode=args.train_mode,
     )
 
     test_dataset = SegmentBPDataset(
         data_dir=args.seg_dir,
         split="test",
         stem="other",
-        eval_mode=True,
+        eval_mode=False,
+        train_mode=args.train_mode,
     )
 
     memory_loader = torch.utils.data.DataLoader(
@@ -85,9 +87,10 @@ def main():
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=64, shuffle=False,
+        test_dataset, batch_size=64, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
+    
     # MelSpectrogram
     to_spec = nnAudio.features.MelSpectrogram(
         sr=args.sample_rate,
@@ -105,54 +108,145 @@ def main():
 
     # Normalization: PrecomputedNorm
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(device)
-    
-    validate(memory_loader, test_loader, model, device, args, to_spec, pre_norm)
+    post_norm = NormalizeBatch().to(device)
 
-def validate(memory_loader, test_loader, model, device, args, to_spec, pre_norm):
+
+    # Validation
     feature_bank, feature_paths = [], []
 
     with torch.no_grad():
-        for x_i, path in tqdm(memory_loader, desc='Feature extracting'):
+        # Training memory loader
+        for x_i, x_j, _, path in tqdm(memory_loader, desc='Training Dataset Feature extracting'):
             x_i = x_i.to(device, non_blocking=True)
+            x_j = x_j.to(device, non_blocking=True)
             
             # Mel-spec transform and normalize
             x_i = (to_spec(x_i) + torch.finfo().eps).log()
+            x_j = (to_spec(x_j) + torch.finfo().eps).log()
+
             x_i = pre_norm(x_i).unsqueeze(1)
+            x_j = pre_norm(x_j).unsqueeze(1)
+
             
-            feature = model.encoder(x_i)
+            # Form a batch and post-normalize it.
+            bs = x_i.shape[0]
+            paired_inputs = torch.cat([x_i, x_j], dim=0)
+            paired_inputs = post_norm(paired_inputs)
+            
+            # Forward pass
+            feature = model.encoder(paired_inputs[:bs])
             feature = F.normalize(feature, dim=1)
+            
             feature_bank.append(feature)
             feature_paths.extend(path)
 
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()  # [D, N]
-        print(f"Feature bank shape: {feature_bank.shape}")
+        print(f"Training Feature bank shape: {feature_bank.shape}")
+        
+        
+        # Testing memory loader
+        feature_bank_test, label_bank_test, feature_paths_test = [], [], []
+        for x_i, x_j, label, path in tqdm(test_loader, desc='Testing Dataset Feature extracting'):
+            x_i = x_i.to(device, non_blocking=True)
+            x_j = x_j.to(device, non_blocking=True)
+            label = label.to(device, non_blocking=True)      
+            
+            # Mel-spec transform and normalize
+            x_i = (to_spec(x_i) + torch.finfo().eps).log()
+            x_j = (to_spec(x_j) + torch.finfo().eps).log()
 
-        test_bar = tqdm(test_loader, desc='KNN Evaluation')
+            x_i = pre_norm(x_i).unsqueeze(1)
+            x_j = pre_norm(x_j).unsqueeze(1)
+            
+            # Form a batch and post-normalize it.
+            bs = x_i.shape[0]
+            paired_inputs = torch.cat([x_i, x_j], dim=0)
+            paired_inputs = post_norm(paired_inputs)
+            
+            # Forward pass
+            feature = model.encoder(paired_inputs[:bs])
+            feature = F.normalize(feature, dim=1)
+            
+            feature_bank_test.append(feature)
+            label_bank_test.append(label)
+            feature_paths_test.extend(path)
+            
+        feature_bank_test = torch.cat(feature_bank_test, dim=0).t().contiguous()  # [D, N]
+        label_bank_test = torch.cat(label_bank_test, dim=0).t().contiguous()  # [D, N]
+        print(f"Testing Feature bank shape: {feature_bank_test.shape}")
+        print(f"Testing Label bank shape: {label_bank_test.shape}")
+        
+        
+        # KNN Evaluation
         with open('info/test_matches_convnext.txt', 'w') as f:
-            for x_i, test_path in test_bar:
+            for x_i, x_j, label, test_path in tqdm(test_loader, desc='KNN Evaluation'):
                 x_i = x_i.to(device, non_blocking=True)
+                x_j = x_j.to(device, non_blocking=True)
                 
                 # Mel-spec transform and normalize
                 x_i = (to_spec(x_i) + torch.finfo().eps).log()
+                x_j = (to_spec(x_j) + torch.finfo().eps).log()
+
                 x_i = pre_norm(x_i).unsqueeze(1)
+                x_j = pre_norm(x_j).unsqueeze(1)
                 
-                feature = model.encoder(x_i)
+                # Form a batch and post-normalize it.
+                bs = x_i.shape[0]
+                paired_inputs = torch.cat([x_i, x_j], dim=0)
+                paired_inputs = post_norm(paired_inputs)
+                
+                # Forward pass
+                feature = model.encoder(paired_inputs[:bs])
                 feature = F.normalize(feature, dim=1)
 
+                """ 
+                1. Storing Training Memory Dataset Knn-similar sounds 
+                """
                 top_k_indices, _ = knn_predict(
                     feature, feature_bank, knn_k=args.knn_k, knn_t=args.knn_t
                 )
-
+                
+                """
+                2. Storing Testing Memory Dataset Knn-similar sounds: 
+                see whether the nearest top 3 are same label, and same sound
+                """
+                top_k_indices_test, _ = knn_predict(
+                    feature, feature_bank_test, knn_k=args.knn_k, knn_t=args.knn_t
+                )
+                
+                # Write to file
                 for i in range(len(test_path)):
                     test_sample_path = test_path[i]
+                    
+                    f.write("-----KNN-Prediction-----\n")
+                    
+                    # For Training
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
                     f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, 'other_seg_0.npy')}\n")
+                    
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
                         f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
                     f.write("\n")
+                    
+                    
+                    # For Testing 
+                    nearest_paths_test = [feature_paths_test[idx] for idx in top_k_indices_test[i].tolist()]
+                    nearest_labels_test = [label_bank_test[idx] for idx in top_k_indices_test[i].tolist()]
 
-                print(f"Test sample: {test_sample_path}")
-                print(f"Top-3 Nearest Paths: {nearest_paths}")
+                    for rank, neighbor_path in enumerate(nearest_paths_test, 1):
+                        f.write(f"python npy2mp3.py --output_mp3 test_target{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
+                    f.write("\n")
+                    
+                    
+                    # Labels
+                    f.write("-----Labels-----\n")
+                    f.write(f"Testing sample label: {label[i]}\n")
+                    for rank, neighbor_label in enumerate(nearest_labels_test, 1):
+                        f.write(f"test_target{rank}: {neighbor_label}\n")
+                    f.write("\n")
+                    
+
+
 
 if __name__ == "__main__":
     main()

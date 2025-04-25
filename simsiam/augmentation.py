@@ -16,8 +16,9 @@ from pathlib import Path
     
 from spec_aug.spec_augment_pytorch import spec_augment, visualization_spectrogram
 from spec_aug.spec_augment_pytorch import SpecAugment
-
-
+from audiomentations import Compose, SeqPerturb_Reverse, TimeMaskBack
+import audiomentations
+print("Audiomentations:", audiomentations.__file__)
 
 class SequencePerturbation(torch.nn.Module):
     def __init__(self, method='random', sample_rate=16000, **kwargs):
@@ -55,9 +56,8 @@ class SequencePerturbation(torch.nn.Module):
         return torch.cat(segments, dim=2)
     
 
-    def fixed_segmentation(self, x):
+    def fixed_segmentation(self, x, num_segments=10):
         C, F, T = x.shape
-        num_segments=10
         segment_length = T // num_segments
         
         # Split the input into segments
@@ -291,3 +291,22 @@ class Transform_Pipeline(nn.Module):
         )  # x shape: [B, 1, img_size, img_size]
         return (x - self.img_mean) / self.img_std
     
+    
+    
+if __name__ == "__main__":
+    
+    sample_rate = 16000
+    seg_second = 0.3
+    piece_second = 0.95
+    
+    transform1 = SeqPerturb_Reverse(method='fixed', num_segments=5, fixed_second=seg_second)
+    transform2 = TimeMaskBack(min_band_part=0.0, max_band_part=0.5, fade=True, p=0.5, min_mask_start_time=0.3)
+    augment = Compose([transform1, transform2])
+    
+    
+    for i in range(10):
+        x = np.random.randn(1, int(sample_rate * piece_second)).astype(np.float32)
+
+        print(x.shape)
+        x = augment(x, 16000)
+        print(x.shape)    
