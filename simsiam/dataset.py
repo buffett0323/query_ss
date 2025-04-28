@@ -910,7 +910,8 @@ if __name__ == "__main__":
 
 
     for (x_i, x_j, _, _) in train_loader:
-        pass
+        print(x_i.shape, x_j.shape)
+        break
 
     # counter, test_amount = 0, 10
     # for (x, x_i, x_j, _, _) in train_loader:
