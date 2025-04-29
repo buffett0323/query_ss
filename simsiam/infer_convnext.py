@@ -46,7 +46,7 @@ def main():
         torch.manual_seed(args.seed)
         cudnn.deterministic = True
 
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # build model
     print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
@@ -70,7 +70,7 @@ def main():
         data_dir=args.seg_dir,
         split="train",
         stem="other",
-        eval_mode=False,
+        eval_mode=True,
         train_mode=args.train_mode,
     )
 
@@ -78,7 +78,7 @@ def main():
         data_dir=args.seg_dir,
         split="test",
         stem="other",
-        eval_mode=False,
+        eval_mode=True,
         train_mode=args.train_mode,
     )
 
@@ -116,25 +116,19 @@ def main():
 
     with torch.no_grad():
         # Training memory loader
-        for x_i, x_j, _, path in tqdm(memory_loader, desc='Training Dataset Feature extracting'):
+        for x_i, _, path in tqdm(memory_loader, desc='Training Dataset Feature extracting'):
             x_i = x_i.to(device, non_blocking=True)
-            x_j = x_j.to(device, non_blocking=True)
             
             # Mel-spec transform and normalize
             x_i = (to_spec(x_i) + torch.finfo().eps).log()
-            x_j = (to_spec(x_j) + torch.finfo().eps).log()
-
             x_i = pre_norm(x_i).unsqueeze(1)
-            x_j = pre_norm(x_j).unsqueeze(1)
-
             
             # Form a batch and post-normalize it.
             bs = x_i.shape[0]
-            paired_inputs = torch.cat([x_i, x_j], dim=0)
-            paired_inputs = post_norm(paired_inputs)
+            paired_inputs = post_norm(x_i)
             
             # Forward pass
-            feature = model.encoder(paired_inputs[:bs])
+            feature = model.encoder(paired_inputs)
             feature = F.normalize(feature, dim=1)
             
             feature_bank.append(feature)
@@ -146,25 +140,20 @@ def main():
         
         # Testing memory loader
         feature_bank_test, label_bank_test, feature_paths_test = [], [], []
-        for x_i, x_j, label, path in tqdm(test_loader, desc='Testing Dataset Feature extracting'):
+        for x_i, label, path in tqdm(test_loader, desc='Testing Dataset Feature extracting'):
             x_i = x_i.to(device, non_blocking=True)
-            x_j = x_j.to(device, non_blocking=True)
             label = label.to(device, non_blocking=True)      
             
             # Mel-spec transform and normalize
             x_i = (to_spec(x_i) + torch.finfo().eps).log()
-            x_j = (to_spec(x_j) + torch.finfo().eps).log()
-
             x_i = pre_norm(x_i).unsqueeze(1)
-            x_j = pre_norm(x_j).unsqueeze(1)
             
             # Form a batch and post-normalize it.
             bs = x_i.shape[0]
-            paired_inputs = torch.cat([x_i, x_j], dim=0)
-            paired_inputs = post_norm(paired_inputs)
+            paired_inputs = post_norm(x_i)
             
             # Forward pass
-            feature = model.encoder(paired_inputs[:bs])
+            feature = model.encoder(paired_inputs)
             feature = F.normalize(feature, dim=1)
             
             feature_bank_test.append(feature)
@@ -178,25 +167,20 @@ def main():
         
         
         # KNN Evaluation
-        with open('info/test_matches_convnext.txt', 'w') as f:
-            for x_i, x_j, label, test_path in tqdm(test_loader, desc='KNN Evaluation'):
+        with open('info/test_matches_convnext_epoch499.txt', 'w') as f:
+            for x_i, label, test_path in tqdm(test_loader, desc='KNN Evaluation'):
                 x_i = x_i.to(device, non_blocking=True)
-                x_j = x_j.to(device, non_blocking=True)
                 
                 # Mel-spec transform and normalize
                 x_i = (to_spec(x_i) + torch.finfo().eps).log()
-                x_j = (to_spec(x_j) + torch.finfo().eps).log()
-
                 x_i = pre_norm(x_i).unsqueeze(1)
-                x_j = pre_norm(x_j).unsqueeze(1)
                 
                 # Form a batch and post-normalize it.
                 bs = x_i.shape[0]
-                paired_inputs = torch.cat([x_i, x_j], dim=0)
-                paired_inputs = post_norm(paired_inputs)
+                paired_inputs = post_norm(x_i)
                 
                 # Forward pass
-                feature = model.encoder(paired_inputs[:bs])
+                feature = model.encoder(paired_inputs)
                 feature = F.normalize(feature, dim=1)
 
                 """ 
@@ -234,7 +218,7 @@ def main():
                     nearest_labels_test = [label_bank_test[idx] for idx in top_k_indices_test[i].tolist()]
 
                     for rank, neighbor_path in enumerate(nearest_paths_test, 1):
-                        f.write(f"python npy2mp3.py --output_mp3 test_target{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 test_top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
                     f.write("\n")
                     
                     

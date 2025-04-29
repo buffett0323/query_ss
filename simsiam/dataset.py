@@ -45,6 +45,7 @@ class SegmentBPDataset(Dataset):
         data_dir,
         split="train",
         stem="other", #["vocals", "bass", "drums", "other"], # VBDO
+        eval_id=0,
         eval_mode=False,
         train_mode="augmentation", # "aug+sel"
         sample_rate=16000,
@@ -74,6 +75,7 @@ class SegmentBPDataset(Dataset):
         self.split = split
         self.stem = stem
         self.eval_mode = eval_mode
+        self.eval_id = eval_id
         self.sample_rate = sample_rate
         self.train_mode = train_mode
         
@@ -148,7 +150,7 @@ class SegmentBPDataset(Dataset):
         
         else:
             # Load audio data from .npy from index 0
-            x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_0.npy"), mmap_mode='r')
+            x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{self.eval_id}.npy"), mmap_mode='r')
             return torch.from_numpy(x.copy()), self.label_dict[song_name], song_name
 
 

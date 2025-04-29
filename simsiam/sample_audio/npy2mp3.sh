@@ -1,8 +1,8 @@
-python npy2mp3.py --output_mp3 target.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/98b0b744-f765-4828-b04b-767d877d7adc_5/other_seg_0.npy
-python npy2mp3.py --output_mp3 top1.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/2860778c-2fc6-4e24-bca7-c8b48f36d30a_4/other_seg_0.npy
-python npy2mp3.py --output_mp3 top2.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/c94f5542-2ae9-424f-9f51-9f89c6d2285a_4/other_seg_0.npy
-python npy2mp3.py --output_mp3 top3.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/8d6ff395-eb32-4358-a73c-0bb91e64d752_1/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_target.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/10f1d6e9-adb8-4a03-a44b-04ecd1675526_3/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_top1.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/f129d28d-ad3c-47d0-83ee-e2b945f037ac_3/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_top2.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/a7ea072f-ab3d-4cec-a57e-9c1ff38a56b4_2/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_top3.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/f6fac443-5a9a-46b1-b3d5-356993f54a2d_2/other_seg_0.npy
 
-python npy2mp3.py --output_mp3 test_target1.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/9043b8ad-25ed-4351-968e-32919925ef08_1/other_seg_0.npy
-python npy2mp3.py --output_mp3 test_target2.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/f846b840-5a2c-4d32-9d88-78dd63fc9422_1/other_seg_0.npy
-python npy2mp3.py --output_mp3 test_target3.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/7edcd457-9f30-4570-8f2c-b30068f0c22c_3/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_test_top1.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/10f1d6e9-adb8-4a03-a44b-04ecd1675526_3/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_test_top2.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/1423fa95-b6d2-4c47-bb94-bd0a33ae655e_1/other_seg_0.npy
+python npy2mp3.py --output_mp3 mem3_test_target.mp3    /mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy/174fc0bf-b06c-4ff0-904a-8556b75c5fed_4/other_seg_0.npy

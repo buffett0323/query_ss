@@ -71,6 +71,37 @@ def train_linear_classifier(lin_cls, train_loader, device, to_spec, pre_norm, po
     return acc, losses
         
 
+def evaluate(lin_cls, eval_loader, device, to_spec, pre_norm, post_norm, model, criterion):
+    lin_cls.eval()  # Set classifier to evaluation mode
+    total = 0
+    correct = 0
+    losses = []
+    
+    with torch.no_grad():
+        for x, labels, _ in eval_loader:
+            x = x.to(device)
+            labels = labels.to(device)
+            
+            x = (to_spec(x) + torch.finfo().eps).log()
+            x = pre_norm(x).unsqueeze(1)
+            x = post_norm(x)
+            
+            features = model.encoder(x)
+            features = F.normalize(features, dim=1)
+            
+            outputs = lin_cls(features)
+            loss = criterion(outputs, labels)
+            losses.append(loss.item())
+            
+            _, predicted = outputs.max(1)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
+            
+    acc = 100. * correct / total
+    avg_loss = np.mean(losses)
+    return acc, avg_loss
+
+
 
 def main():
     parser = argparse.ArgumentParser(description="SimSiam Inference - Single GPU")
@@ -86,16 +117,16 @@ def main():
 
     """ Config settings """
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    args.pretrained = '/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0422/checkpoint_0499.pth.tar'
+    args.pretrained = '/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0423/checkpoint_0199.pth.tar'
     train_batch_size = 64 # 4096
     epochs = 1000 #1000
     wandb_log = True
-    split = "train"
+    split = "test"
     # wandb
     if wandb_log:
         wandb.init(
             project="simsiam_lincls",
-            name=f"convnext_lincls_{split}_0422_ckpt_0499",
+            name=f"convnext_lincls_{split}_0423_ckpt_0199",
             config=vars(args),
         )
     
@@ -146,16 +177,28 @@ def main():
         eval_mode=True,
         train_mode=args.train_mode,
     )
+    
+    eval_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
+        split=split,
+        stem="other",
+        eval_mode=True,
+        train_mode=args.train_mode,
+        eval_id=1,
+    )
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=train_batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
+    eval_loader = torch.utils.data.DataLoader(
+        eval_dataset, batch_size=train_batch_size, shuffle=False,
+        num_workers=args.workers, pin_memory=True)
     
     # Get linear classifier
     print(f"In Linear Classifier, num_classes: {len(train_dataset.label_dict)}")
     lin_cls = LinearClassifier(
-        in_features=2048, 
+        in_features=1024, 
         num_classes=len(train_dataset.label_dict)
     ).to(device)
     
@@ -171,14 +214,29 @@ def main():
             pre_norm, post_norm, model, criterion, optimizer
         )
         avg_loss = np.mean(losses)
-        print(f"Epoch {epoch} -- Accuracy: {acc}% -- Loss: {avg_loss}")
+        print(f"TRAIN -- Epoch {epoch} -- Accuracy: {acc}% -- Loss: {avg_loss}")
+        
+        if epoch % 10 == 0:
+            # evaluate
+            acc, avg_loss = evaluate(
+                lin_cls, eval_loader, device, to_spec, 
+                pre_norm, post_norm, model, criterion
+            )
+            print(f"EVAL -- Epoch {epoch} -- Accuracy: {acc}% -- Loss: {avg_loss}")
+            
+            if wandb_log:   
+                wandb.log({
+                    "epoch": epoch,
+                    "eval_accuracy": acc,
+                    "eval_loss": avg_loss
+                })
         
         # Log metrics to wandb
         if wandb_log:   
             wandb.log({
                 "epoch": epoch,
-                "accuracy": acc,
-                "loss": avg_loss
+                "train_accuracy": acc,
+                "train_loss": avg_loss
             })
     
     # Finish wandb run
