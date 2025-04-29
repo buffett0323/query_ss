@@ -216,21 +216,6 @@ def main():
         avg_loss = np.mean(losses)
         print(f"TRAIN -- Epoch {epoch} -- Accuracy: {acc}% -- Loss: {avg_loss}")
         
-        if epoch % 10 == 0:
-            # evaluate
-            acc, avg_loss = evaluate(
-                lin_cls, eval_loader, device, to_spec, 
-                pre_norm, post_norm, model, criterion
-            )
-            print(f"EVAL -- Epoch {epoch} -- Accuracy: {acc}% -- Loss: {avg_loss}")
-            
-            if wandb_log:   
-                wandb.log({
-                    "epoch": epoch,
-                    "eval_accuracy": acc,
-                    "eval_loss": avg_loss
-                })
-        
         # Log metrics to wandb
         if wandb_log:   
             wandb.log({
@@ -238,6 +223,23 @@ def main():
                 "train_accuracy": acc,
                 "train_loss": avg_loss
             })
+            
+        # Evaluation
+        if epoch % 10 == 0:
+            eval_acc, eval_avg_loss = evaluate(
+                lin_cls, eval_loader, device, to_spec, 
+                pre_norm, post_norm, model, criterion
+            )
+            print(f"EVAL -- Epoch {epoch} -- Accuracy: {eval_acc}% -- Loss: {eval_avg_loss}")
+            
+            if wandb_log:   
+                wandb.log({
+                    "epoch": epoch,
+                    "eval_accuracy": eval_acc,
+                    "eval_loss": eval_avg_loss
+                })
+        
+        
     
     # Finish wandb run
     wandb.finish()
