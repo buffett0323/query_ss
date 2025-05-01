@@ -5,8 +5,8 @@ rave train \
     --name beatport_rave \
     --channels 2 \
     --save_every 10000 \
-    --gpu 3 \
-    --batch 16 \
+    --gpu 1 \
+    --batch 64 \
     --workers 24 \
     # --augment configs/augmentations/compress.gin \
     # --augment configs/augmentations/gain.gin \
