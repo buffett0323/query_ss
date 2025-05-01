@@ -1,0 +1,15 @@
+*pycache*
+*DS_Store
+lightning_logs/
+*.ckpt
+*.ts
+*libtorch*
+*.wav
+*.txt
+runs
+*.npy
+*.yaml
+*.onnx
+__version__*
+PKG-INFO
+.junit-test-report.xml
