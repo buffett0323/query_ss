@@ -212,7 +212,6 @@ def main(argv):
     else:
         gpu = FLAGS.gpu or rave.core.setup_gpu()
 
-    print('selected gpu:', gpu)
 
     accelerator = None
     devices = None
@@ -228,7 +227,8 @@ def main(argv):
         exit()
         accelerator = "mps"
         devices = 1
-
+    print('selected gpu:', gpu, "devices: ", devices)
+    
     callbacks = [
         validation_checkpoint,
         last_checkpoint,

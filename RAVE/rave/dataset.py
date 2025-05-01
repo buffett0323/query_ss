@@ -3,7 +3,6 @@ import logging
 import math
 import os
 import subprocess
-from multiprocessing import Pool, cpu_count
 from random import random
 from typing import Dict, Iterable, Optional, Sequence, Union, Callable
 
@@ -20,6 +19,14 @@ from tqdm import tqdm
 from . import transforms
 from udls import AudioExample as AudioExampleWrapper
 from udls.generated import AudioExample
+from functools import partial
+from multiprocessing import Pool, cpu_count
+
+
+
+def extract_waveform_shape(k: bytes, txn: lmdb.Transaction, audio_key: str = 'waveform') -> int:
+    ae = AudioExample.FromString(txn.get(k))
+    return np.frombuffer(ae.buffers[audio_key].data, dtype=np.int16).shape
 
 
 def get_derivator_integrator(sr: int):
@@ -57,24 +64,16 @@ class AudioDataset(data.Dataset):
         self._keys = None
         self._transforms = transforms
         self._n_channels = n_channels
-        
-
-        def process_key(k):
-            with self.env.begin() as txn:
-                ae = AudioExample.FromString(txn.get(k))
-                return np.frombuffer(ae.buffers['waveform'].data, dtype=np.int16).shape
-
-        lens = []
-        with Pool(cpu_count()) as pool:
-            lens = list(tqdm(
-                pool.imap(process_key, self.keys),
-                total=len(self.keys),
-                desc='Discovering dataset'
-            ))
+        # lens = []
+        # with self.env.begin() as txn:
+        #     for k in tqdm(self.keys, desc='Discovering dataset'):
+        #        ae = AudioExample.FromString(txn.get(k)) 
+        #        lens.append(np.frombuffer(ae.buffers['waveform'].data, dtype=np.int16).shape)
 
 
     def __len__(self):
         return len(self.keys)
+
 
     def __getitem__(self, index):
         with self.env.begin() as txn:
@@ -262,13 +261,7 @@ def get_dataset(db_path,
     transform_list = transforms.Compose(transform_list)
 
     if lazy:
-        return LazyAudioDataset(
-            db_path, 
-            n_signal, 
-            sr_dataset, 
-            transform_list, 
-            n_channels
-        )
+        return LazyAudioDataset(db_path, n_signal, sr_dataset, transform_list, n_channels)
     else:
         return AudioDataset(
             db_path,
