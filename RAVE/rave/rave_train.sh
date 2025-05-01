@@ -5,9 +5,9 @@ rave train \
     --name beatport_rave \
     --channels 2 \
     --save_every 10000 \
-    --gpu 1 \
+    --gpu 3 \
     --batch 16 \
-    --workers 16 \
+    --workers 24 \
     # --augment configs/augmentations/compress.gin \
     # --augment configs/augmentations/gain.gin \
     # --config configs/noise.gin \
