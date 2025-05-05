@@ -6,7 +6,7 @@ rave train \
     --channels 2 \
     --save_every 10000 \
     --gpu 1 \
-    --batch 64 \
+    --batch 32 \
     --workers 24 \
     # --augment configs/augmentations/compress.gin \
     # --augment configs/augmentations/gain.gin \
