@@ -1,3 +1,4 @@
+nvitop
 numpy
 pandas
 tqdm
