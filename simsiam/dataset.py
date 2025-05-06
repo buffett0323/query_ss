@@ -131,6 +131,7 @@ class SegmentBPDataset(Dataset):
                 x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
                 x_i = self.augment_func(x, sample_rate=self.sample_rate)
                 x_j = self.augment_func(x, sample_rate=self.sample_rate)
+                
                 return torch.from_numpy(x_i), torch.from_numpy(x_j), \
                     self.label_dict[song_name], song_name
             

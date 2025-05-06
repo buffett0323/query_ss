@@ -51,5 +51,5 @@ if __name__ == "__main__":
     
     
     # 5. Save the counter
-    with open("info/chorus_audio_16000_095sec_npy_seg_counter.json", "w") as f:
+    with open("../info/chorus_audio_16000_095sec_npy_seg_counter.json", "w") as f:
         json.dump(seg_counter, f, indent=4)
