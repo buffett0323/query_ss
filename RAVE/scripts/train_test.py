@@ -185,8 +185,7 @@ def main(argv):
 
     from tqdm import tqdm
     for batch in tqdm(train):
-        print(batch)
-        break
+        print(batch.shape)
     
     
     # # CHECKPOINT CALLBACKS
