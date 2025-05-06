@@ -14,6 +14,40 @@ from collections import defaultdict
 from tqdm import tqdm
 
 
+def get_top_2_peak_infos(
+    load_path, 
+    segment_duration=0.95, 
+    sample_rate=16000,
+    amp_thres=0.5
+):
+    # Load waveform
+    waveform = np.load(load_path).astype(np.float32)
+   
+    # Pretend out of bounds
+    segment_samples = int(segment_duration*sample_rate)
+    thres = waveform.shape[0] - segment_samples
+    cut_waveform = waveform[:thres]
+
+    # Envelope (amplitude)
+    envelope = np.abs(cut_waveform)
+
+    # Find peaks
+    peaks, _ = scipy.signal.find_peaks(envelope, distance=sample_rate // 20)
+    if len(peaks) == 0: return [] # print("No peaks found.")
+        
+    # Get peak amplitudes
+    peak_amplitudes = envelope[peaks]
+    
+    # Filter peaks above threshold
+    peak_info = []
+    for peak_idx, amp in zip(peaks, peak_amplitudes):
+        if amp >= amp_thres:
+            time_sec = peak_idx / sample_rate
+            peak_info.append((peak_idx, amp, time_sec))
+            
+    return peak_info
+
+
 
 def find_top_2_peak_segments(
     load_path, 
