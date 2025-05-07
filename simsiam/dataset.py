@@ -12,6 +12,9 @@ import argparse
 import scipy.interpolate
 import scipy.stats
 import nnAudio.features
+import lmdb
+import pickle
+
 
 import numpy as np
 import torch.nn as nn
@@ -37,6 +40,23 @@ import audiomentations
 print("Audiomentations Loaded in Dataset.py:", audiomentations.__file__) # Check importing my own audiomentations
 
 
+
+def create_lmdb(data_dir, lmdb_path, map_size=1e12):
+
+    env = lmdb.open(lmdb_path, map_size=map_size)
+    with env.begin(write=True) as txn:
+        for song in tqdm(os.listdir(data_dir)):
+            song_path = os.path.join(data_dir, song)
+            for file in os.listdir(song_path):
+                if file.endswith(".npy"):
+                    arr = np.load(os.path.join(song_path, file))
+                    key = f"{song}/{file}".encode()
+                    txn.put(key, pickle.dumps(arr, protocol=4))
+        
+        print(f"LMDB created at {lmdb_path}")
+
+
+
 # Beatport Dataset
 class SegmentBPDataset(Dataset):
     """ For 4 seconds audio data """
@@ -44,7 +64,7 @@ class SegmentBPDataset(Dataset):
         self,
         data_dir,
         split="train",
-        stem="other", #["vocals", "bass", "drums", "other"], # VBDO
+        stem="bass_other", #["vocals", "bass", "drums", "other"], # VBDO
         eval_id=0,
         eval_mode=False,
         train_mode="augmentation", # "aug+sel"
@@ -62,6 +82,7 @@ class SegmentBPDataset(Dataset):
         tm_fade=True,
         tstr_min_rate=0.8,
         tstr_max_rate=1.25,
+        use_lmdb=False, # True
     ):
         # Load segment info list
 
@@ -78,6 +99,11 @@ class SegmentBPDataset(Dataset):
         self.eval_id = eval_id
         self.sample_rate = sample_rate
         self.train_mode = train_mode
+        self.use_lmdb = use_lmdb
+        
+        # LMDB
+        if self.use_lmdb:
+            self.lmdb_env = lmdb.open(data_dir, readonly=True, lock=False, readahead=False, meminit=False)
         
         # Augmentation
         self.pre_augment = Compose([
@@ -118,6 +144,20 @@ class SegmentBPDataset(Dataset):
         x = self.post_augment(x, sample_rate=sample_rate)
         return x
     
+    
+    def load_segment(self, song_name, seg_idx):
+        if self.use_lmdb:
+            key = f"{song_name}/{self.stem}_seg_{seg_idx}".encode()
+            with self.lmdb_env.begin(write=False) as txn:
+                byte_data = txn.get(key)
+                if byte_data is None:
+                    raise KeyError(f"Key {key} not found in LMDB.")
+                x = pickle.loads(byte_data)
+        else:
+            path = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx}.npy")
+            x = np.load(path, mmap_mode='r').copy()
+        return x
+    
 
     def __getitem__(self, idx):
         # Load audio data from .npy
@@ -127,32 +167,26 @@ class SegmentBPDataset(Dataset):
             segment_count = self.seg_counter[song_name]
             
             if self.train_mode == "augmentation":
-                idx = random.randint(0, segment_count-1)
-                x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx}.npy")) #, mmap_mode='r')
+                seg_idx = random.randint(0, segment_count - 1)
+                x = self.load_segment(song_name, seg_idx)
                 x_i = self.augment_func(x, sample_rate=self.sample_rate)
                 x_j = self.augment_func(x, sample_rate=self.sample_rate)
-                
                 return torch.from_numpy(x_i), torch.from_numpy(x_j), \
                     self.label_dict[song_name], song_name
-            
+
             elif self.train_mode == "aug+sel":
-                # Pair 1: No Augmentation but different segment
-                # Randomly select two different segment indices
                 idx1, idx2 = random.sample(range(segment_count), 2)
-                x_1 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx1}.npy")) #, mmap_mode='r')
-                x_2 = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{idx2}.npy")) #, mmap_mode='r')
-                
-                # Pair 2: Augmentation
+                x_1 = self.load_segment(song_name, idx1)
+                x_2 = self.load_segment(song_name, idx2)
                 x_i = self.post_augment(x_1, sample_rate=self.sample_rate)
                 x_j = self.post_augment(x_1, sample_rate=self.sample_rate)
-                
                 return torch.from_numpy(x_1), torch.from_numpy(x_2), \
                     torch.from_numpy(x_i), torch.from_numpy(x_j), song_name
         
         else:
             # Load audio data from .npy from index 0
-            x = np.load(os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{self.eval_id}.npy"), mmap_mode='r')
-            return torch.from_numpy(x.copy()), self.label_dict[song_name], song_name
+            x = self.load_segment(song_name, self.eval_id)
+            return torch.from_numpy(x), self.label_dict[song_name], song_name
 
 
 
