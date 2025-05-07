@@ -41,20 +41,35 @@ print("Audiomentations Loaded in Dataset.py:", audiomentations.__file__) # Check
 
 
 
-def create_lmdb(data_dir, lmdb_path, map_size=1e12):
-
+def create_lmdb(data_dir, lmdb_path):
+    map_size = 10 * 1024 ** 3
     env = lmdb.open(lmdb_path, map_size=map_size)
-    with env.begin(write=True) as txn:
-        for song in tqdm(os.listdir(data_dir)):
-            song_path = os.path.join(data_dir, song)
-            for file in os.listdir(song_path):
-                if file.endswith(".npy"):
-                    arr = np.load(os.path.join(song_path, file))
-                    key = f"{song}/{file}".encode()
-                    txn.put(key, pickle.dumps(arr, protocol=4))
-        
-        print(f"LMDB created at {lmdb_path}")
+    
+    with open(f"info/chorus_audio_16000_095sec_npy_bass_other_seg_counter.json", "r") as f:
+        seg_counter = json.load(f)
+    
+    # Pre-collect all file paths to avoid nested loops
+    npy_files = []
+    for song, val in tqdm(seg_counter.items(), desc="Processing songs"):
+        npy_files.extend([(song, os.path.join(data_dir, song, f"bass_other_seg_{i}.npy")) 
+                         for i in range(val)])
+    
+    # Batch write to LMDB    
+    batch_size = 1000
+    txn = env.begin(write=True)
 
+    for i, (song, file_path) in enumerate(tqdm(npy_files, desc="Writing to LMDB in batch")):
+        arr = np.load(file_path)
+        key = f"{song}/{os.path.basename(file_path)}".encode()
+        txn.put(key, pickle.dumps(arr, protocol=4))
+        
+        if (i + 1) % batch_size == 0:
+            txn.commit()
+            txn = env.begin(write=True)
+
+    # Final commit
+    txn.commit()
+    print(f"LMDB created at {lmdb_path}")
 
 
 # Beatport Dataset
@@ -905,50 +920,55 @@ if __name__ == "__main__":
 
     BATCH_SIZE = 4 #16, #args.batch_size,
     args = parser.parse_args()
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    train_dataset = SegmentBPDataset(
-        data_dir=args.seg_dir,
-        split="train",
-        stem="other",
-        eval_mode=False,
-        train_mode=args.train_mode,
-        num_seq_segments=args.num_seq_segments,
-        fixed_second=args.fixed_second,
-        sp_method=args.sp_method,
-        p_ts=args.p_ts,
-        p_ps=args.p_ps,
-        p_tm=args.p_tm,
-        p_tstr=args.p_tstr,
-        semitone_range=args.semitone_range,
-        tm_min_band_part=args.tm_min_band_part,
-        tm_max_band_part=args.tm_max_band_part,
-        tm_fade=args.tm_fade,
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE, #16, #args.batch_size,
-        shuffle=True,
-        num_workers=args.workers,
-    )
+    os.makedirs(args.lmdb_dir, exist_ok=True)
+    
+    if args.use_lmdb:
+        create_lmdb(args.seg_dir, args.lmdb_dir)
+    
+    # device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    # train_dataset = SegmentBPDataset(
+    #     data_dir=args.seg_dir,
+    #     split="train",
+    #     stem="other",
+    #     eval_mode=False,
+    #     train_mode=args.train_mode,
+    #     num_seq_segments=args.num_seq_segments,
+    #     fixed_second=args.fixed_second,
+    #     sp_method=args.sp_method,
+    #     p_ts=args.p_ts,
+    #     p_ps=args.p_ps,
+    #     p_tm=args.p_tm,
+    #     p_tstr=args.p_tstr,
+    #     semitone_range=args.semitone_range,
+    #     tm_min_band_part=args.tm_min_band_part,
+    #     tm_max_band_part=args.tm_max_band_part,
+    #     tm_fade=args.tm_fade,
+    # )
+    # train_loader = torch.utils.data.DataLoader(
+    #     train_dataset,
+    #     batch_size=BATCH_SIZE, #16, #args.batch_size,
+    #     shuffle=True,
+    #     num_workers=args.workers,
+    # )
 
-    # MelSpectrogram
-    to_spec = nnAudio.features.MelSpectrogram(
-        sr=args.sample_rate,
-        n_fft=args.n_fft,
-        win_length=args.window_size,
-        hop_length=args.hop_length,
-        n_mels=args.n_mels,
-        fmin=args.fmin,
-        fmax=args.fmax,
-        center=True,
-        power=2,
-        verbose=False,
-    ).to(device)
+    # # MelSpectrogram
+    # to_spec = nnAudio.features.MelSpectrogram(
+    #     sr=args.sample_rate,
+    #     n_fft=args.n_fft,
+    #     win_length=args.window_size,
+    #     hop_length=args.hop_length,
+    #     n_mels=args.n_mels,
+    #     fmin=args.fmin,
+    #     fmax=args.fmax,
+    #     center=True,
+    #     power=2,
+    #     verbose=False,
+    # ).to(device)
 
 
-    for (x_i, x_j, _, _) in train_loader:
-        print(x_i.shape, x_j.shape)
-        break
+    # for (x_i, x_j, _, _) in train_loader:
+    #     print(x_i.shape, x_j.shape)
+    #     break
 
     # counter, test_amount = 0, 10
     # for (x, x_i, x_j, _, _) in train_loader:

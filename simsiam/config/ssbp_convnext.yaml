@@ -7,13 +7,17 @@ wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Seq Perturb +
 
 # Directory settings
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy"
-seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy"
+seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"
 # data_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_npy"
 model_dict_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_model_dict_0423"
 model_lincls_save_path: "/mnt/gestalt/home/buffett/simsiam_model_dict/convnext_lincls_model_dict_0423"
 # model_dict_save_dir: "/home/buffett/dataset/resnet_50_model_dict"
 workers: 24 # 24 for terra, 56 for fatcat
 
+
+# LMDB settings
+lmdb_dir: "/mnt/gestalt/home/buffett/beatport_analyze/lmdb"
+use_lmdb: True
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
