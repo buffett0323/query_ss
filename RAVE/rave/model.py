@@ -297,6 +297,7 @@ class RAVE(pl.LightningModule):
 
         # ENCODE INPUT
         # get multiband in case
+        print("Training step x_raw.shape:", x_raw.shape)
         z, x_multiband = self.encode(x_raw, return_mb=True)
 
         z, reg = self.encoder.reparametrize(z)[:2]

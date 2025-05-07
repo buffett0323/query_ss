@@ -156,36 +156,42 @@ def main(argv):
         )
 
     # create model
-    model = rave.RAVE(n_channels=FLAGS.channels)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = rave.RAVE(n_channels=FLAGS.channels).to(device)
     if FLAGS.derivative:
         model.integrator = rave.dataset.get_derivator_integrator(model.sr)[1]
 
-    # parse datasset
-    print("Getting dataset in path:", FLAGS.db_path)
-    dataset = rave.dataset.get_dataset(FLAGS.db_path,
-                                       model.sr,
-                                       FLAGS.n_signal,
-                                       derivative=FLAGS.derivative,
-                                       normalize=FLAGS.normalize,
-                                       rand_pitch=FLAGS.rand_pitch,
-                                       n_channels=n_channels)
-    train, val = rave.dataset.split_dataset(dataset, 98)
-    print("Finished splitting dataset, with train dataset length:", len(train), "and val dataset length:", len(val))
+    # # parse datasset
+    # print("Getting dataset in path:", FLAGS.db_path)
+    # dataset = rave.dataset.get_dataset(FLAGS.db_path,
+    #                                    model.sr,
+    #                                    FLAGS.n_signal,
+    #                                    derivative=FLAGS.derivative,
+    #                                    normalize=FLAGS.normalize,
+    #                                    rand_pitch=FLAGS.rand_pitch,
+    #                                    n_channels=n_channels)
+    # train, val = rave.dataset.split_dataset(dataset, 98)
+    # print("Finished splitting dataset, with train dataset length:", len(train), "and val dataset length:", len(val))
 
-    # get data-loader
-    num_workers = FLAGS.workers
-    if os.name == "nt" or sys.platform == "darwin":
-        num_workers = 0
-    train = DataLoader(train,
-                       FLAGS.batch,
-                       True,
-                       drop_last=True,
-                       num_workers=num_workers)
-    val = DataLoader(val, FLAGS.batch, False, num_workers=num_workers)
+    # # get data-loader
+    # num_workers = FLAGS.workers
+    # if os.name == "nt" or sys.platform == "darwin":
+    #     num_workers = 0
+    # train = DataLoader(train,
+    #                    FLAGS.batch,
+    #                    True,
+    #                    drop_last=True,
+    #                    num_workers=num_workers)
+    # val = DataLoader(val, FLAGS.batch, False, num_workers=num_workers)
 
-    from tqdm import tqdm
-    for batch in tqdm(train):
-        print(batch.shape)
+    # from tqdm import tqdm
+    # for batch in tqdm(train):
+    #     print(batch.shape)
+    
+    x = torch.randn(8, 1, 44100).to(device)
+    z, x_enc = model.encode(x, return_mb=False)
+    print("z.shape",z.shape)
+    print("x_enc.shape",x_enc.shape)
     
     
     # # CHECKPOINT CALLBACKS
