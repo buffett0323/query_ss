@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.svm import SVC
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from transformers import BertTokenizer, BertModel
 from tqdm import tqdm
 import torch
@@ -55,22 +55,42 @@ if __name__ == "__main__":
     X_test_text = test_data['review'].tolist()
     X_test_vec = np.stack([handle_embedding(doc) for doc in tqdm(X_test_text, desc="Embedding test data")])
 
-    # Train SVM
-    print("Training SVM...")
-    SVM_model = SVC(kernel="linear", C=1, probability=True)
-    SVM_model.fit(X_train_vec, y_train)
-
+    # Train SVM with grid search
+    print("Performing grid search...")
+    param_grid = {
+        'C': [0.1, 1, 10],
+        'kernel': ['linear', 'rbf'],
+        'gamma': ['scale', 'auto', 0.1, 1],
+    }
+    
+    grid_search = GridSearchCV(
+        SVC(probability=True),
+        param_grid,
+        cv=5,
+        scoring='accuracy',
+        n_jobs=-1,
+        verbose=2
+    )
+    
+    grid_search.fit(X_train_vec, y_train)
+    
+    print("Best parameters:", grid_search.best_params_)
+    print("Best cross-validation score:", grid_search.best_score_)
+    
+    # Use best model
+    SVM_model = grid_search.best_estimator_
+    
     # Predict on validation set
     print("Predicting on validation set...")
     predictions = SVM_model.predict(X_val_vec)
     accuracy = sum(1 for x, y in zip(predictions, y_val) if x == y) / len(predictions)
-    print(f"Accuracy: {accuracy}")
+    print(f"Validation Accuracy: {accuracy}")
 
     # Output predictions
     test_predictions = SVM_model.predict(X_test_vec)
     df_output = pd.DataFrame({
         "Id": test_data['id'],
-        "Value": test_predictions
+        "helpfulness": test_predictions
     })
     df_output.to_csv("SVM_linear.csv", index=False)
     print("Saved predictions to SVM_linear.csv")
