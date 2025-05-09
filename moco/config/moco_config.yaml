@@ -1,0 +1,42 @@
+# Dataset settings
+data_dir: ""  # path to dataset (required)
+
+# Model architecture settings
+arch: "resnet50"  # model architecture
+model_names: []  # list of available model names
+
+# Training settings
+workers: 32  # number of data loading workers
+epochs: 200  # number of total epochs to run
+start_epoch: 0  # manual epoch number (useful on restarts)
+batch_size: 256  # mini-batch size
+lr: 0.03  # initial learning rate
+schedule: [120, 160]  # learning rate schedule (when to drop lr by 10x)
+momentum: 0.9  # momentum of SGD solver
+weight_decay: 1e-4  # weight decay
+print_freq: 10  # print frequency
+
+# Checkpoint settings
+resume: ""  # path to latest checkpoint
+
+# Distributed training settings
+world_size: -1  # number of nodes for distributed training
+rank: -1  # node rank for distributed training
+dist_url: "tcp://224.66.41.62:23456"  # url used to set up distributed training
+dist_backend: "nccl"  # distributed backend
+gpu: null  # GPU id to use
+multiprocessing_distributed: false  # Use multi-processing distributed training
+
+# Random seed
+seed: null  # seed for initializing training
+
+# MoCo specific settings
+moco_dim: 128  # feature dimension
+moco_k: 65536  # queue size; number of negative keys
+moco_m: 0.999  # moco momentum of updating key encoder
+moco_t: 0.07  # softmax temperature
+
+# MoCo v2 specific settings
+mlp: false  # use mlp head
+aug_plus: false  # use moco v2 data augmentation
+cos: false  # use cosine lr schedule 
