@@ -1,12 +1,14 @@
 import pandas as pd
+import numpy as np
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
+
+from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformers import BertTokenizer, BertModel
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-
+from matplotlib import pyplot as plt
 
 
 # Custom dataset class
@@ -47,13 +49,17 @@ class ReviewClassifier(nn.Module):
         super().__init__()
         self.bert = bert_model
         self.dropout = nn.Dropout(dropout)
-        self.linear = nn.Linear(768, 2)  # 768 is BERT's hidden size
+        self.final_layer = nn.Sequential(
+            nn.Linear(768, 1),  # 768 is BERT's hidden size
+            nn.Sigmoid()
+        )
         
     def forward(self, input_ids, attention_mask):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs[1]  # Use [CLS] token representation
         dropout_output = self.dropout(pooled_output)
-        return self.linear(dropout_output)
+        return self.final_layer(dropout_output)
+    
 
 
 
@@ -65,11 +71,13 @@ def train_epoch(model, data_loader, optimizer, device):
     for batch in tqdm(data_loader, desc="Training"):
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
-        labels = batch['label'].to(device)
-        
+        labels = batch['label'].unsqueeze(1).float().to(device)
+
+        # model forward
         optimizer.zero_grad()
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-        loss = nn.CrossEntropyLoss()(outputs, labels)
+
+        loss = nn.BCELoss()(outputs, labels)
         loss.backward()
         optimizer.step()
         
@@ -84,41 +92,37 @@ def evaluate(model, data_loader, device):
     model.eval()
     predictions = []
     actual_labels = []
-    total_loss = 0
     
     with torch.no_grad():
-        for batch in tqdm(data_loader, desc="Evaluating"):
+        for batch in data_loader:
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
+            labels = batch['label'].unsqueeze(1).float().to(device)
             
+            # model forward
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            loss = nn.CrossEntropyLoss()(outputs, labels)
-            total_loss += loss.item()
+            preds = (outputs > 0.5).long().squeeze(1)
             
-            _, preds = torch.max(outputs, dim=1)
             predictions.extend(preds.cpu().tolist())
             actual_labels.extend(labels.tolist())
             
-    avg_loss = total_loss / len(data_loader)
-    return predictions, actual_labels, avg_loss
-
+    return predictions, actual_labels
 
 
 
 # Main training loop
 def main():
+   
     # Hyperparameters
     BATCH_SIZE = 16
     NUM_EPOCHS = 100
     LR = 2e-5 # 1e-4
     PATIENCE = 5  # Number of epochs to wait before early stopping
-    TEST_SIZE = 0.2 # 0.2
     
     # 1. Load and preprocess data
     df = pd.read_csv('review_data.csv', header=0, names=['id', 'review', 'helpfulness'])
     X, y = df['review'], df['helpfulness']
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=TEST_SIZE, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.1, random_state=42)
     X_train, X_val = X_train.tolist(), X_val.tolist()
     y_train, y_val = y_train.tolist(), y_val.tolist()
     
@@ -149,26 +153,26 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
     
     # Early stopping setup
-    best_val_loss = float('inf')
+    best_accuracy = 0
     patience_counter = 0
     train_losses = []
     
     
     # 5. Training loop
-    pbar = tqdm(range(NUM_EPOCHS), desc="Epochs")
+    pbar = tqdm(range(NUM_EPOCHS), desc="Training")
     for epoch in pbar:
         train_loss = train_epoch(model, train_loader, optimizer, device)
         train_losses.append(train_loss)
         
-        predictions, actual_labels, val_loss = evaluate(model, valid_loader, device)
+        predictions, actual_labels = evaluate(model, valid_loader, device)
         accuracy = sum(1 for x, y in zip(predictions, actual_labels) if x == y) / len(predictions)
         
         # Update progress bar description with metrics
-        pbar.set_description(f"Epoch {epoch+1}/{NUM_EPOCHS} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Acc: {accuracy:.4f}")
+        pbar.set_description(f"Epoch {epoch+1}/{NUM_EPOCHS} | Loss: {train_loss:.4f} | Acc: {accuracy:.4f}")
         
-        # Early stopping check based on validation loss
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        # Early stopping check
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
             patience_counter = 0
             
             # Save best model
@@ -178,6 +182,7 @@ def main():
             if patience_counter >= PATIENCE:
                 print(f"\nEarly stopping triggered after {epoch+1} epochs")
                 break
+    
         
         
     # Plot training loss curve
@@ -195,14 +200,10 @@ def main():
     model.load_state_dict(torch.load('baseline_best_model.pt'))
     
     # Evaluate on test set
-    predictions, _, _ = evaluate(model, test_loader, device)
+    predictions, _ = evaluate(model, test_loader, device)
+    print(len(predictions))
 
 
-    # output to csv
-    with open('predictions_0509.csv', 'w') as f:
-        f.write('Id,helpfulness\n')
-        for i, pred in enumerate(predictions):
-            f.write(f'{i+2649},{pred}\n')
 
 
 if __name__ == "__main__":
