@@ -78,6 +78,12 @@ def load_audio_chunk(path: str, n_signal: int,
         processes.append(process)
     
     chunk = [p.stdout.read(n_signal * 4) for p in processes]
+    
+    if len(chunk[0]) < n_signal * 4:
+        print(f"❌ Skipped (too short): {path}, with length {len(chunk[0])}, num_signal: {n_signal*4}")
+        process.stdout.close()
+        return  # yield nothing
+    
     while len(chunk[0]) == n_signal * 4:
         yield b''.join(chunk)
         chunk = [p.stdout.read(n_signal * 4) for p in processes]
@@ -155,6 +161,7 @@ def process_audio_array(audio: Tuple[int, bytes],
             key.encode(),
             ae.SerializeToString(),
         )
+    print(f"✅ Stored chunk: {key}")
     return audio_id
 
 
@@ -252,7 +259,7 @@ def main(argv):
         chunks = enumerate(chunks)
 
         processed_samples = map(partial(process_audio_array, env=env, channels=FLAGS.channels), chunks)
-
+        
         pbar = tqdm(processed_samples)
         n_seconds = 0
         for audio_id in pbar:

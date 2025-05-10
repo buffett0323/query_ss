@@ -156,129 +156,118 @@ def main(argv):
         )
 
     # create model
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = rave.RAVE(n_channels=FLAGS.channels).to(device)
+    model = rave.RAVE(n_channels=FLAGS.channels)
     if FLAGS.derivative:
         model.integrator = rave.dataset.get_derivator_integrator(model.sr)[1]
 
-    # # parse datasset
-    # print("Getting dataset in path:", FLAGS.db_path)
-    # dataset = rave.dataset.get_dataset(FLAGS.db_path,
-    #                                    model.sr,
-    #                                    FLAGS.n_signal,
-    #                                    derivative=FLAGS.derivative,
-    #                                    normalize=FLAGS.normalize,
-    #                                    rand_pitch=FLAGS.rand_pitch,
-    #                                    n_channels=n_channels)
-    # train, val = rave.dataset.split_dataset(dataset, 98)
-    # print("Finished splitting dataset, with train dataset length:", len(train), "and val dataset length:", len(val))
+    # parse datasset
+    print("Getting dataset in path:", FLAGS.db_path)
+    dataset = rave.dataset.get_dataset(FLAGS.db_path,
+                                       model.sr,
+                                       FLAGS.n_signal,
+                                       derivative=FLAGS.derivative,
+                                       normalize=FLAGS.normalize,
+                                       rand_pitch=FLAGS.rand_pitch,
+                                       n_channels=n_channels)
+    train, val = rave.dataset.split_dataset(dataset, 98)
+    print("Finished splitting dataset, with train dataset length:", len(train), "and val dataset length:", len(val))
 
-    # # get data-loader
-    # num_workers = FLAGS.workers
-    # if os.name == "nt" or sys.platform == "darwin":
-    #     num_workers = 0
-    # train = DataLoader(train,
-    #                    FLAGS.batch,
-    #                    True,
-    #                    drop_last=True,
-    #                    num_workers=num_workers)
-    # val = DataLoader(val, FLAGS.batch, False, num_workers=num_workers)
+    # get data-loader
+    num_workers = FLAGS.workers
+    if os.name == "nt" or sys.platform == "darwin":
+        num_workers = 0
+    train = DataLoader(train,
+                       FLAGS.batch,
+                       True,
+                       drop_last=True,
+                       num_workers=num_workers)
+    val = DataLoader(val, FLAGS.batch, False, num_workers=num_workers)
 
-    # from tqdm import tqdm
-    # for batch in tqdm(train):
-    #     print(batch.shape)
+    # CHECKPOINT CALLBACKS
+    validation_checkpoint = pl.callbacks.ModelCheckpoint(monitor="validation",
+                                                         filename="best")
+    last_filename = "last" if FLAGS.save_every is None else "epoch-{epoch:04d}"                                                        
+    last_checkpoint = rave.core.ModelCheckpoint(filename=last_filename, step_period=FLAGS.save_every)
+
+    val_check = {}
+    if len(train) >= FLAGS.val_every:
+        val_check["val_check_interval"] = 1 if FLAGS.smoke_test else FLAGS.val_every
+    else:
+        nepoch = FLAGS.val_every // len(train)
+        val_check["check_val_every_n_epoch"] = nepoch
+
+    if FLAGS.smoke_test:
+        val_check['limit_train_batches'] = 1
+        val_check['limit_val_batches'] = 1
+
+    gin_hash = hashlib.md5(
+        gin.operative_config_str().encode()).hexdigest()[:10]
+
+    RUN_NAME = f'{FLAGS.name}_{gin_hash}'
+
+    os.makedirs(os.path.join(FLAGS.out_path, RUN_NAME), exist_ok=True)
+
+    if FLAGS.gpu == [-1]:
+        gpu = 0
+    else:
+        gpu = FLAGS.gpu or rave.core.setup_gpu()
+
+
+    accelerator = None
+    devices = None
+    if FLAGS.gpu == [-1]:
+        pass
+    elif torch.cuda.is_available():
+        accelerator = "cuda"
+        devices = FLAGS.gpu or rave.core.setup_gpu()
+    elif torch.backends.mps.is_available():
+        print(
+            "Training on mac is not available yet. Use --gpu -1 to train on CPU (not recommended)."
+        )
+        exit()
+        accelerator = "mps"
+        devices = 1
+    print('selected gpu:', gpu, "devices: ", devices)
     
-    x = torch.randn(8, 1, 44100).to(device)
-    z, x_enc = model.encode(x, return_mb=False)
-    print("z.shape",z.shape)
-    print("x_enc.shape",x_enc.shape)
+    callbacks = [
+        validation_checkpoint,
+        last_checkpoint,
+        rave.model.WarmupCallback(),
+        rave.model.QuantizeCallback(),
+        # rave.core.LoggerCallback(rave.core.ProgressLogger(RUN_NAME)),
+        rave.model.BetaWarmupCallback(),
+    ]
+
+    if FLAGS.ema is not None:
+        callbacks.append(EMA(FLAGS.ema))
+
+    trainer = pl.Trainer(
+        logger=pl.loggers.TensorBoardLogger(
+            FLAGS.out_path,
+            name=RUN_NAME,
+        ),
+        accelerator=accelerator,
+        devices=devices,
+        callbacks=callbacks,
+        max_epochs=300000,
+        max_steps=FLAGS.max_steps,
+        profiler="simple",
+        enable_progress_bar=FLAGS.progress,
+        **val_check,
+    )
+
+    run = rave.core.search_for_run(FLAGS.ckpt)
+    if run is not None:
+        print('loading state from file %s'%run)
+        loaded = torch.load(run, map_location='cpu')
+        # model = model.load_state_dict(loaded)
+        trainer.fit_loop.epoch_loop._batches_that_stepped = loaded['global_step']
+        # model = model.load_state_dict(loaded['state_dict'])
     
-    
-    # # CHECKPOINT CALLBACKS
-    # validation_checkpoint = pl.callbacks.ModelCheckpoint(monitor="validation",
-    #                                                      filename="best")
-    # last_filename = "last" if FLAGS.save_every is None else "epoch-{epoch:04d}"                                                        
-    # last_checkpoint = rave.core.ModelCheckpoint(filename=last_filename, step_period=FLAGS.save_every)
+    with open(os.path.join(FLAGS.out_path, RUN_NAME, "config.gin"), "w") as config_out:
+        config_out.write(gin.operative_config_str())
 
-    # val_check = {}
-    # if len(train) >= FLAGS.val_every:
-    #     val_check["val_check_interval"] = 1 if FLAGS.smoke_test else FLAGS.val_every
-    # else:
-    #     nepoch = FLAGS.val_every // len(train)
-    #     val_check["check_val_every_n_epoch"] = nepoch
-
-    # if FLAGS.smoke_test:
-    #     val_check['limit_train_batches'] = 1
-    #     val_check['limit_val_batches'] = 1
-
-    # gin_hash = hashlib.md5(
-    #     gin.operative_config_str().encode()).hexdigest()[:10]
-
-    # RUN_NAME = f'{FLAGS.name}_{gin_hash}'
-
-    # os.makedirs(os.path.join(FLAGS.out_path, RUN_NAME), exist_ok=True)
-
-    # if FLAGS.gpu == [-1]:
-    #     gpu = 0
-    # else:
-    #     gpu = FLAGS.gpu or rave.core.setup_gpu()
-
-
-    # accelerator = None
-    # devices = None
-    # if FLAGS.gpu == [-1]:
-    #     pass
-    # elif torch.cuda.is_available():
-    #     accelerator = "cuda"
-    #     devices = FLAGS.gpu or rave.core.setup_gpu()
-    # elif torch.backends.mps.is_available():
-    #     print(
-    #         "Training on mac is not available yet. Use --gpu -1 to train on CPU (not recommended)."
-    #     )
-    #     exit()
-    #     accelerator = "mps"
-    #     devices = 1
-    # print('selected gpu:', gpu, "devices: ", devices)
-    
-    # callbacks = [
-    #     validation_checkpoint,
-    #     last_checkpoint,
-    #     rave.model.WarmupCallback(),
-    #     rave.model.QuantizeCallback(),
-    #     # rave.core.LoggerCallback(rave.core.ProgressLogger(RUN_NAME)),
-    #     rave.model.BetaWarmupCallback(),
-    # ]
-
-    # if FLAGS.ema is not None:
-    #     callbacks.append(EMA(FLAGS.ema))
-
-    # trainer = pl.Trainer(
-    #     logger=pl.loggers.TensorBoardLogger(
-    #         FLAGS.out_path,
-    #         name=RUN_NAME,
-    #     ),
-    #     accelerator=accelerator,
-    #     devices=devices,
-    #     callbacks=callbacks,
-    #     max_epochs=300000,
-    #     max_steps=FLAGS.max_steps,
-    #     profiler="simple",
-    #     enable_progress_bar=FLAGS.progress,
-    #     **val_check,
-    # )
-
-    # run = rave.core.search_for_run(FLAGS.ckpt)
-    # if run is not None:
-    #     print('loading state from file %s'%run)
-    #     loaded = torch.load(run, map_location='cpu')
-    #     # model = model.load_state_dict(loaded)
-    #     trainer.fit_loop.epoch_loop._batches_that_stepped = loaded['global_step']
-    #     # model = model.load_state_dict(loaded['state_dict'])
-    
-    # with open(os.path.join(FLAGS.out_path, RUN_NAME, "config.gin"), "w") as config_out:
-    #     config_out.write(gin.operative_config_str())
-
-    # trainer.fit(model, train, val, ckpt_path=run)
+    trainer.fit(model, train, val, ckpt_path=run)
 
 
 if __name__ == "__main__": 

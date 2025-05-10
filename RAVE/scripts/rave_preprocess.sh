@@ -3,4 +3,5 @@ python preprocess.py \
     --output_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/ \
     --channels 1 \
     --sampling_rate 16000 \
-    --max_db_size 100
+    --max_db_size 100 \
+    --num_signal 7600 \

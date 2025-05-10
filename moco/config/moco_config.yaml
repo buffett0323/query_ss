@@ -6,8 +6,10 @@ wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Seq Perturb +
 
 
 # Dataset settings
+data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new"
 seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"  # path to dataset (required)
 model_dict_save_dir: "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp08"
+lmdb_dir: "/mnt/gestalt/home/buffett/beatport_analyze/lmdb"
 batch_size: 256 # 256  # mini-batch size
 workers: 16  # number of data loading workers
 sample_rate: 16000

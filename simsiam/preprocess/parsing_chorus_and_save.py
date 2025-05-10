@@ -9,12 +9,13 @@ from multiprocessing import Pool, cpu_count
 
 SEGMENT_TIME = 0.95
 SAMPLE_RATE = 16000
-AMP_THRES = 0.8 # 0.5
+AMP_THRES = 0.5 # 0.5
+SLICE_NAME = "amp05"
 FILE_NAME = "bass_other.npy"
 SEGMENT_LENGTH = int(SEGMENT_TIME * SAMPLE_RATE)
 DATA_DIR = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_bass_other_16000_npy"
 JSON_PATH = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_peak_info.json"
-STORE_DIR = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"
+STORE_DIR = f"/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/{SLICE_NAME}"
 os.makedirs(STORE_DIR, exist_ok=True)
 
 
@@ -62,5 +63,5 @@ if __name__ == "__main__":
         if num_segments >= 2:
             seg_counter[file_name] = num_segments
     
-    with open("../info/chorus_audio_16000_095sec_npy_bass_other_seg_counter.json", "w") as f:
+    with open(f"../../moco/info/train_seg_counter_{SLICE_NAME}.json", "w") as f:
         json.dump(seg_counter, f, indent=4)

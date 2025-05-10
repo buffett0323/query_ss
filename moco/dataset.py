@@ -46,9 +46,11 @@ def create_lmdb(data_dir, lmdb_path):
     
     # Pre-collect all file paths to avoid nested loops
     npy_files = []
-    for song, val in tqdm(seg_counter.items(), desc="Processing songs"):
-        npy_files.extend([(song, os.path.join(data_dir, song, f"bass_other_seg_{i}.npy")) 
-                         for i in range(val)])
+    for song, _ in tqdm(seg_counter.items(), desc="Processing songs"):
+        npy_files.append(
+            (song, os.path.join(data_dir, song, "bass_other_seg_0.npy")) 
+        )
+    print("len(npy_files):", len(npy_files))
     
     # Batch write to LMDB    
     batch_size = 1000
