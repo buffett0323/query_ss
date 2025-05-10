@@ -14,11 +14,14 @@ import shutil
 import time
 import warnings
 import yaml
+import wandb
+import nnAudio
+import numpy as np
 
 # import deeplearning.cross_image_ssl.moco.builder
 # import deeplearning.cross_image_ssl.moco.loader
-import moco.builder
-import moco.loader
+# import moco.builder
+# import moco.loader
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
@@ -32,24 +35,22 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 import torchvision.transforms as transforms
 
-from utils import yaml_config_hook
-
-
-model_names = sorted(
-    name
-    for name in models.__dict__
-    if name.islower() and not name.startswith("__") and callable(models.__dict__[name])
-)
+from model import MoCo
+from utils import yaml_config_hook, AverageMeter, ProgressMeter
+from dataset import SegmentBPDataset
+from augmentation import PrecomputedNorm, NormalizeBatch
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="PyTorch ImageNet Training")
+    parser = argparse.ArgumentParser(description="MoCoV2_BP")
     
     config = yaml_config_hook("config/moco_config.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
+    
     args = parser.parse_args()
-
+    
+    # Initial settings
     if args.seed is not None:
         random.seed(args.seed)
         torch.manual_seed(args.seed)
@@ -62,11 +63,6 @@ def main() -> None:
             "from checkpoints."
         )
 
-    if args.gpu is not None:
-        warnings.warn(
-            "You have chosen a specific GPU. This will completely "
-            "disable data parallelism."
-        )
 
     if args.dist_url == "env://" and args.world_size == -1:
         args.world_size = int(os.environ["WORLD_SIZE"])
@@ -74,6 +70,9 @@ def main() -> None:
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
+    print("ngpus:", ngpus_per_node)
+    
+    # Distributed training
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
@@ -83,47 +82,56 @@ def main() -> None:
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
     else:
         # Simply call main_worker function
+        print("No Multiprocessing")
         main_worker(args.gpu, ngpus_per_node, args)
 
 
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
+    torch.cuda.set_device(args.gpu)
 
-    # suppress printing if not master
+    if args.dist_url == "env://" and args.rank == -1:
+        args.rank = int(os.environ.get("RANK", 0))
+
+    if args.multiprocessing_distributed:
+        args.rank = args.rank * ngpus_per_node + gpu
+
     if args.multiprocessing_distributed and args.gpu != 0:
-        def print_pass(*args, **kwargs):  # Allow any extra keyword arguments
-            pass
-        builtins.print = print_pass
+        builtins.print = lambda *args, **kwargs: None
 
-    if args.gpu is not None:
-        print("Use GPU: {} for training".format(args.gpu))
+    print(f"[rank{args.rank}] on GPU {args.gpu} — device = {torch.cuda.current_device()}")
 
-    if args.distributed:
-        if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(os.environ["RANK"])
-        if args.multiprocessing_distributed:
-            # For multiprocessing distributed training, rank needs to be the
-            # global rank among all the processes
-            args.rank = args.rank * ngpus_per_node + gpu
-        dist.init_process_group(
-            backend=args.dist_backend,
-            init_method=args.dist_url,
-            world_size=args.world_size,
-            rank=args.rank,
-        )
+    # Init process group
+    dist.init_process_group(
+        backend=args.dist_backend,
+        init_method=args.dist_url,
+        world_size=args.world_size,
+        rank=args.rank,
+    )
+    dist.barrier(device_ids=[args.gpu])  # ✅ Prevent NCCL unknown device warning
         
     
+    # Only initialize WandB on the master process (rank 0)
+    if args.rank == 0 and args.log_wandb:
+        wandb.init(
+            project=args.wandb_project_name,
+            name=args.wandb_name,
+            notes=args.wandb_notes,
+            config=vars(args),  # Store args
+        )
+    
+    
     # create model
-    print("=> creating model '{}'".format(args.arch))
-    model = moco.builder.MoCo(
-        models.__dict__[args.arch],
-        args.moco_dim,
-        args.moco_k,
-        args.moco_m,
-        args.moco_t,
-        args.mlp,
+    print("=> Creating model '{}'".format(args.arch))
+    model = MoCo(
+        args, 
+        dim=args.moco_dim, 
+        K=args.moco_K, 
+        m=args.moco_m, 
+        T=args.moco_T, 
+        mlp=args.moco_mlp
     )
-    print(model)
+    # print(model)
 
     if args.distributed:
         # For multiprocessing distributed, DistributedDataParallel constructor
@@ -188,46 +196,26 @@ def main_worker(gpu, ngpus_per_node, args):
 
     cudnn.benchmark = True
 
-    # TODO: Add data loading code
     # Data loading code
-    traindir = os.path.join(args.data, "train")
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    train_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
+        split="train",
+        stem="bass_other",
+        eval_mode=False,
+        num_seq_segments=args.num_seq_segments,
+        fixed_second=args.fixed_second,
+        sp_method=args.sp_method,
+        p_ts=args.p_ts,
+        p_ps=args.p_ps,
+        p_tm=args.p_tm,
+        p_tstr=args.p_tstr,
+        semitone_range=args.semitone_range,
+        tm_min_band_part=args.tm_min_band_part,
+        tm_max_band_part=args.tm_max_band_part,
+        tm_fade=args.tm_fade,
+        amp_name=args.amp_name,
     )
-    if args.aug_plus:
-        # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
-        augmentation = [
-            transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
-            transforms.RandomApply(
-                [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)],
-                p=0.8,  # not strengthened
-            ),
-            transforms.RandomGrayscale(p=0.2),
-            transforms.RandomApply(
-                [moco.loader.GaussianBlur([0.1, 2.0])],
-                p=0.5,
-            ),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]
-    else:
-        # MoCo v1's aug: the same as InstDisc https://arxiv.org/abs/1805.01978
-        augmentation = [
-            transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
-            transforms.RandomGrayscale(p=0.2),
-            transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ]
-
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        moco.loader.TwoCropsTransform(
-            transforms.Compose(augmentation)
-        ),
-    )
+    
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -242,40 +230,74 @@ def main_worker(gpu, ngpus_per_node, args):
         pin_memory=True,
         sampler=train_sampler,
         drop_last=True,
+        persistent_workers=args.persistent_workers,
+        prefetch_factor=args.prefetch_factor,
     )
+    
+    # MelSpectrogram
+    to_spec = nnAudio.features.MelSpectrogram(
+        sr=args.sample_rate,
+        n_fft=args.n_fft,
+        win_length=args.window_size,
+        hop_length=args.hop_length,
+        n_mels=args.n_mels,
+        fmin=args.fmin,
+        fmax=args.fmax,
+        center=True,
+        power=2,
+        verbose=False,
+    ).to(args.gpu)
+    
+    # Normalization: PrecomputedNorm
+    pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(args.gpu)
+    post_norm = NormalizeBatch().to(args.gpu)
 
+
+    # Training loop
+    os.makedirs(args.model_dict_save_dir, exist_ok=True)
+    
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train_loss = train(train_loader, model, criterion, optimizer, epoch, args,\
+            to_spec, pre_norm, post_norm)
+        
+        # Log only from master process
+        if args.gpu == 0 and args.log_wandb:
+            wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
 
         if not args.multiprocessing_distributed or (
             args.multiprocessing_distributed and args.rank % ngpus_per_node == 0
         ):
-            save_checkpoint(
-                {
-                    "epoch": epoch + 1,
-                    "arch": args.arch,
-                    "state_dict": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                },
-                is_best=False,
-                filename="checkpoint_{:04d}.pth.tar".format(epoch),
-            )
+            if (epoch+1) % 10 == 0:
+                save_checkpoint(
+                    {
+                        "epoch": epoch + 1,
+                        "arch": args.arch,
+                        "state_dict": model.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                    },
+                    is_best=False,
+                    filename="checkpoint_{:04d}.pth.tar".format(epoch),
+                    save_dir=args.model_dict_save_dir,
+                )
+                
+    if args.distributed:
+        dist.destroy_process_group()
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args) -> None:
+def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_norm, post_norm) -> None:
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":.4e")
-    top1 = AverageMeter("Acc@1", ":6.2f")
-    top5 = AverageMeter("Acc@5", ":6.2f")
+    # top1 = AverageMeter("Acc@1", ":6.2f")
+    # top5 = AverageMeter("Acc@5", ":6.2f")
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
+        [batch_time, data_time, losses], #], top1, top5],
         prefix="Epoch: [{}]".format(epoch),
     )
 
@@ -283,24 +305,36 @@ def train(train_loader, model, criterion, optimizer, epoch, args) -> None:
     model.train()
 
     end = time.time()
-    for i, (images, _) in enumerate(train_loader):
+    for i, (x_i, x_j, _, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
         if args.gpu is not None:
-            images[0] = images[0].cuda(args.gpu, non_blocking=True)
-            images[1] = images[1].cuda(args.gpu, non_blocking=True)
+            x_i = x_i.cuda(args.gpu, non_blocking=True)
+            x_j = x_j.cuda(args.gpu, non_blocking=True)
 
+        # Mel-spec transform and normalize
+        x_i = (to_spec(x_i) + torch.finfo().eps).log()
+        x_j = (to_spec(x_j) + torch.finfo().eps).log()
+
+        x_i = pre_norm(x_i).unsqueeze(1)
+        x_j = pre_norm(x_j).unsqueeze(1)
+        
+        # Form a batch and post-normalize it.
+        bs = x_i.shape[0]
+        paired_inputs = torch.cat([x_i, x_j], dim=0)
+        paired_inputs = post_norm(paired_inputs)
+        
         # compute output
-        output, target = model(im_q=images[0], im_k=images[1])
+        output, target = model(im_q=paired_inputs[:bs], im_k=paired_inputs[bs:])
         loss = criterion(output, target)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        losses.update(loss.item(), images[0].size(0))
-        top1.update(acc1[0], images[0].size(0))
-        top5.update(acc5[0], images[0].size(0))
+        # acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        losses.update(loss.item(), x_i.size(0))
+        # top1.update(acc1[0], images[0].size(0))
+        # top5.update(acc5[0], images[0].size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -313,60 +347,35 @@ def train(train_loader, model, criterion, optimizer, epoch, args) -> None:
 
         if i % args.print_freq == 0:
             progress.display(i)
+            
+            # Log training loss per step only from GPU 0
+            if args.gpu == 0 and args.log_wandb:
+                wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
+
+    return losses.avg
 
 
-def save_checkpoint(state, is_best, filename: str = "checkpoint.pth.tar") -> None:
-    torch.save(state, filename)
+
+def save_checkpoint(
+    state, 
+    is_best, 
+    filename: str = "checkpoint.pth.tar",
+    save_dir: str = "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp08"
+) -> None:
+    
+    torch.save(state, os.path.join(save_dir, filename))
     if is_best:
-        shutil.copyfile(filename, "model_best.pth.tar")
+        shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))
+        
+        
 
 
-class AverageMeter:
-    """Computes and stores the average and current value"""
-
-    def __init__(self, name, fmt: str = ":f") -> None:
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self) -> None:
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n: int = 1) -> None:
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self) -> str:
-        fmtstr = "{name} {val" + self.fmt + "} ({avg" + self.fmt + "})"
-        return fmtstr.format(**self.__dict__)
-
-
-class ProgressMeter:
-    def __init__(self, num_batches, meters, prefix: str = "") -> None:
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch) -> None:
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print("\t".join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = "{:" + str(num_digits) + "d}"
-        return "[" + fmt + "/" + fmt.format(num_batches) + "]"
 
 
 def adjust_learning_rate(optimizer, epoch, args) -> None:
     """Decay the learning rate based on schedule"""
     lr = args.lr
-    if args.cos:  # cosine lr schedule
+    if args.moco_cos:  # cosine lr schedule
         lr *= 0.5 * (1.0 + math.cos(math.pi * epoch / args.epochs))
     else:  # stepwise lr schedule
         for milestone in args.schedule:
@@ -374,22 +383,6 @@ def adjust_learning_rate(optimizer, epoch, args) -> None:
     for param_group in optimizer.param_groups:
         param_group["lr"] = lr
 
-
-def accuracy(output, target, topk=(1,)):
-    """Computes the accuracy over the k top predictions for the specified values of k"""
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
-
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-        res = []
-        for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
 
 
 if __name__ == "__main__":
