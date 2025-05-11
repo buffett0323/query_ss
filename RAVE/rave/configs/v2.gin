@@ -7,7 +7,7 @@ from rave import discriminator
 
 import torch.nn as nn
 
-include "configs/v1.gin"
+include "../rave/configs/v1.gin"
 
 KERNEL_SIZE = 3
 DILATIONS = [

@@ -97,6 +97,8 @@ class RandomCrop(Transform):
         self.n_signal = n_signal
 
     def __call__(self, x: np.ndarray):
+        if x.shape[-1] < self.n_signal:
+            raise ValueError(f"Input audio too short: {x.shape[-1]} < required {self.n_signal}")
         in_point = randint(0, x.shape[-1] - self.n_signal)
         x = x[..., in_point:in_point + self.n_signal]
         return x

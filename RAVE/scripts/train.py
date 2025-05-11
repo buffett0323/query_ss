@@ -20,7 +20,9 @@ import rave
 import rave.core
 import rave.dataset
 from rave.transforms import get_augmentations, add_augmentation
-
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 FLAGS = flags.FLAGS
 
@@ -76,7 +78,7 @@ flags.DEFINE_bool('progress',
 flags.DEFINE_bool('smoke_test', 
                   default=False,
                   help="Run training with n_batches=1 to test the model")
-
+flags.DEFINE_integer('sr', 44100, help='Sampling rate')
 
 class EMA(pl.Callback):
 
@@ -155,8 +157,17 @@ def main(argv):
             FLAGS.override,
         )
 
+    # create run name
+    gin_hash = hashlib.md5(gin.operative_config_str().encode()).hexdigest()[:10]
+    RUN_NAME = f"{FLAGS.name}_{gin_hash}"
+    print(f"RUN_NAME: {RUN_NAME}")
+
     # create model
-    model = rave.RAVE(n_channels=FLAGS.channels)
+    model = rave.RAVE(
+        n_channels=FLAGS.channels, 
+        sampling_rate=FLAGS.sr,
+        save_audio_dir=os.path.join(FLAGS.out_path, RUN_NAME, "audio"),
+    )
     if FLAGS.derivative:
         model.integrator = rave.dataset.get_derivator_integrator(model.sr)[1]
 
@@ -200,10 +211,16 @@ def main(argv):
         val_check['limit_train_batches'] = 1
         val_check['limit_val_batches'] = 1
 
-    gin_hash = hashlib.md5(
-        gin.operative_config_str().encode()).hexdigest()[:10]
-
-    RUN_NAME = f'{FLAGS.name}_{gin_hash}'
+    # Loggers
+    tb_logger = TensorBoardLogger(
+        FLAGS.out_path, 
+        name=RUN_NAME
+    )
+    wandb_logger = WandbLogger(
+        project=FLAGS.name,
+        name=RUN_NAME,
+        save_dir=FLAGS.out_path
+    )
 
     os.makedirs(os.path.join(FLAGS.out_path, RUN_NAME), exist_ok=True)
 
@@ -242,10 +259,7 @@ def main(argv):
         callbacks.append(EMA(FLAGS.ema))
 
     trainer = pl.Trainer(
-        logger=pl.loggers.TensorBoardLogger(
-            FLAGS.out_path,
-            name=RUN_NAME,
-        ),
+        logger=[tb_logger, wandb_logger],
         accelerator=accelerator,
         devices=devices,
         callbacks=callbacks,

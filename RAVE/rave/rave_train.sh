@@ -1,6 +1,6 @@
 rave train \
     --config configs/v2.gin \
-    --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/ \
+    --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/amp_08/ \
     --out_path /mnt/gestalt/home/buffett/rave/train_configs/ \
     --name beatport_rave \
     --channels 2 \

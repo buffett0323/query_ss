@@ -2,7 +2,6 @@ import math
 from time import time
 from typing import Callable, Optional, Iterable, Dict
 
-import os
 import gin, pdb
 import numpy as np
 import pytorch_lightning as pl
@@ -11,7 +10,7 @@ import torch.nn as nn
 from einops import rearrange
 from sklearn.decomposition import PCA
 from pytorch_lightning.trainer.states import RunningStage
-from scipy.io.wavfile import write as write_wav
+
 
 import rave.core
 
@@ -131,12 +130,26 @@ def _pqmf_decode(pqmf, x: torch.Tensor, batch_size: Iterable[int], n_channels: i
     return x
 
 
+# FiLM module to condition latent on timbre embedding
+class FiLM(nn.Module):
+    def __init__(self, timbre_dim: int, latent_dim: int):
+        super().__init__()
+        self.gamma = nn.Linear(timbre_dim, latent_dim)
+        self.beta = nn.Linear(timbre_dim, latent_dim)
+
+    def forward(self, z: torch.Tensor, emb: torch.Tensor):
+        # z: (B, C, T), emb: (B, timbre_dim)
+        gamma = self.gamma(emb).unsqueeze(-1)  # (B, C, 1)
+        beta = self.beta(emb).unsqueeze(-1)    # (B, C, 1)
+        return z * gamma + beta
+
+
+
 @gin.configurable
 class RAVE(pl.LightningModule):
 
     def __init__(
         self,
-        save_audio_dir, # TODO
         latent_size,
         sampling_rate,
         encoder,
@@ -149,6 +162,7 @@ class RAVE(pl.LightningModule):
         num_skipped_features,
         audio_distance: Callable[[], nn.Module],
         multiband_audio_distance: Callable[[], nn.Module],
+        timbre_embedding_dim: int = 1024,        # NEW: dim of your timbre embedding
         n_bands: int = 16,
         balancer = None,
         weights: Optional[Dict[str, float]] = None,
@@ -200,6 +214,9 @@ class RAVE(pl.LightningModule):
         self.register_buffer("fidelity", torch.zeros(latent_size))
 
         self.latent_size = latent_size
+        
+        # Instantiate FiLM conditioner
+        self.film = FiLM(timbre_embedding_dim, latent_size)
 
         self.automatic_optimization = False
 
@@ -212,7 +229,6 @@ class RAVE(pl.LightningModule):
 
         # CONSTANTS
         self.sr = sampling_rate
-        self.save_audio_dir = save_audio_dir
         self.valid_signal_crop = valid_signal_crop
         self.n_channels = n_channels
         self.feature_matching_fun = feature_matching_fun
@@ -291,94 +307,148 @@ class RAVE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         p = Profiler()
         gen_opt, dis_opt = self.optimizers()
-        x_raw = batch; x_raw.requires_grad = True
+        x_raw, timbre_emb = batch
+        x_raw.requires_grad = True
+        timbre_emb.requires_grad = False
+        
+        
         batch_size = x_raw.shape[:-2]
         self.encoder.set_warmed_up(self.warmed_up)
         self.decoder.set_warmed_up(self.warmed_up)
 
-        # --- ENCODE ---
+        # ENCODE INPUT
+        # get multiband in case
         z, x_multiband = self.encode(x_raw, return_mb=True)
+
         z, reg = self.encoder.reparametrize(z)[:2]
         p.tick('encode')
 
-        # --- DECODE ---
+        # FiLM modulation
+        z = self.film(z, timbre_emb)
+
+        # DECODE LATENT
         y = self.decoder(z)
         if self.output_mode == "pqmf":
             y_multiband = y
             y_raw = _pqmf_decode(self.pqmf, y, batch_size=batch_size, n_channels=self.n_channels)
         else:
-            y_raw = y
+            y_raw = y 
             y_multiband = _pqmf_encode(self.pqmf, y)
+
+        # TODO this has been added for training with num_samples = 65536 samples, output padding seems to mess with output dimensions. 
+        # this may probably conflict with cached_conv
+        y_raw = y_raw[..., :x_raw.shape[-1]]
+        y_multiband = y_multiband[..., :x_multiband.shape[-1]]
+
         p.tick('decode')
 
-        # --- CROP ---
         if self.valid_signal_crop and self.receptive_field.sum():
-            x_mb = rave.core.valid_signal_crop(x_multiband, *self.receptive_field)
-            y_mb = rave.core.valid_signal_crop(y_multiband, *self.receptive_field)
-        else:
-            x_mb, y_mb = x_multiband, y_multiband
+            x_multiband = rave.core.valid_signal_crop(
+                x_multiband,
+                *self.receptive_field,
+            )
+            y_multiband = rave.core.valid_signal_crop(
+                y_multiband,
+                *self.receptive_field,
+            )
         p.tick('crop')
 
-        # --- DISTANCE LOSSES ---
-        loss_dict = {}
-        mb_dist = self.multiband_audio_distance(x_mb, y_mb); p.tick('mb distance')
-        for k, v in mb_dist.items():
-            loss_dict[f'multiband_{k}'] = self.weights['multiband_audio_distance'] * v
+        # DISTANCE BETWEEN INPUT AND OUTPUT
+        distances = {}
+        multiband_distance =  self.multiband_audio_distance(
+            x_multiband, y_multiband)
+        p.tick('mb distance')
+        for k, v in multiband_distance.items():
+            distances[f'multiband_{k}'] = self.weights['multiband_audio_distance'] * v
 
-        fb_dist = self.audio_distance(x_raw, y_raw); p.tick('fb distance')
-        for k, v in fb_dist.items():
-            loss_dict[f'fullband_{k}'] = self.weights['audio_distance'] * v
+        fullband_distance = self.audio_distance(x_raw, y_raw)
+        p.tick('fb distance')
 
-        # --- ADVERSARIAL & FEATURE MATCHING ---
-        loss_dis = torch.tensor(0., device=x_raw.device)
-        loss_adv = torch.tensor(0., device=x_raw.device)
-        feature_matching = torch.tensor(0., device=x_raw.device)
-        if self.warmed_up:
-            xy = torch.cat([x_raw, y_raw], dim=0)
+        for k, v in fullband_distance.items():
+            distances[f'fullband_{k}'] = self.weights['audio_distance'] *  v
+
+        feature_matching_distance = 0.
+
+        if self.warmed_up:  # DISCRIMINATION
+            xy = torch.cat([x_raw, y_raw], 0)
             features = self.discriminator(xy)
-            real_feats, fake_feats = self.split_features(features)
-            # sum up over scales
-            for real, fake in zip(real_feats, fake_feats):
-                # feature matching
-                fm = sum(self.feature_matching_fun(r, f) for r, f in zip(real[self.num_skipped_features:], fake[self.num_skipped_features:]))
-                feature_matching += fm / len(real[self.num_skipped_features:])
-                # adversarial
-                d, adv = self.gan_loss(real[-1], fake[-1])
-                loss_dis += d
-                loss_adv += adv
-            feature_matching /= len(real_feats)
 
-        # attach extra losses
+            feature_real, feature_fake = self.split_features(features)
+
+            loss_dis = 0
+            loss_adv = 0
+
+            pred_real = 0
+            pred_fake = 0
+
+            for scale_real, scale_fake in zip(feature_real, feature_fake):
+                current_feature_distance = sum(
+                    map(
+                        self.feature_matching_fun,
+                        scale_real[self.num_skipped_features:],
+                        scale_fake[self.num_skipped_features:],
+                    )) / len(scale_real[self.num_skipped_features:])
+
+                feature_matching_distance = feature_matching_distance + current_feature_distance
+
+                _dis, _adv = self.gan_loss(scale_real[-1], scale_fake[-1])
+
+                pred_real = pred_real + scale_real[-1].mean()
+                pred_fake = pred_fake + scale_fake[-1].mean()
+
+                loss_dis = loss_dis + _dis
+                loss_adv = loss_adv + _adv
+
+            feature_matching_distance = feature_matching_distance / len(
+                feature_real)
+
+        else:
+            pred_real = torch.tensor(0.).to(x_raw)
+            pred_fake = torch.tensor(0.).to(x_raw)
+            loss_dis = torch.tensor(0.).to(x_raw)
+            loss_adv = torch.tensor(0.).to(x_raw)
+        p.tick('discrimination')
+
+        # COMPOSE GEN LOSS
+        loss_gen = {}
+        loss_gen.update(distances)
+        p.tick('update loss gen dict')
+
         if reg.item():
-            loss_dict['regularization'] = reg * self.beta_factor
-        if self.warmed_up:
-            loss_dict['feature_matching'] = self.weights['feature_matching'] * feature_matching
-            loss_dict['adversarial']      = self.weights['adversarial']      * loss_adv
-            loss_dict['loss_dis']         = loss_dis
+            loss_gen['regularization'] = reg * self.beta_factor
 
-        # --- OPTIMIZATION ---
-        if self.warmed_up and (batch_idx % self.update_discriminator_every == 0):
-            dis_opt.zero_grad(); loss_dis.backward(); dis_opt.step()
+        if self.warmed_up:
+            loss_gen['feature_matching'] = self.weights['feature_matching'] * feature_matching_distance
+            loss_gen['adversarial'] = self.weights['adversarial'] * loss_adv
+
+        # OPTIMIZATION
+        if not (batch_idx %
+                self.update_discriminator_every) and self.warmed_up:
+            dis_opt.zero_grad()
+            loss_dis.backward()
+            dis_opt.step()
+            p.tick('dis opt')
         else:
             gen_opt.zero_grad()
-            total_gen_loss = sum(loss_dict.values())
-            total_gen_loss.backward()
+            loss_gen_value = 0.
+            for k, v in loss_gen.items():
+                loss_gen_value += v * self.weights.get(k, 1.)
+            loss_gen_value.backward()
             gen_opt.step()
 
-        # --- LOGGING ONCE ---
-        # 加上 beta_factor，同時一次把所有 key 打點
-        loss_dict['beta_factor'] = self.beta_factor
-        self.log_dict(
-            loss_dict,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True
-        )
+        # LOGGING
+        self.log("beta_factor", self.beta_factor)
 
-        return total_gen_loss
-    
-    
-    def validation_step(self, x, batch_idx):
+        if self.warmed_up:
+            self.log("loss_dis", loss_dis)
+            self.log("pred_real", pred_real.mean())
+            self.log("pred_fake", pred_fake.mean())
+
+        self.log_dict(loss_gen)
+        p.tick('logging')
+
+    def validation_step(self, batch, batch_idx):
+        x, timbre_emb = batch
 
         z = self.encode(x)
         if isinstance(self.encoder, blocks.VariationalEncoder):
@@ -386,20 +456,21 @@ class RAVE(pl.LightningModule):
         else:
             mean = None
 
-        z = self.encoder.reparametrize(z)[0] # z.shape: torch.Size([16, 128, 64])
-        y = self.decode(z) # y.shape: torch.Size([16, 1, 131072])
+        z = self.encoder.reparametrize(z)[0]
+        
+        # FiLM
+        z = self.film(z, timbre_emb)
+        
+        y = self.decode(z)
 
         distance = self.audio_distance(x, y)
         full_distance = sum(distance.values())
 
         if self.trainer is not None:
             self.log('validation', full_distance)
-        
-        self.log('val_full_distance', full_distance, on_step=False, on_epoch=True, prog_bar=True)
+
         return torch.cat([x, y], -1), mean
 
-
-    @torch.no_grad()
     def validation_epoch_end(self, out):
         if not self.receptive_field.sum():
             print("Computing receptive field for this configuration...")
@@ -412,51 +483,44 @@ class RAVE(pl.LightningModule):
 
         if not len(out): return
 
-        # Unpack inputs and reconstructions
-        # audio, z = list(zip(*out))
-        # audio = list(map(lambda x: x.cpu(), audio))
-        audio_pairs, z = zip(*out)
-        audio_pairs = [a.cpu() for a in audio_pairs]
+        audio, z = list(zip(*out))
+        audio = list(map(lambda x: x.cpu(), audio))
 
         if self.trainer.state.stage == RunningStage.SANITY_CHECKING:
             return
 
-        # Save audio files if directory is provided (only on global rank 0)
-        if getattr(self, 'save_audio_dir', None) and self.trainer.is_global_zero:
-            os.makedirs(self.save_audio_dir, exist_ok=True)
-            epoch = self.current_epoch
-            
-            for idx, pair in enumerate(audio_pairs):
-                # pair shape: (channels, 2 * time_steps)
-                if pair.ndim == 1:
-                    total_len = pair.shape[0]
-                    c = 1
-                elif pair.ndim == 2:
-                    c, total_len = pair.shape
-                elif pair.ndim == 3:
-                    _, c, total_len = pair.shape
-                else:
-                    raise ValueError(f"Unexpected audio shape: {pair.shape}")
-                
-                half = total_len // 2
-                inp = pair[:, :half].numpy().T  # (time, channels)
-                out = pair[:, half:].numpy().T # (time, channels)
-                write_wav(
-                    os.path.join(self.save_audio_dir, f"epoch{epoch:03d}_sample{idx:02d}_input.wav"),
-                    self.sr,
-                    inp
-                )
-                write_wav(
-                    os.path.join(self.save_audio_dir, f"epoch{epoch:03d}_sample{idx:02d}_output.wav"),
-                    self.sr,
-                    out
+        # LATENT SPACE ANALYSIS
+        if not self.warmed_up and isinstance(self.encoder,
+                                             blocks.VariationalEncoder):
+            z = torch.cat(z, 0)
+            z = rearrange(z, "b c t -> (b t) c")
+
+            self.latent_mean.copy_(z.mean(0))
+            z = z - self.latent_mean
+
+            pca = PCA(z.shape[-1]).fit(z.cpu().numpy())
+
+            components = pca.components_
+            components = torch.from_numpy(components).to(z)
+            self.latent_pca.copy_(components)
+
+            var = pca.explained_variance_ / np.sum(pca.explained_variance_)
+            var = np.cumsum(var)
+
+            self.fidelity.copy_(torch.from_numpy(var).to(self.fidelity))
+
+            var_percent = [.8, .9, .95, .99]
+            for p in var_percent:
+                self.log(
+                    f"fidelity_{p}",
+                    np.argmax(var > p).astype(np.float32),
                 )
 
-        # Log to TensorBoard / W&B as before
-        y = torch.cat(audio_pairs, 0)[:8].reshape(-1).numpy()
+        y = torch.cat(audio, 0)[:8].reshape(-1).numpy()
         if self.integrator is not None:
             y = self.integrator(y)
-        self.logger.experiment.add_audio("audio_val", y, self.eval_number, self.sr)
+        self.logger.experiment.add_audio("audio_val", y, self.eval_number,
+                                        self.sr)
         self.eval_number += 1
 
     def on_fit_start(self):
@@ -473,3 +537,4 @@ class RAVE(pl.LightningModule):
         model = ['```'] + model + ['```']
         model = '\n'.join(model)
         tb.add_text("model", model)
+
