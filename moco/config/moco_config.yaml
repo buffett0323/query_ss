@@ -1,7 +1,7 @@
 # Wandb settings
 log_wandb: True #False
 wandb_project_name: "MoCoV2_BP"
-wandb_name: "ConvNeXt-Base + 4 Augs + Seg_0 only"
+wandb_name: "ConvNeXt-Base + 4 Augs + Seg_0 only + 1024 dim"
 wandb_notes: "ConvNeXt-Base, Terra, Amp_0.5 Seg_0 only, Augmentation: Seq Perturb + Reverse 0.5 -> Time mask -> Pitch shift -> Time stretch"
 
 
@@ -75,7 +75,7 @@ multiprocessing_distributed: true  # Use multi-processing distributed training
 seed: null # 42  # seed for initializing training
 
 # MoCo specific settings; To run MoCo v2, set --mlp --moco-t 0.2 --aug-plus --cos.
-moco_dim: 128  # feature dimension
+moco_dim: 1024 # 128  # feature dimension
 moco_K: 65536  # queue size; number of negative keys
 moco_m: 0.999  # moco momentum of updating key encoder
 moco_T: 0.2 # MoCoV2 -> 0.2, MoCoV1 -> 0.07  # softmax temperature

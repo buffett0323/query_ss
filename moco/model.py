@@ -33,7 +33,8 @@ class MoCo(nn.Module):
         self.K = K
         self.m = m
         self.T = T
-
+        print(f"Model dim: {dim}")
+        
         # create the encoders
         # num_classes is the output fc dimension
         if args.arch == "ConvNeXt":
