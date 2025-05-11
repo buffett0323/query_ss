@@ -14,7 +14,7 @@ import scipy.stats
 import nnAudio.features
 import lmdb
 import pickle
-
+import multiprocessing
 
 import numpy as np
 import torch.nn as nn
@@ -37,37 +37,60 @@ from utils import yaml_config_hook
 
 
 
-def create_lmdb(data_dir, lmdb_path):
-    map_size = 10 * 1024 ** 3
-    env = lmdb.open(lmdb_path, map_size=map_size)
-    
-    with open(f"info/chorus_audio_16000_095sec_npy_bass_other_seg_counter.json", "r") as f:
-        seg_counter = json.load(f)
-    
-    # Pre-collect all file paths to avoid nested loops
-    npy_files = []
-    for song, _ in tqdm(seg_counter.items(), desc="Processing songs"):
-        npy_files.append(
-            (song, os.path.join(data_dir, song, "bass_other_seg_0.npy")) 
-        )
-    print("len(npy_files):", len(npy_files))
-    
-    # Batch write to LMDB    
-    batch_size = 1000
-    txn = env.begin(write=True)
 
-    for i, (song, file_path) in enumerate(tqdm(npy_files, desc="Writing to LMDB in batch")):
+def load_and_serialize(song_file_pair):
+    song, file_path = song_file_pair
+    try:
         arr = np.load(file_path)
-        key = f"{song}/{os.path.basename(file_path)}".encode()
-        txn.put(key, pickle.dumps(arr, protocol=4))
-        
+        key = song.encode()
+        val = pickle.dumps(arr, protocol=4)
+        return key, val
+    except Exception as e:
+        print(f"[ERROR] Failed on {file_path}: {e}")
+        return None
+
+
+def create_lmdb(data_dir, lmdb_path):
+    map_size = 10 * 1024 ** 3  # 10GB
+    env = lmdb.open(
+        lmdb_path,
+        map_size=map_size,
+        writemap=True,        # ✅ performance boost
+        map_async=True,       # ✅ performance boost
+        readahead=False
+    )
+
+    with open("info/train_seg_counter_amp_05.json", "r") as f:
+        seg_counter = json.load(f)
+
+    # Pre-collect all file paths
+    npy_files = [
+        (song, os.path.join(data_dir, song, "bass_other_seg_0.npy"))
+        for song in seg_counter
+    ]
+    print("Got", len(npy_files), "files")
+
+
+    # Use multiprocessing to load and serialize data
+    with multiprocessing.Pool(processes=os.cpu_count()) as pool:
+        results = list(tqdm(pool.imap_unordered(load_and_serialize, npy_files), total=len(npy_files)))
+
+    # Filter out failed ones
+    results = [r for r in results if r is not None]
+
+    # Write to LMDB
+    batch_size = 5000
+    txn = env.begin(write=True)
+    for i, (key, val) in enumerate(tqdm(results, desc="Writing to LMDB")):
+        txn.put(key, val)
         if (i + 1) % batch_size == 0:
             txn.commit()
             txn = env.begin(write=True)
-
-    # Final commit
     txn.commit()
-    print(f"LMDB created at {lmdb_path}")
+    env.sync()
+    env.close()
+
+    print(f"✅ LMDB created at {lmdb_path}")
 
 
 # Beatport Dataset
@@ -95,7 +118,7 @@ class SegmentBPDataset(Dataset):
         tstr_min_rate=0.8,
         tstr_max_rate=1.25,
         use_lmdb=False, # True
-        amp_name="_amp08",
+        amp_name="_amp_08",
     ):
         # Load segment info list
 

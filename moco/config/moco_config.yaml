@@ -7,7 +7,7 @@ wandb_notes: "ConvNeXt-Base,Fatcat, Amp_Seg-0.95sec, Augmentation: Seq Perturb +
 
 # Dataset settings
 data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new"
-seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"  # path to dataset (required)
+seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_05"  # path to dataset (required)
 model_dict_save_dir: "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp08"
 lmdb_dir: "/mnt/gestalt/home/buffett/beatport_analyze/lmdb"
 batch_size: 256 # 256  # mini-batch size
@@ -40,6 +40,7 @@ tstr_max_rate: 1.25
 sp_method: "fixed" # "random", "fixed", "adaptive", "reverse"
 norm_stats: [-5.36902,  3.7100384]
 amp_name: "_amp08"
+use_lmdb: True
 
 
 # Model architecture settings

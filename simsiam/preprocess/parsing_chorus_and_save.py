@@ -10,7 +10,7 @@ from multiprocessing import Pool, cpu_count
 SEGMENT_TIME = 0.95
 SAMPLE_RATE = 16000
 AMP_THRES = 0.5 # 0.5
-SLICE_NAME = "amp05"
+SLICE_NAME = "amp_05"
 FILE_NAME = "bass_other.npy"
 SEGMENT_LENGTH = int(SEGMENT_TIME * SAMPLE_RATE)
 DATA_DIR = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_bass_other_16000_npy"
