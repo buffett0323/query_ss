@@ -1,7 +1,12 @@
 import yaml
 import os
 import torch
-
+import multiprocessing
+import json
+import lmdb
+import numpy as np
+import pickle
+from tqdm import tqdm
 
 def yaml_config_hook(config_file):
     """
@@ -83,3 +88,58 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
+
+def load_and_serialize(song_file_pair):
+    song, file_path = song_file_pair
+    try:
+        arr = np.load(file_path)
+        key = song.encode()
+        val = pickle.dumps(arr, protocol=4)
+        return key, val
+    except Exception as e:
+        print(f"[ERROR] Failed on {file_path}: {e}")
+        return None
+
+
+def create_lmdb(data_dir, lmdb_path):
+    map_size = 10 * 1024 ** 3  # 10GB
+    env = lmdb.open(
+        lmdb_path,
+        map_size=map_size,
+        writemap=True,        # ✅ performance boost
+        map_async=True,       # ✅ performance boost
+        readahead=False
+    )
+
+    with open("info/train_seg_counter_amp_05.json", "r") as f:
+        seg_counter = json.load(f)
+
+    # Pre-collect all file paths
+    npy_files = [
+        (song, os.path.join(data_dir, song, "bass_other_seg_0.npy"))
+        for song in seg_counter
+    ]
+    print("Got", len(npy_files), "files")
+
+
+    # Use multiprocessing to load and serialize data
+    with multiprocessing.Pool(processes=os.cpu_count()) as pool:
+        results = list(tqdm(pool.imap_unordered(load_and_serialize, npy_files), total=len(npy_files)))
+
+    # Filter out failed ones
+    results = [r for r in results if r is not None]
+
+    # Write to LMDB
+    batch_size = 5000
+    txn = env.begin(write=True)
+    for i, (key, val) in enumerate(tqdm(results, desc="Writing to LMDB")):
+        txn.put(key, val)
+        if (i + 1) % batch_size == 0:
+            txn.commit()
+            txn = env.begin(write=True)
+    txn.commit()
+    env.sync()
+    env.close()
+
+    print(f"✅ LMDB created at {lmdb_path}")

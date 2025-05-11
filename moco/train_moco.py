@@ -214,6 +214,8 @@ def main_worker(gpu, ngpus_per_node, args):
         tm_max_band_part=args.tm_max_band_part,
         tm_fade=args.tm_fade,
         amp_name=args.amp_name,
+        use_lmdb=args.use_lmdb,
+        lmdb_path=args.lmdb_dir,
     )
     
 
@@ -272,7 +274,7 @@ def main_worker(gpu, ngpus_per_node, args):
         if not args.multiprocessing_distributed or (
             args.multiprocessing_distributed and args.rank % ngpus_per_node == 0
         ):
-            if (epoch+1) % 10 == 0:
+            if (epoch+1) % args.save_freq == 0:
                 save_checkpoint(
                     {
                         "epoch": epoch + 1,

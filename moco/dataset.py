@@ -31,66 +31,11 @@ from tqdm import tqdm
 from scipy.stats import entropy
 
 from audiomentations import Compose, TimeStretch, PitchShift, TimeMaskBack, SeqPerturb_Reverse
-from utils import yaml_config_hook
+from utils import yaml_config_hook, create_lmdb
 # import audiomentations
-# print("Audiomentations Loaded in Dataset.py:", audiomentations.__file__)
+# print("Audiomentations Path:", audiomentations.__file__)
 
 
-
-
-def load_and_serialize(song_file_pair):
-    song, file_path = song_file_pair
-    try:
-        arr = np.load(file_path)
-        key = song.encode()
-        val = pickle.dumps(arr, protocol=4)
-        return key, val
-    except Exception as e:
-        print(f"[ERROR] Failed on {file_path}: {e}")
-        return None
-
-
-def create_lmdb(data_dir, lmdb_path):
-    map_size = 10 * 1024 ** 3  # 10GB
-    env = lmdb.open(
-        lmdb_path,
-        map_size=map_size,
-        writemap=True,        # ✅ performance boost
-        map_async=True,       # ✅ performance boost
-        readahead=False
-    )
-
-    with open("info/train_seg_counter_amp_05.json", "r") as f:
-        seg_counter = json.load(f)
-
-    # Pre-collect all file paths
-    npy_files = [
-        (song, os.path.join(data_dir, song, "bass_other_seg_0.npy"))
-        for song in seg_counter
-    ]
-    print("Got", len(npy_files), "files")
-
-
-    # Use multiprocessing to load and serialize data
-    with multiprocessing.Pool(processes=os.cpu_count()) as pool:
-        results = list(tqdm(pool.imap_unordered(load_and_serialize, npy_files), total=len(npy_files)))
-
-    # Filter out failed ones
-    results = [r for r in results if r is not None]
-
-    # Write to LMDB
-    batch_size = 5000
-    txn = env.begin(write=True)
-    for i, (key, val) in enumerate(tqdm(results, desc="Writing to LMDB")):
-        txn.put(key, val)
-        if (i + 1) % batch_size == 0:
-            txn.commit()
-            txn = env.begin(write=True)
-    txn.commit()
-    env.sync()
-    env.close()
-
-    print(f"✅ LMDB created at {lmdb_path}")
 
 
 # Beatport Dataset
@@ -118,10 +63,12 @@ class SegmentBPDataset(Dataset):
         tstr_min_rate=0.8,
         tstr_max_rate=1.25,
         use_lmdb=False, # True
-        amp_name="_amp_08",
+        lmdb_path=None,
+        amp_name="_amp_05",
     ):
         # Load segment info list
-
+        print(f"Loading {split} segment counter from {amp_name}")
+        
         with open(f"info/{split}_seg_counter{amp_name}.json", "r") as f:
             self.seg_counter = json.load(f)
             self.bp_listdir = list(self.seg_counter.keys())
@@ -135,11 +82,22 @@ class SegmentBPDataset(Dataset):
         self.eval_id = eval_id
         self.sample_rate = sample_rate
         self.use_lmdb = use_lmdb
+        self.lmdb_path = lmdb_path
         
         # LMDB
         if self.use_lmdb:
-            self.lmdb_env = lmdb.open(data_dir, readonly=True, lock=False, readahead=False, meminit=False)
-        
+            print("Loading LMDB from:", lmdb_path)
+            self.lmdb_env = lmdb.open(
+                lmdb_path, 
+                readonly=True, 
+                lock=False, 
+                readahead=False, 
+                meminit=False
+            )
+        else:
+            print("Not using LMDB")
+            
+            
         # Augmentation
         self.pre_augment = Compose([
             SeqPerturb_Reverse(
@@ -169,6 +127,7 @@ class SegmentBPDataset(Dataset):
                 p=p_tstr,
             ), # Time Stretch: Stretch the audio in time without changing the pitch.
         ])
+        
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.bp_listdir)
@@ -180,15 +139,22 @@ class SegmentBPDataset(Dataset):
         return x
     
     
-    def load_segment(self, song_name, seg_idx):
+    def load_segment(self, song_name):
         if self.use_lmdb:
-            key = f"{song_name}/{self.stem}_seg_{seg_idx}".encode()
+            key = song_name.encode()
             with self.lmdb_env.begin(write=False) as txn:
                 byte_data = txn.get(key)
                 if byte_data is None:
                     raise KeyError(f"Key {key} not found in LMDB.")
                 x = pickle.loads(byte_data)
         else:
+            # TODO: Random Choose Segment
+            # if self.eval_mode:
+            #     seg_idx = self.eval_id
+            # else:
+            #     segment_count = self.seg_counter[song_name]
+            #     seg_idx = random.randint(0, segment_count - 1)
+            seg_idx = self.eval_id
             path = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx}.npy")
             x = np.load(path, mmap_mode='r').copy()
         return x
@@ -199,9 +165,7 @@ class SegmentBPDataset(Dataset):
         song_name = self.bp_listdir[idx]
         
         if not self.eval_mode:
-            segment_count = self.seg_counter[song_name]
-            seg_idx = random.randint(0, segment_count - 1)
-            x = self.load_segment(song_name, seg_idx)
+            x = self.load_segment(song_name)
             x_i = self.augment_func(x, sample_rate=self.sample_rate)
             x_j = self.augment_func(x, sample_rate=self.sample_rate)
             return torch.from_numpy(x_i), torch.from_numpy(x_j), \
@@ -209,7 +173,7 @@ class SegmentBPDataset(Dataset):
         
         else:
             # Load audio data from .npy from index 0
-            x = self.load_segment(song_name, self.eval_id)
+            x = self.load_segment(song_name)
             return torch.from_numpy(x), self.label_dict[song_name], song_name
 
 
@@ -224,5 +188,50 @@ if __name__ == "__main__":
     args = parser.parse_args()
     os.makedirs(args.lmdb_dir, exist_ok=True)
     
-    if args.use_lmdb:
-        create_lmdb(args.seg_dir, args.lmdb_dir)
+    # if args.use_lmdb:
+    #     create_lmdb(args.seg_dir, args.lmdb_dir)
+    
+    train_dataset = SegmentBPDataset(
+        data_dir=args.seg_dir,
+        split="train",
+        stem="bass_other",
+        eval_mode=False,
+        num_seq_segments=args.num_seq_segments,
+        fixed_second=args.fixed_second,
+        sp_method=args.sp_method,
+        p_ts=args.p_ts,
+        p_ps=args.p_ps,
+        p_tm=args.p_tm,
+        p_tstr=args.p_tstr,
+        semitone_range=args.semitone_range,
+        tm_min_band_part=args.tm_min_band_part,
+        tm_max_band_part=args.tm_max_band_part,
+        tm_fade=args.tm_fade,
+        amp_name=args.amp_name,
+        use_lmdb=False,
+        lmdb_path=args.lmdb_dir,
+    )
+    
+    print("train_dataset length:", len(train_dataset))
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=8, #args.batch_size,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=True,
+        drop_last=True,
+        persistent_workers=args.persistent_workers,
+        prefetch_factor=args.prefetch_factor,
+    )
+    
+    import time
+    time_start = time.time()
+    for i, (x_i, x_j, label, song_name) in enumerate(tqdm(train_loader)):
+        # print(x_i.shape, x_j.shape, label, song_name)
+        # break
+        if i > 100:
+            break
+    time_end = time.time()
+    print("time cost:", time_end - time_start)
+    
+    # print(train_loader.dataset[0])
