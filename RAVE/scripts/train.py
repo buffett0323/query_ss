@@ -23,6 +23,7 @@ from rave.transforms import get_augmentations, add_augmentation
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from rave.model import RAVE
 
 FLAGS = flags.FLAGS
 
@@ -169,7 +170,7 @@ def main(argv):
 
 
     # create model
-    model = rave.RAVE(
+    model = RAVE(
         n_channels=FLAGS.channels, 
         sampling_rate=FLAGS.sr,
         save_audio_dir=os.path.join(FLAGS.out_path, RUN_NAME, "audio"),
