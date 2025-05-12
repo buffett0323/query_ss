@@ -59,7 +59,7 @@ flags.DEFINE_multi_string('override', default=[], help='Override gin binding')
 flags.DEFINE_integer('workers',
                      default=8,
                      help='Number of workers to spawn for dataset loading')
-flags.DEFINE_multi_integer('gpu', default=[1, 2], help='GPU to use')
+# flags.DEFINE_multi_integer('gpu', default=[1, 2], help='GPU to use')
 flags.DEFINE_bool('derivative',
                   default=False,
                   help='Train RAVE on the derivative of the signal')
@@ -78,7 +78,11 @@ flags.DEFINE_bool('progress',
 flags.DEFINE_bool('smoke_test', 
                   default=False,
                   help="Run training with n_batches=1 to test the model")
+# Buffett Added
 flags.DEFINE_integer('sr', 44100, help='Sampling rate')
+flags.DEFINE_integer('devices', default=2, help='GPU amounts to use')
+flags.DEFINE_string('accelerator', default="gpu", help='Accelerator to use')
+flags.DEFINE_string('strategy', default="ddp", help='Strategy to use')
 
 class EMA(pl.Callback):
 
@@ -224,27 +228,26 @@ def main(argv):
 
     os.makedirs(os.path.join(FLAGS.out_path, RUN_NAME), exist_ok=True)
 
-    if FLAGS.gpu == [-1]:
-        gpu = 0
-    else:
-        gpu = FLAGS.gpu or rave.core.setup_gpu()
+    # if FLAGS.gpu == [-1]:
+    #     gpu = 0
+    # else:
+    #     gpu = FLAGS.gpu or rave.core.setup_gpu()
 
-    print(f"gpu: {gpu}")
-    accelerator = None
-    devices = None
-    if FLAGS.gpu == [-1]:
-        pass
-    elif torch.cuda.is_available():
-        accelerator = "cuda"
-        devices = FLAGS.gpu or rave.core.setup_gpu()
-    elif torch.backends.mps.is_available():
-        print(
-            "Training on mac is not available yet. Use --gpu -1 to train on CPU (not recommended)."
-        )
-        exit()
-        accelerator = "mps"
-        devices = 1
-    print('selected gpu:', gpu, "devices: ", devices)
+    # accelerator = None
+    # devices = None
+    # if FLAGS.gpu == [-1]:
+    #     pass
+    # elif torch.cuda.is_available():
+    #     accelerator = "cuda"
+    #     devices = FLAGS.gpu or rave.core.setup_gpu()
+    # elif torch.backends.mps.is_available():
+    #     print(
+    #         "Training on mac is not available yet. Use --gpu -1 to train on CPU (not recommended)."
+    #     )
+    #     exit()
+    #     accelerator = "mps"
+    #     devices = 1
+    # print('selected gpu:', gpu, "devices: ", devices)
     
     callbacks = [
         validation_checkpoint,
@@ -260,9 +263,9 @@ def main(argv):
 
     trainer = pl.Trainer(
         logger=[tb_logger, wandb_logger],
-        accelerator="gpu",         # ✅ updated
-        devices=2,                 # ✅ updated
-        strategy="ddp",            # ✅ already correct
+        accelerator=FLAGS.accelerator,         # ✅ updated
+        devices=FLAGS.devices,                 # ✅ updated
+        strategy=FLAGS.strategy,               # ✅ updated
         callbacks=callbacks,
         max_epochs=300000,
         max_steps=FLAGS.max_steps,

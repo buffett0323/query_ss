@@ -1,5 +1,4 @@
-python train.py \
-    --gpu 2 \
+CUDA_VISIBLE_DEVICES=2,3 torchrun --nproc_per_node=2 train.py \
     --config ../rave/configs/v2.gin \
     --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/4secs/ \
     --out_path /mnt/gestalt/home/buffett/rave/train_configs/ \
@@ -9,17 +8,8 @@ python train.py \
     --batch 16 \
     --workers 24 \
     --sr 44100 \
-# CUDA_VISIBLE_DEVICES=1,2 torchrun --nproc_per_node=2 train.py \
-#     --gpu 0 1 \
-#     --config ../rave/configs/v2.gin \
-#     --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/4secs/ \
-#     --out_path /mnt/gestalt/home/buffett/rave/train_configs/ \
-#     --name beatport_rave \
-#     --channels 1 \
-#     --save_every 10000 \
-#     --batch 16 \
-#     --workers 24 \
-#     --sr 44100 \
+    --devices 2 \
+    --strategy ddp
     # --n_signal 131072 \ # = 1024 * 128
     # --augment configs/augmentations/compress.gin \
     # --augment configs/augmentations/gain.gin \
