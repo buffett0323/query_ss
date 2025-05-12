@@ -1,5 +1,5 @@
-CUDA_VISIBLE_DEVICES=0 python train.py \
-    --config ../rave/configs/v2.gin \
+python train_single_gpu.py \
+    --config ../rave/configs/v3.gin \
     --db_path /home/buffett/dataset/rave/beatport_data_pp/4secs/ \
     --out_path /home/buffett/dataset/rave/train_configs/ \
     --name beatport_rave \
@@ -8,6 +8,4 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
     --batch 16 \
     --workers 24 \
     --sr 44100 \
-    --devices 1 \
-    --accelerator gpu \
-    --strategy auto
+    --gpu 0

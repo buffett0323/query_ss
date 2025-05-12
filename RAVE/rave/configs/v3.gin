@@ -1,9 +1,9 @@
 from __gin__ import dynamic_registration
 
-include "configs/v2.gin"
-include "configs/adain.gin"
-include "configs/snake.gin"
-include "configs/descript_discriminator.gin"
+include "../rave/configs/v2.gin"
+include "../rave/configs/adain.gin"
+include "../rave/configs/snake.gin"
+include "../rave/configs/descript_discriminator.gin"
 
 import rave
 

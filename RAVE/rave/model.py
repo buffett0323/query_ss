@@ -368,7 +368,7 @@ class RAVE(pl.LightningModule):
             gen_opt.step()
 
         # --- LOGGING ONCE ---
-        # 加上 beta_factor，同時一次把所有 key 打點
+        # Add beta_factor and log all metrics to wandb
         loss_dict['beta_factor'] = self.beta_factor
         self.log_dict(
             loss_dict,
