@@ -5,7 +5,7 @@ python train_single_gpu.py \
     --name beatport_rave \
     --channels 1 \
     --save_every 10000 \
-    --batch 16 \
+    --batch 64 \
     --workers 24 \
     --sr 44100 \
-    --gpu 0
+    --gpu 4
