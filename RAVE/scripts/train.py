@@ -262,6 +262,7 @@ def main(argv):
         logger=[tb_logger, wandb_logger],
         accelerator=accelerator,
         devices=devices,
+        strategy="ddp", # <-- ADD THIS LINE FOR MULTI-GPU TRAINING
         callbacks=callbacks,
         max_epochs=300000,
         max_steps=FLAGS.max_steps,

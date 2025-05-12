@@ -1,5 +1,5 @@
 python train.py \
-    --gpu 2 \
+    --gpu 0 1 \
     --config ../rave/configs/v2.gin \
     --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/4secs/ \
     --out_path /mnt/gestalt/home/buffett/rave/train_configs/ \
