@@ -9,4 +9,5 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
     --workers 24 \
     --sr 44100 \
     --devices 1 \
-    --strategy single_device
+    --accelerator gpu \
+    --strategy auto
