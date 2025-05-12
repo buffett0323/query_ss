@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=2,3 torchrun --nproc_per_node=2 train.py \
     --config ../rave/configs/v2.gin \
-    --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/4secs/ \
-    --out_path /mnt/gestalt/home/buffett/rave/train_configs/ \
+    --db_path /home/buffett/dataset/rave/beatport_data_pp/4secs/ \
+    --out_path /home/buffett/dataset/rave/train_configs/ \
     --name beatport_rave \
     --channels 1 \
     --save_every 10000 \

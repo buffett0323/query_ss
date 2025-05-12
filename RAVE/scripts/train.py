@@ -165,6 +165,8 @@ def main(argv):
     gin_hash = hashlib.md5(gin.operative_config_str().encode()).hexdigest()[:10]
     RUN_NAME = f"{FLAGS.name}_{gin_hash}"
     print(f"RUN_NAME: {RUN_NAME}")
+    os.makedirs(os.path.join(FLAGS.out_path, RUN_NAME), exist_ok=True)
+
 
     # create model
     model = rave.RAVE(
@@ -226,7 +228,6 @@ def main(argv):
         save_dir=FLAGS.out_path
     )
 
-    os.makedirs(os.path.join(FLAGS.out_path, RUN_NAME), exist_ok=True)
 
     # if FLAGS.gpu == [-1]:
     #     gpu = 0
