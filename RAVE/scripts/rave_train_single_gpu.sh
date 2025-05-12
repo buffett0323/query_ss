@@ -1,11 +1,11 @@
 python train_single_gpu.py \
     --config ../rave/configs/v3.gin \
-    --db_path /home/buffett/dataset/rave/beatport_data_pp/4secs/ \
-    --out_path /home/buffett/dataset/rave/train_configs/ \
+    --db_path /mnt/gestalt/home/buffett/rave/beatport_data_pp/4secs/ \
+    --out_path /mnt/gestalt/home/buffett/rave/train_configs/ \
     --name beatport_rave \
     --channels 1 \
     --save_every 10000 \
     --batch 64 \
     --workers 24 \
     --sr 44100 \
-    --gpu 4
+    --gpu 1
