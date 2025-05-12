@@ -23,8 +23,7 @@ from rave.transforms import get_augmentations, add_augmentation
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
-from rave.model import RAVE
-
+print("✅ Loaded RAVE from:", rave.__file__)
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('name', None, help='Name of the run', required=True)
@@ -81,9 +80,10 @@ flags.DEFINE_bool('smoke_test',
                   help="Run training with n_batches=1 to test the model")
 # Buffett Added
 flags.DEFINE_integer('sr', 44100, help='Sampling rate')
-flags.DEFINE_integer('devices', default=2, help='GPU amounts to use')
-flags.DEFINE_string('accelerator', default="gpu", help='Accelerator to use')
-flags.DEFINE_string('strategy', default="ddp", help='Strategy to use')
+flags.DEFINE_integer('devices', default=1, help='GPU amounts to use')
+# flags.DEFINE_string('devices', default="auto", help='GPU amounts to use')
+flags.DEFINE_string('accelerator', default="auto", help='Accelerator to use')
+flags.DEFINE_string('strategy', default="auto", help='Strategy to use')
 
 class EMA(pl.Callback):
 
@@ -170,7 +170,7 @@ def main(argv):
 
 
     # create model
-    model = RAVE(
+    model = rave.RAVE(
         n_channels=FLAGS.channels, 
         sampling_rate=FLAGS.sr,
         save_audio_dir=os.path.join(FLAGS.out_path, RUN_NAME, "audio"),
