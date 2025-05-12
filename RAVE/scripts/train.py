@@ -59,7 +59,7 @@ flags.DEFINE_multi_string('override', default=[], help='Override gin binding')
 flags.DEFINE_integer('workers',
                      default=8,
                      help='Number of workers to spawn for dataset loading')
-flags.DEFINE_multi_integer('gpu', default=None, help='GPU to use')
+flags.DEFINE_multi_integer('gpu', default=[1, 2], help='GPU to use')
 flags.DEFINE_bool('derivative',
                   default=False,
                   help='Train RAVE on the derivative of the signal')
@@ -229,7 +229,7 @@ def main(argv):
     else:
         gpu = FLAGS.gpu or rave.core.setup_gpu()
 
-
+    print(f"gpu: {gpu}")
     accelerator = None
     devices = None
     if FLAGS.gpu == [-1]:
@@ -260,9 +260,9 @@ def main(argv):
 
     trainer = pl.Trainer(
         logger=[tb_logger, wandb_logger],
-        accelerator=accelerator,
-        devices=devices,
-        strategy="ddp", # <-- ADD THIS LINE FOR MULTI-GPU TRAINING
+        accelerator="gpu",         # ✅ updated
+        devices=2,                 # ✅ updated
+        strategy="ddp",            # ✅ already correct
         callbacks=callbacks,
         max_epochs=300000,
         max_steps=FLAGS.max_steps,

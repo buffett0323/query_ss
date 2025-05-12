@@ -225,6 +225,8 @@ class RAVE(pl.LightningModule):
 
         self.register_buffer("receptive_field", torch.tensor([0, 0]).long())
         self.audio_monitor_epochs = audio_monitor_epochs
+        os.makedirs(self.save_audio_dir, exist_ok=True)
+        
 
     def configure_optimizers(self):
         gen_p = list(self.encoder.parameters())
@@ -372,13 +374,15 @@ class RAVE(pl.LightningModule):
             loss_dict,
             on_step=True,
             on_epoch=True,
-            prog_bar=True
+            prog_bar=True,
+            sync_dist=True
         )
 
         return total_gen_loss
     
     
     def validation_step(self, x, batch_idx):
+        # print(f"x.shape: {x.shape}") # x.shape: torch.Size([16, 1, 131072])
 
         z = self.encode(x)
         if isinstance(self.encoder, blocks.VariationalEncoder):
@@ -393,71 +397,114 @@ class RAVE(pl.LightningModule):
         full_distance = sum(distance.values())
 
         if self.trainer is not None:
-            self.log('validation', full_distance)
+            self.log(
+                'validation', 
+                full_distance, 
+                sync_dist=True
+            )
         
-        self.log('val_full_distance', full_distance, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            'val_full_distance', 
+            full_distance, 
+            on_step=False, 
+            on_epoch=True, 
+            prog_bar=True, 
+            sync_dist=True
+        )
         return torch.cat([x, y], -1), mean
 
 
-    @torch.no_grad()
     def validation_epoch_end(self, out):
         if not self.receptive_field.sum():
             print("Computing receptive field for this configuration...")
             lrf, rrf = rave.core.get_rave_receptive_field(self, n_channels=self.n_channels)
             self.receptive_field[0] = lrf
             self.receptive_field[1] = rrf
-            print(
-                f"Receptive field: {1000*lrf/self.sr:.2f}ms <-- x --> {1000*rrf/self.sr:.2f}ms"
-            )
+            print(f"Receptive field: {1000*lrf/self.sr:.2f}ms <-- x --> {1000*rrf/self.sr:.2f}ms")
 
         if not len(out): return
 
-        # Unpack inputs and reconstructions
-        # audio, z = list(zip(*out))
-        # audio = list(map(lambda x: x.cpu(), audio))
-        audio_pairs, z = zip(*out)
-        audio_pairs = [a.cpu() for a in audio_pairs]
+        audio, z = list(zip(*out))
+        audio = list(map(lambda x: x.cpu(), audio))
 
         if self.trainer.state.stage == RunningStage.SANITY_CHECKING:
             return
 
-        # Save audio files if directory is provided (only on global rank 0)
-        if getattr(self, 'save_audio_dir', None) and self.trainer.is_global_zero:
-            os.makedirs(self.save_audio_dir, exist_ok=True)
-            epoch = self.current_epoch
+        # LATENT SPACE ANALYSIS
+        if not self.warmed_up and isinstance(self.encoder, blocks.VariationalEncoder):
+            print("Latent space analysis")
+            z = torch.cat(z, 0)
+            z = rearrange(z, "b c t -> (b t) c")
+
+            self.latent_mean.copy_(z.mean(0))
+            z = z - self.latent_mean
+
+            pca = PCA(z.shape[-1]).fit(z.cpu().numpy())
+
+            components = pca.components_
+            components = torch.from_numpy(components).to(z)
+            self.latent_pca.copy_(components)
+
+            var = pca.explained_variance_ / np.sum(pca.explained_variance_)
+            var = np.cumsum(var)
+
+            self.fidelity.copy_(torch.from_numpy(var).to(self.fidelity))
+
+            var_percent = [.8, .9, .95, .99]
+            for p in var_percent:
+                self.log(
+                    f"fidelity_{p}",
+                    np.argmax(var > p).astype(np.float32),
+                    sync_dist=True
+                )
+                
+        # Save audio locally
+        if self.current_epoch % 5 == 0:
+            os.makedirs(os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}"), exist_ok=True)
             
-            for idx, pair in enumerate(audio_pairs):
-                # pair shape: (channels, 2 * time_steps)
-                if pair.ndim == 1:
-                    total_len = pair.shape[0]
-                    c = 1
-                elif pair.ndim == 2:
-                    c, total_len = pair.shape
-                elif pair.ndim == 3:
-                    _, c, total_len = pair.shape
-                else:
-                    raise ValueError(f"Unexpected audio shape: {pair.shape}")
+            
+            for i, pair in enumerate(audio[:10]):  # Save only top 10
+                pair = pair.squeeze(0).cpu().numpy()  # from [1, 2*T] → [2*T]
+                pair = pair.squeeze(1) # pair.shape: (16, 1, 262144) -> pair.shape: (16, 262144)
+                
+                if pair.ndim != 2: 
+                    print(f"pair.shape: {pair.shape}")
+                    continue
+                
+                BS, total_len = pair.shape
+                if total_len % 2 != 0:
+                    print(f"[WARNING] Odd length audio skipped: {pair.shape}")
+                    continue
                 
                 half = total_len // 2
-                inp = pair[:, :half].numpy().T  # (time, channels)
-                out = pair[:, half:].numpy().T # (time, channels)
-                write_wav(
-                    os.path.join(self.save_audio_dir, f"epoch{epoch:03d}_sample{idx:02d}_input.wav"),
-                    self.sr,
-                    inp
-                )
-                write_wav(
-                    os.path.join(self.save_audio_dir, f"epoch{epoch:03d}_sample{idx:02d}_output.wav"),
-                    self.sr,
-                    out
-                )
+                x_np_pair, y_np_pair = pair[:, :half], pair[:, half:]
+                
+                for b in range(BS):
+                    x_np, y_np = x_np_pair[b], y_np_pair[b]
+                    
+                    # Clip + convert
+                    x_np, y_np = np.clip(x_np, -1.0, 1.0), np.clip(y_np, -1.0, 1.0)
+                    x_np, y_np = (x_np * 32767).astype(np.int16), (y_np * 32767).astype(np.int16)
 
-        # Log to TensorBoard / W&B as before
-        y = torch.cat(audio_pairs, 0)[:8].reshape(-1).numpy()
-        if self.integrator is not None:
-            y = self.integrator(y)
-        self.logger.experiment.add_audio("audio_val", y, self.eval_number, self.sr)
-        self.eval_number += 1
+                    write_wav(
+                        os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_input_{i}.wav"), 
+                        self.sr, 
+                        x_np
+                    )
+                    write_wav(
+                        os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_output_{i}.wav"), 
+                        self.sr, 
+                        y_np
+                    )
+                    break
+        
+        # # Log to W&B / TensorBoard
+        # y = torch.cat(audio, 0)[:8].reshape(-1).numpy()
+        # if self.integrator is not None:
+        #     y = self.integrator(y)
+        # print(f"y.shape: {y.shape}")
+        # self.logger.experiment.add_audio("audio_val", y, self.eval_number, self.sr)
+        # self.eval_number += 1
 
     def on_fit_start(self):
         tb = self.logger.experiment
