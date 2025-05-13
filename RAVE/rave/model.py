@@ -258,10 +258,8 @@ class RAVE(pl.LightningModule):
             x_enc = _pqmf_encode(self.pqmf, x_enc) # after _pqmf_encode, x_enc.shape: torch.Size([8, 16, 8192])
         elif self.input_mode == "mel":
             x_enc = self._mel_encode(x)
-        print("x_enc.shape:", x_enc.shape)
             
         z = self.encoder(x_enc, cond=cond)  # z.shape: torch.Size([8, 16, 8192]) -> torch.Size([8, 256, 64])
-        print("z.shape:", z.shape)
         
         if return_mb:
             if self.input_mode == "pqmf":
