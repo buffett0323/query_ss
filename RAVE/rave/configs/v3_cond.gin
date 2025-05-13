@@ -1,0 +1,13 @@
+from __gin__ import dynamic_registration
+
+include "../rave/configs/v2.gin"
+include "../rave/configs/cond_adain.gin"
+include "../rave/configs/snake.gin"
+include "../rave/configs/descript_discriminator.gin"
+
+import rave
+
+rave.BetaWarmupCallback:
+    initial_value = 1e-6
+    target_value = 5e-2
+    warmup_len = 20000

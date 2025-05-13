@@ -511,6 +511,79 @@ def normalize_dilations(dilations: Union[Sequence[int],
     return dilations
 
 
+# Buffett Added
+class ConditionalAdaIN1d(nn.Module):
+    """
+    x: (B, C, T)       — Conv1d feature map
+    cond: (B, 1024)    — timbre conditioning vector
+    """
+    def __init__(
+        self, 
+        dim: int, # 96->192->384->768
+        cond_dim: int = 1024, 
+        eps: float = 1e-5
+    ):
+        super().__init__()
+        self.affine = nn.Linear(cond_dim, dim * 2)
+        self.eps = eps
+
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        cond: Optional[torch.Tensor] = None
+    ):
+        if cond is None:
+            print("No conditioning vector provided")
+            return x
+
+        gamma, beta = self.affine(cond).chunk(2, dim=-1)  # (B, C)
+        gamma, beta = gamma.unsqueeze(-1), beta.unsqueeze(-1)
+        mean = x.mean(-1, keepdim=True)
+        std  = x.std (-1, keepdim=True) + self.eps
+        return gamma * (x - mean) / std + beta
+    
+    
+    
+class CC_CachedSequential(nn.Sequential):
+    """
+    Sequential operations with future-compensation tracking
+    (adds conditional support)
+    """
+    def __init__(self, *args, **kwargs):
+        cumulative_delay = kwargs.pop("cumulative_delay", 0)
+        stride           = kwargs.pop("stride", 1)
+        super().__init__(*args, **kwargs)
+
+        self.cumulative_delay = int(cumulative_delay) * stride
+
+        last_delay = 0
+        for i in range(1, len(self) + 1):
+            try:
+                last_delay = self[-i].cumulative_delay
+                break
+            except AttributeError:
+                pass
+        self.cumulative_delay += last_delay
+
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        cond: Optional[torch.Tensor] = None
+    ):
+        for m in self:
+            if isinstance(m, ConditionalAdaIN1d):
+                x = m(x, cond)
+                continue
+
+            try:
+                x = m(x, cond=cond)
+            except TypeError:
+                x = m(x)
+        return x
+
+
+
 class EncoderV2(nn.Module):
 
     def __init__(
@@ -589,10 +662,17 @@ class EncoderV2(nn.Module):
         if recurrent_layer is not None:
             net.append(recurrent_layer(latent_size * n_out))
 
-        self.net = cc.CachedSequential(*net)
+        self.net = CC_CachedSequential(*net) # cc.CachedSequential(*net)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.net(x)
+    def forward(
+        self,
+        x: torch.Tensor,
+        cond: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        if cond is not None:
+            x = self.net(x, cond=cond)
+        else:
+            x = self.net(x)
         return x
 
 
@@ -689,12 +769,19 @@ class GeneratorV2(nn.Module):
         else:
             net.append(waveform_module)
 
-        self.net = cc.CachedSequential(*net)
+        self.net = CC_CachedSequential(*net) # cc.CachedSequential(*net)
 
         self.amplitude_modulation = amplitude_modulation
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.net(x)
+    def forward(
+        self,
+        x: torch.Tensor,
+        cond: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        if cond is not None:
+            x = self.net(x, cond=cond)
+        else:
+            x = self.net(x)
 
         noise = 0.
 
@@ -737,8 +824,12 @@ class VariationalEncoder(nn.Module):
         state = torch.tensor(int(state), device=self.warmed_up.device)
         self.warmed_up = state
 
-    def forward(self, x: torch.Tensor):
-        z = self.encoder(x)
+    def forward(
+        self, 
+        x: torch.Tensor,
+        cond: Optional[torch.Tensor] = None
+    ):
+        z = self.encoder(x, cond=cond)
 
         if self.warmed_up:
             z = z.detach()
