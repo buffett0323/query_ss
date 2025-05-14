@@ -39,7 +39,6 @@ lars: True
 
 
 # dataset options
-train_mode: "augmentation" # "aug+sel"
 segment_second: 0.95
 piece_second: 4
 max_length: 64
@@ -58,7 +57,7 @@ SAMPLE_RATE: 16000
 AMP_THRES: 0.5
 fixed_second: 0.3
 num_seq_segments: 5
-p_ts: 0.8 # 0.5 # Sequence Perturbation
+p_ts: 0.5 # 0.5 # Sequence Perturbation
 p_ps: 0.5 # 0.4 # Pitch Shift
 p_tm: 0.5 # 0.5 # Time Mask
 p_tstr: 0.5 # 0.5 # Time Stretch

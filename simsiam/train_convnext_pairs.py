@@ -85,7 +85,7 @@ def main():
     train_dataset = SegmentBPDataset(
         data_dir=args.seg_dir,
         split="train",
-        stem="other",
+        stem="bass_other",
         eval_mode=False,
         train_mode=args.train_mode,
         p_ts=args.p_ts,
