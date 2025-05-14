@@ -142,7 +142,7 @@ def main():
         adjust_learning_rate(optimizer, init_lr, epoch, args)
         
         # Training
-        train_loss = train(train_loader, model, criterion, optimizer, epoch, 
+        train_loss, no_nan_exists = train(train_loader, model, criterion, optimizer, epoch, 
                            args, to_spec, pre_norm, post_norm)
 
         if args.log_wandb:
@@ -158,12 +158,27 @@ def main():
                 filename=f'checkpoint_{epoch:04d}.pth.tar', 
                 save_dir=args.model_dict_save_path
             )
+        
+        if not no_nan_exists:
+            print(f"Found NaN in the model at epoch {epoch}")
+            break
             
+def check_nan(i, z1, z2):
+    if torch.isnan(z1).any() or torch.isnan(z2).any():
+        print(f"NaN detected in batch {i}")
+        print("z1 contains NaN:", torch.isnan(z1).any().item())
+        print("z2 contains NaN:", torch.isnan(z2).any().item())
+        # Optional: print the full tensors to see where NaNs occur
+        print("z1:", z1)
+        print("z2:", z2)
+        return False
+    return True
+
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_norm, post_norm):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    
     losses_pair1 = AverageMeter('Loss-Sel', ':.4f')
     losses_pair2 = AverageMeter('Loss-Aug', ':.4f')
     progress = ProgressMeter(
@@ -171,6 +186,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         [batch_time, data_time, losses_pair1, losses_pair2], 
         prefix=f"Epoch: [{epoch}]",
     )
+    no_nan_exists = True
 
     model.train()
     end = time.time()
@@ -212,12 +228,22 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         z1_std1 = F.normalize(z1, dim=1).std(dim=0).mean()
         z2_std1 = F.normalize(z2, dim=1).std(dim=0).mean()
         
+        if i % 500 == 0:
+            if not check_nan(i, z1, z2):
+                no_nan_exists = False
+                break
+            
         # Pair 2: Same segment but different augmentation
         p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
         loss_pair2 = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
 
         z1_std2 = F.normalize(z1, dim=1).std(dim=0).mean()
         z2_std2 = F.normalize(z2, dim=1).std(dim=0).mean()
+        
+        if i % 500 == 0:
+            if not check_nan(i, z1, z2):
+                no_nan_exists = False
+                break
         
         # Calculate Avg_std_train
         avg_std = (z1_std1 + z2_std1 + z1_std2 + z2_std2) / 4
@@ -246,7 +272,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
                     "step": step
                 })
 
-    return (losses_pair1.avg + losses_pair2.avg) / 2
+    return (losses_pair1.avg + losses_pair2.avg) / 2, no_nan_exists
     
     
 
