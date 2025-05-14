@@ -39,6 +39,7 @@ from utils import yaml_config_hook, create_lmdb
 
 
 # Beatport Dataset
+# Beatport Dataset
 class SegmentBPDataset(Dataset):
     """ For 4 seconds audio data """
     def __init__(
@@ -62,14 +63,13 @@ class SegmentBPDataset(Dataset):
         tm_fade=True,
         tstr_min_rate=0.8,
         tstr_max_rate=1.25,
-        use_lmdb=False, # True
-        lmdb_path=None,
         amp_name="_amp_05",
+        loading_mode="simple",#"pairs",
     ):
         # Load segment info list
-        print(f"Loading {split} segment counter from {amp_name}")
+        print(f"Loading {split} segment counter from {amp_name}, with {loading_mode} mode")
         
-        with open(f"info/{split}_seg_counter{amp_name}.json", "r") as f:
+        with open(f"info/chorus_audio_16000_095sec_npy_bass_other_seg_counter{amp_name}_{split}.json", "r") as f:
             self.seg_counter = json.load(f)
             self.bp_listdir = list(self.seg_counter.keys())
             print(f"{split} Mode: {len(self.bp_listdir)} songs")
@@ -81,23 +81,8 @@ class SegmentBPDataset(Dataset):
         self.eval_mode = eval_mode
         self.eval_id = eval_id
         self.sample_rate = sample_rate
-        self.use_lmdb = use_lmdb
-        self.lmdb_path = lmdb_path
+        self.loading_mode = loading_mode
         
-        # LMDB
-        if self.use_lmdb:
-            print("Loading LMDB from:", lmdb_path)
-            self.lmdb_env = lmdb.open(
-                lmdb_path, 
-                readonly=True, 
-                lock=False, 
-                readahead=False, 
-                meminit=False
-            )
-        else:
-            print("Not using LMDB")
-            
-            
         # Augmentation
         self.pre_augment = Compose([
             SeqPerturb_Reverse(
@@ -140,41 +125,55 @@ class SegmentBPDataset(Dataset):
     
     
     def load_segment(self, song_name):
-        if self.use_lmdb:
-            key = song_name.encode()
-            with self.lmdb_env.begin(write=False) as txn:
-                byte_data = txn.get(key)
-                if byte_data is None:
-                    raise KeyError(f"Key {key} not found in LMDB.")
-                x = pickle.loads(byte_data)
-        else:
-            # TODO: Random Choose Segment
-            # if self.eval_mode:
-            #     seg_idx = self.eval_id
-            # else:
-            #     segment_count = self.seg_counter[song_name]
-            #     seg_idx = random.randint(0, segment_count - 1)
-            seg_idx = self.eval_id
-            path = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx}.npy")
-            x = np.load(path, mmap_mode='r').copy()
+        # TODO: Random Choose Segment
+        # if self.eval_mode:
+        #     seg_idx = self.eval_id
+        # else:
+        #     segment_count = self.seg_counter[song_name]
+        #     seg_idx = random.randint(0, segment_count - 1)
+        seg_idx = self.eval_id
+        path = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx}.npy")
+        x = np.load(path, mmap_mode='r').copy()
         return x
     
+    
+    def load_pairs(self, song_name):
+        segment_count = self.seg_counter[song_name]
+        seg_idx1, seg_idx2 = random.sample(range(segment_count), 2)
+        path1 = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx1}.npy")
+        path2 = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx2}.npy")
+        x_i = np.load(path1, mmap_mode='r').copy()
+        x_j = np.load(path2, mmap_mode='r').copy()
+        return x_i, x_j
+
 
     def __getitem__(self, idx):
         # Load audio data from .npy
         song_name = self.bp_listdir[idx]
         
         if not self.eval_mode:
-            x = self.load_segment(song_name)
-            x_i = self.augment_func(x, sample_rate=self.sample_rate)
-            x_j = self.augment_func(x, sample_rate=self.sample_rate)
-            return torch.from_numpy(x_i), torch.from_numpy(x_j), \
-                self.label_dict[song_name], song_name
+            if self.loading_mode == "simple":
+                x = self.load_segment(song_name)
+                x_i = self.augment_func(x, sample_rate=self.sample_rate)
+                x_j = self.augment_func(x, sample_rate=self.sample_rate)
+                return torch.from_numpy(x_i), torch.from_numpy(x_j), \
+                        self.label_dict[song_name], song_name
+            
+            elif self.loading_mode == "pairs":
+                x_pair1, x_pair2 = self.load_pairs(song_name)
+                x_i = self.augment_func(x_pair1, sample_rate=self.sample_rate)
+                x_j = self.augment_func(x_pair1, sample_rate=self.sample_rate)
+                return torch.from_numpy(x_pair1), torch.from_numpy(x_pair2), \
+                        torch.from_numpy(x_i), torch.from_numpy(x_j)
+                        
+            else:
+                raise ValueError(f"Invalid loading mode: {self.loading_mode}")
         
         else:
             # Load audio data from .npy from index 0
             x = self.load_segment(song_name)
             return torch.from_numpy(x), self.label_dict[song_name], song_name
+
 
 
 

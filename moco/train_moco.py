@@ -214,8 +214,7 @@ def main_worker(gpu, ngpus_per_node, args):
         tm_max_band_part=args.tm_max_band_part,
         tm_fade=args.tm_fade,
         amp_name=args.amp_name,
-        use_lmdb=args.use_lmdb,
-        lmdb_path=args.lmdb_dir,
+        loading_mode="pairs",
     )
     
 
@@ -256,7 +255,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
     # Training loop
-    os.makedirs(args.model_dict_save_dir, exist_ok=True)
+    os.makedirs(args.model_dict_save_path, exist_ok=True)
     
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -278,13 +277,11 @@ def main_worker(gpu, ngpus_per_node, args):
                 save_checkpoint(
                     {
                         "epoch": epoch + 1,
-                        "arch": args.arch,
                         "state_dict": model.state_dict(),
                         "optimizer": optimizer.state_dict(),
                     },
-                    is_best=False,
                     filename="checkpoint_{:04d}.pth.tar".format(epoch),
-                    save_dir=args.model_dict_save_dir,
+                    save_dir=args.model_dict_save_path,
                 )
                 
     if args.distributed:
@@ -294,31 +291,35 @@ def main_worker(gpu, ngpus_per_node, args):
 def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_norm, post_norm) -> None:
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
-    losses = AverageMeter("Loss", ":.4e")
-    # top1 = AverageMeter("Acc@1", ":6.2f")
-    # top5 = AverageMeter("Acc@5", ":6.2f")
+    # losses = AverageMeter("Loss", ":.4e")
+    losses_pair1 = AverageMeter('Loss-Sel', ':.4f')
+    losses_pair2 = AverageMeter('Loss-Aug', ':.4f')
     progress = ProgressMeter(
-        len(train_loader),
-        [batch_time, data_time, losses], #], top1, top5],
-        prefix="Epoch: [{}]".format(epoch),
+        len(train_loader), 
+        [batch_time, data_time, losses_pair1, losses_pair2], 
+        prefix=f"Epoch: [{epoch}]",
     )
 
     # switch to train mode
     model.train()
 
     end = time.time()
-    for i, (x_i, x_j, _, _) in enumerate(train_loader):
-        # measure data loading time
+    for i, (x_1, x_2, x_i, x_j) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
-        if args.gpu is not None:
-            x_i = x_i.cuda(args.gpu, non_blocking=True)
-            x_j = x_j.cuda(args.gpu, non_blocking=True)
-
+        x_1 = x_1.cuda(non_blocking=True)
+        x_2 = x_2.cuda(non_blocking=True)
+        x_i = x_i.cuda(non_blocking=True)
+        x_j = x_j.cuda(non_blocking=True)
+        
         # Mel-spec transform and normalize
+        x_1 = (to_spec(x_1) + torch.finfo().eps).log()
+        x_2 = (to_spec(x_2) + torch.finfo().eps).log()
         x_i = (to_spec(x_i) + torch.finfo().eps).log()
         x_j = (to_spec(x_j) + torch.finfo().eps).log()
 
+        x_1 = pre_norm(x_1).unsqueeze(1)
+        x_2 = pre_norm(x_2).unsqueeze(1)
         x_i = pre_norm(x_i).unsqueeze(1)
         x_j = pre_norm(x_j).unsqueeze(1)
         
@@ -327,49 +328,61 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         paired_inputs = torch.cat([x_i, x_j], dim=0)
         paired_inputs = post_norm(paired_inputs)
         
+        # Split the batch into 4 parts
+        x_1, x_2 = paired_inputs[:bs], paired_inputs[bs:2*bs]
+        x_i, x_j = paired_inputs[2*bs:3*bs], paired_inputs[3*bs:]
+        
         # compute output
-        output, target = model(im_q=paired_inputs[:bs], im_k=paired_inputs[bs:])
-        loss = criterion(output, target)
+        output1, target1 = model(im_q=x_1, im_k=x_2)
+        loss_pair1 = criterion(output1, target1)
+        
+        output2, target2 = model(im_q=x_i, im_k=x_j)
+        loss_pair2 = criterion(output2, target2)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        losses.update(loss.item(), x_i.size(0))
+        losses_pair1.update(loss_pair1.item(), x_1.size(0))
+        losses_pair2.update(loss_pair2.item(), x_i.size(0))
         # top1.update(acc1[0], images[0].size(0))
         # top5.update(acc5[0], images[0].size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        loss.backward()
+        loss_pair1.backward()
+        loss_pair2.backward()
         optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
+        total_loss = (loss_pair1.item() + loss_pair2.item()) / 2
 
         if i % args.print_freq == 0:
             progress.display(i)
             
             # Log training loss per step only from GPU 0
-            if args.gpu == 0 and args.log_wandb:
-                wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
+            if args.log_wandb:
+                step = epoch * len(train_loader) + i
+                wandb.log({
+                    "train_loss_step": total_loss, 
+                    "step": step,
+                    "loss_pair1": loss_pair1.item(),
+                    "loss_pair2": loss_pair2.item(),
+                })
 
-    return losses.avg
+    return (losses_pair1.avg + losses_pair2.avg) / 2
 
 
 
 def save_checkpoint(
     state, 
-    is_best, 
     filename: str = "checkpoint.pth.tar",
     save_dir: str = "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp08"
 ) -> None:
     
     torch.save(state, os.path.join(save_dir, filename))
-    if is_best:
-        shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))
-        
-        
+  
 
 
 
