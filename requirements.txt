@@ -27,3 +27,5 @@ encodec==0.1.1
 accelerate
 diffusers
 transformers
+nnAudio==0.3.3
+lmdb==1.6.2
