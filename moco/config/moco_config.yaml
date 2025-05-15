@@ -1,16 +1,14 @@
 # Wandb settings
 log_wandb: True #False
 wandb_project_name: "MoCoV2_BP"
-wandb_name: "ConvNeXt-Base + 4 Augs + Seg_0 only + 1024 dim"
+wandb_name: "ConvNeXt-Base Pairs + 4 Augs + Seg_0 only + 1024 dim"
 wandb_notes: "ConvNeXt-Base, Terra, Amp_0.5 Seg_0 only, Augmentation: Seq Perturb + Reverse 0.5 -> Time mask -> Pitch shift -> Time stretch"
-
+loading_mode: "pairs" # simple
 
 # Dataset settings
-data_dir: "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new"
-seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_05"
-model_dict_save_path: "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp05"
-lmdb_dir: "/mnt/gestalt/home/buffett/beatport_analyze/lmdb"
-batch_size: 512 # 256  # mini-batch size
+seg_dir: "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"
+model_dict_save_path: "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp08"
+batch_size: 256 # 256  # mini-batch size
 workers: 16  # number of data loading workers
 sample_rate: 16000
 n_fft: 1024

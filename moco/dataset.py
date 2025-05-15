@@ -39,7 +39,6 @@ from utils import yaml_config_hook, create_lmdb
 
 
 # Beatport Dataset
-# Beatport Dataset
 class SegmentBPDataset(Dataset):
     """ For 4 seconds audio data """
     def __init__(
@@ -207,8 +206,6 @@ if __name__ == "__main__":
         tm_max_band_part=args.tm_max_band_part,
         tm_fade=args.tm_fade,
         amp_name=args.amp_name,
-        use_lmdb=False,
-        lmdb_path=args.lmdb_dir,
     )
     
     print("train_dataset length:", len(train_dataset))

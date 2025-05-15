@@ -325,25 +325,21 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         
         # Form a batch and post-normalize it.
         bs = x_i.shape[0]
-        paired_inputs = torch.cat([x_i, x_j], dim=0)
+        paired_inputs = torch.cat([x_1, x_2, x_i, x_j], dim=0)
         paired_inputs = post_norm(paired_inputs)
         
-        # Split the batch into 4 parts
-        x_1, x_2 = paired_inputs[:bs], paired_inputs[bs:2*bs]
-        x_i, x_j = paired_inputs[2*bs:3*bs], paired_inputs[3*bs:]
-        
         # compute output
-        output1, target1 = model(im_q=x_1, im_k=x_2)
+        output1, target1 = model(im_q=paired_inputs[:bs], im_k=paired_inputs[bs:2*bs])
         loss_pair1 = criterion(output1, target1)
         
-        output2, target2 = model(im_q=x_i, im_k=x_j)
+        output2, target2 = model(im_q=paired_inputs[2*bs:3*bs], im_k=paired_inputs[3*bs:])
         loss_pair2 = criterion(output2, target2)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
         # acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        losses_pair1.update(loss_pair1.item(), x_1.size(0))
-        losses_pair2.update(loss_pair2.item(), x_i.size(0))
+        losses_pair1.update(loss_pair1.item(), bs)
+        losses_pair2.update(loss_pair2.item(), bs)
         # top1.update(acc1[0], images[0].size(0))
         # top5.update(acc5[0], images[0].size(0))
 
