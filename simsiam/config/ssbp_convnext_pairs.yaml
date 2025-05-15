@@ -3,13 +3,13 @@ segment_second: 0.95
 piece_second: 4
 log_wandb: True #False
 wandb_project_name: "SimSiam Training"
-wandb_name: "ConvNeXt-Base + 2-pairs Sinica-131"
+wandb_name: "ConvNeXt-Base + 2-pairs Sinica-131 + Split by song name + amp_08"
 wandb_notes: "ConvNeXt-Base, Sinica-131, Amp_Seg-0.95sec, Augmentation: Time shift -> Time mask -> Pitch shift -> Time stretch, lr:5e-2"
 loading_mode: "pairs"
 
 # distributed training
 seg_dir: "/home/buffett/dataset/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"
-model_dict_save_path: "/home/buffett/dataset/simsiam_model_dict/convnext_model_dict_2pairs_0514"
+model_dict_save_path: "/home/buffett/dataset/simsiam_model_dict/convnext_model_dict_2pairs_0516"
 workers: 24 # 24 for terra, 56 for fatcat
 
 
