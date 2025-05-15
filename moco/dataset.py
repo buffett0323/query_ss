@@ -68,7 +68,7 @@ class SegmentBPDataset(Dataset):
         # Load segment info list
         print(f"Loading {split} segment counter from {amp_name}, with {loading_mode} mode")
         
-        with open(f"info/chorus_audio_16000_095sec_npy_bass_other_seg_counter{amp_name}_{split}.json", "r") as f:
+        with open(f"info/{split}_segments{amp_name}.json", "r") as f:
             self.seg_counter = json.load(f)
             self.bp_listdir = list(self.seg_counter.keys())
             print(f"{split} Mode: {len(self.bp_listdir)} songs")
@@ -141,9 +141,9 @@ class SegmentBPDataset(Dataset):
         seg_idx1, seg_idx2 = random.sample(range(segment_count), 2)
         path1 = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx1}.npy")
         path2 = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx2}.npy")
-        x_i = np.load(path1, mmap_mode='r').copy()
-        x_j = np.load(path2, mmap_mode='r').copy()
-        return x_i, x_j
+        x_pair1 = np.load(path1, mmap_mode='r').copy()
+        x_pair2 = np.load(path2, mmap_mode='r').copy()
+        return x_pair1, x_pair2
 
 
     def __getitem__(self, idx):

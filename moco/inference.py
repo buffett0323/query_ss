@@ -242,10 +242,10 @@ def main() -> None:
                     
                     # For Training
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
-                    f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, 'other_seg_0.npy')}\n")
+                    f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, 'bass_other_seg_0.npy')}\n")
                     
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
-                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'bass_other_seg_0.npy')}\n")
                     f.write("\n")
                     
                     
@@ -254,7 +254,7 @@ def main() -> None:
                     nearest_labels_test = [label_bank_test[idx] for idx in top_k_indices_test[i].tolist()]
 
                     for rank, neighbor_path in enumerate(nearest_paths_test, 1):
-                        f.write(f"python npy2mp3.py --output_mp3 test_top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
+                        f.write(f"python npy2mp3.py --output_mp3 test_top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'bass_other_seg_0.npy')}\n")
                     f.write("\n")
                     
                     

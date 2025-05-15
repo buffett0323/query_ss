@@ -1,7 +1,7 @@
 # Wandb settings
 log_wandb: True #False
 wandb_project_name: "MoCoV2_BP"
-wandb_name: "ConvNeXt-Base Pairs + 4 Augs + Seg_0 only + 1024 dim"
+wandb_name: "ConvNeXt-Base + Pairs + 4 Augs + Seg_0 only + 1024 dim + Split by song name"
 wandb_notes: "ConvNeXt-Base, Terra, Amp_0.5 Seg_0 only, Augmentation: Seq Perturb + Reverse 0.5 -> Time mask -> Pitch shift -> Time stretch"
 loading_mode: "pairs" # simple
 
