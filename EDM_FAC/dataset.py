@@ -36,10 +36,14 @@ class EDM_Render_Dataset(Dataset):
         # Create ID mappings for all three levels
         self.timbre_to_id = {}
         self.id_to_timbre = {}
+        self.midi_to_id = {}
+        self.id_to_midi = {}
         self.timbre_to_files = {}
         self.content_to_files = {}
-        self.unique_timbres = []
-        self.unique_midis = []
+        
+        # Storing names
+        self.unique_timbres = [] # timbre names
+        self.unique_midis = [] # midi names
         self._preprocess()
 
         # Create index mappings
@@ -63,13 +67,22 @@ class EDM_Render_Dataset(Dataset):
             self.timbre_to_id[timbre] = idx
             self.id_to_timbre[idx] = timbre
 
+        for idx, midi in enumerate(sorted(self.unique_midis)):
+            self.midi_to_id[midi] = idx
+            self.id_to_midi[idx] = midi
 
     def _build_index(self):
-        counter = 0
+
         for stem in tqdm(self.stems, desc="Pre-loading information"):
-            for timbre_id in self.unique_timbres:
-                for midi_id in self.unique_midis:
-                    wav_path = os.path.join(self.root_path, stem, f"{timbre_id}_{midi_id}.wav")
+            for timbre in self.unique_timbres:
+                for midi in self.unique_midis:
+                    wav_path = os.path.join(self.root_path, stem, f"{timbre}_{midi}.wav")
+                    
+                    # Transfer to class ids
+                    timbre_id = self.timbre_to_id[timbre]
+                    midi_id = self.midi_to_id[midi]
+                    counter = len(self.file_index)
+                    
                     
                     if not os.path.exists(wav_path): continue
 
@@ -82,9 +95,8 @@ class EDM_Render_Dataset(Dataset):
                         self.content_to_files[midi_id] = []
                     self.content_to_files[midi_id].append(counter)
                     
-                    midi_path = os.path.join(self.midi_path, f"{midi_id}.mid")
+                    midi_path = os.path.join(self.midi_path, f"{midi}.mid")
                     self.file_index.append((timbre_id, midi_id, wav_path, midi_path))
-                    counter += 1
 
     
     def _shuffle_file_index(self):
@@ -105,19 +117,19 @@ class EDM_Render_Dataset(Dataset):
 
 
     def _get_random_match(self, curr_idx: int, match_type: str) -> int:
-        curr_timbre, curr_content, _, _ = self.file_index[curr_idx]
+        curr_timbre_id, curr_content_id, _, _ = self.file_index[curr_idx]
 
         if match_type == 'content':
             # Same content ID, different timbre/DI/tone
             possible_matches = [
-                idx for idx in self.content_to_files[curr_content]
-                if self.file_index[idx][0] != curr_timbre
+                idx for idx in self.content_to_files[curr_content_id]
+                    if self.file_index[idx][0] != curr_timbre_id
             ]
         elif match_type == 'timbre':
             # Same DI ID, different content and tone
             possible_matches = [
-                idx for idx in self.timbre_to_files[curr_timbre]
-                if self.file_index[idx][1] != curr_content
+                idx for idx in self.timbre_to_files[curr_timbre_id]
+                    if self.file_index[idx][1] != curr_content_id
             ]
         else:
             raise ValueError(f"Unknown match type: {match_type}")
@@ -154,6 +166,7 @@ class EDM_Render_Dataset(Dataset):
         except Exception as e:
             print(f"Error processing MIDI file {midi_path}: {e}")
             return torch.zeros((n_frames, self.n_notes))
+
 
     def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
         signal, _ = sf.read(
@@ -240,7 +253,30 @@ class EDM_Render_Dataset(Dataset):
             'metadata': [item['metadata'] for item in batch]
         }
         
-        
+
+
+            
+def build_dataloader(
+    dataset,
+    batch_size=32,
+    num_workers=0,
+    prefetch_factor=16,
+    split="train",
+):
+    collate_fn = dataset.collate
+    data_loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        drop_last=True,
+        pin_memory=True,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=True if num_workers > 0 else False,
+        shuffle=True if split == "train" else False,
+    )
+
+    return data_loader
 
 
 if __name__ == "__main__":
@@ -253,3 +289,22 @@ if __name__ == "__main__":
     )
     print(len(dataset))
     print(dataset[0])
+    
+    dataloader = build_dataloader(
+        dataset, 
+        batch_size=4, 
+        num_workers=0, 
+        split="train"
+    )
+    
+    
+    for batch in dataloader:
+        print(batch.keys())
+        print(batch['input'].shape)
+        print(batch['pitch'].shape)
+        print(batch['timbre_id'].shape)
+        print(batch['content_match'].shape)
+        print(batch['content_pitch'].shape)
+        print(batch['timbre_match'].shape)
+        print(batch['timbre_pitch'].shape)
+        break
