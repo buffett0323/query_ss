@@ -2,15 +2,17 @@ path: /mnt/gestalt/home/buffett
 
 log_wandb: True
 wandb_project: edm-fac
-wandb_name: run_edm-fac
+wandb_name: train w/o validation and sample
 
 wandb_dir: ${path}/EDM_FAC
 root_path: ${path}/rendered_audio
 midi_path: ${path}/single_note_midi
 save_path: ${path}/EDM_FAC
 
-save_interval: 10 #1000
-validate_interval: 10 #1000
+log_interval: 10
+save_interval: 1000
+sample_freq: 1000
+validate_interval: 1000
 num_iters: 250000
 batch_size: 8 #4
 pretrained_model: ""

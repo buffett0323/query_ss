@@ -154,17 +154,19 @@ def main(args, accelerator):
     )
     validate = tracker.track("val", len(val_loader))(validate)
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
-
+    save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
     
     # Loop
     with tracker.live:
         for tracker.step, batch in enumerate(train_loader, start=tracker.step):
             train_step(args, accelerator, batch, tracker.step, wrapper)
             
-
             if tracker.step % args.save_interval == 0:
                 save_checkpoint(args, tracker.step, wrapper)
             
+            # if tracker.step % args.sample_freq == 0:
+            #     save_samples(args, val_idx, writer)
+                
             # if tracker.step % args.validate_interval == 0:
             #     validate(args, accelerator, val_loader, wrapper)
                 
@@ -177,6 +179,9 @@ def main(args, accelerator):
             wandb.finish()
         except:
             pass
+
+def save_samples(args, val_idx, writer):
+    pass
 
 
 def save_checkpoint(args, iter, wrapper):
@@ -342,7 +347,7 @@ def train_step(args, accelerator, batch, iter, wrapper):
     output["other/time_per_step"] = time.time() - train_start_time
 
     # Log to wandb
-    if iter % 10 == 0:  # Log every 10 steps to avoid too frequent logging
+    if iter % args.log_interval == 0:  # Log every 10 steps to avoid too frequent logging
         try:
             import wandb
             if wandb.run is not None and args.log_wandb:
