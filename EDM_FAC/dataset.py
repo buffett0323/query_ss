@@ -174,6 +174,7 @@ class EDM_Render_Dataset(Dataset):
             start=int(offset*self.sample_rate), 
             frames=int(self.duration*self.sample_rate)
         )
+        signal = signal.mean(axis=1, keepdims=False)
         return AudioSignal(signal, self.sample_rate)
 
     

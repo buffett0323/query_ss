@@ -1,232 +1,370 @@
-import shutil
+import sys
 import warnings
 import argparse
 import torch
 import os
-import os.path as osp
-import yaml
-import random
 import time
-import glob
-import torchaudio
 import torch
+import logging
+import wandb
 warnings.simplefilter('ignore')
-
-
 
 from modules.commons import *
 from losses import *
-from optimizers import build_optimizer
-
-from accelerate import Accelerator
-from accelerate.utils import LoggerType
-from accelerate import DistributedDataParallelKwargs
-
+from tqdm import tqdm
+from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader
-from torchmetrics.classification import MulticlassAccuracy
 
-import logging
-from accelerate.logging import get_logger
-
-from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
 from dac.nn.loss import MultiScaleSTFTLoss, MelSpectrogramLoss, GANLoss, L1Loss
 from audiotools import AudioSignal
+from audiotools import ml
+from audiotools.ml.decorators import Tracker, timer, when
+from audiotools.core import util
+
 from dataset import EDM_Render_Dataset
+from utils import yaml_config_hook, get_infinite_loader
+import dac
 
-logger = get_logger(__name__, log_level="INFO")
-# torch.autograd.set_detect_anomaly(True)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
-def build_dataloader(
-    dataset,
-    batch_size=32,
-    num_workers=0,
-    prefetch_factor=16,
-    split="train",
-):
-    collate_fn = dataset.collate
-    data_loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        collate_fn=collate_fn,
-        drop_last=True,
-        pin_memory=True,
-        prefetch_factor=prefetch_factor if num_workers > 0 else None,
-        shuffle=True if split == "train" else False,
+class Wrapper:
+    def __init__(
+        self,
+        args,
+        accelerator
+    ):
+        self.generator = dac.model.MyDAC(
+            timbre_classes=284,
+            encoder_dim=args.encoder_dim,
+            encoder_rates=args.encoder_rates,
+            latent_dim=args.latent_dim,
+            decoder_dim=args.decoder_dim,
+            decoder_rates=args.decoder_rates,
+            sample_rate=args.sample_rate,
+        ).to(accelerator.device)
+        self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
+        self.scheduler_g = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_g, gamma=1.0)
+
+        self.discriminator = dac.model.Discriminator().to(accelerator.device)
+        self.optimizer_d = torch.optim.AdamW(self.discriminator.parameters(), lr=args.base_lr)
+        self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=1.0)
+        
+        # Losses
+        self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
+        self.mel_loss = MelSpectrogramLoss(
+            n_mels=[5, 10, 20, 40, 80, 160, 320],
+            window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
+            mel_fmin=[0, 0, 0, 0, 0, 0, 0],
+            mel_fmax=[None, None, None, None, None, None, None],
+            pow=1.0,
+            mag_weight=0.0,
+            clamp_eps=1e-5,
+        ).to(accelerator.device)
+        self.l1_loss = L1Loss().to(accelerator.device)
+        self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
+        self.content_loss = FocalLoss(gamma=2).to(accelerator.device)
+
+        # Loss parameters
+        self.params = {
+            "gen/mel-loss": 15.0,
+            "adv/loss_feature": 2.0,
+            "adv/loss_g": 1.0,
+            "vq/commitment_loss": 0.25,
+            "vq/codebook_loss": 1.0,
+        }
+
+
+
+def main(args, accelerator):
+    
+    device = accelerator.device
+    print(f"Using device: {device}")
+    
+    # Initialize tracker and models
+    util.seed(args.seed)
+    
+    # Initialize wandb
+    if args.log_wandb and accelerator.local_rank == 0:
+        wandb.init(
+            project=args.wandb_project,
+            name=args.wandb_name,
+            config=vars(args),
+            dir=args.wandb_dir
+        )
+    
+    Path(args.save_path).mkdir(exist_ok=True, parents=True)
+    tracker = Tracker(
+        writer=(
+            SummaryWriter(log_dir=f"{args.save_path}/logs") 
+                if accelerator.local_rank == 0 else None
+        ), 
+        log_file=f"{args.save_path}/log.txt", 
+        rank=accelerator.local_rank,
     )
+    wrapper = Wrapper(args, accelerator)
 
-    return data_loader
-
-
-
-def main(args):
-    config_path = args.config_path
-    config = yaml.safe_load(open(config_path))
-
-    log_dir = config['log_dir']
-    if not osp.exists(log_dir): os.makedirs(log_dir, exist_ok=True)
-    shutil.copy(config_path, osp.join(log_dir, osp.basename(config_path)))
-    
-    # Accelerate setup
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True, broadcast_buffers=True)
-    accelerator = Accelerator(project_dir=log_dir, split_batches=True, kwargs_handlers=[ddp_kwargs])
-    
-    if accelerator.is_main_process:
-        writer = SummaryWriter(log_dir + "/tensorboard")
-
-    # write logs
-    file_handler = logging.FileHandler(osp.join(log_dir, 'train.log'))
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter('%(levelname)s:%(asctime)s: %(message)s'))
-    logger.logger.addHandler(file_handler)
-
-    # load model and processor
-    batch_size = config.get('batch_size', 10)
-    batch_length = config.get('batch_length', 120)
-    device = accelerator.device #if accelerator.num_processes > 1 else torch.device('cpu')
-
-    epochs = config.get('epochs', 200)
-    log_interval = config.get('log_interval', 10)
-    saving_epoch = config.get('save_freq', 2)
-    save_interval = config.get('save_interval', 1000)
-
-    data_params = config.get('data_params', None)
-    sr = config['preprocess_params'].get('sr', 24000)
-    root_path = data_params['root_path']
-    midi_path = data_params['midi_path']
-    
-    num_workers = config.get('num_workers', 4)
-    prefetch_factor = config.get('prefetch_factor', 8)
-    
-    duration = config.get('duration', 0.38)
-    sample_rate = config.get('sample_rate', 44100)
-    min_note = config.get('min_note', 21)
-    max_note = config.get('max_note', 108)
-    stems = config.get('stems', ["lead", "pad", "bass", "keys", "pluck"])
-    
-    # max_frame_len = config.get('max_len', 80)
-    # discriminator_iter_start = config['loss_params'].get('discriminator_iter_start', 0)
-    # loss_params = config.get('loss_params', {})
-    # hop_length = config['preprocess_params']['spect_params'].get('hop_length', 300)
-    # win_length = config['preprocess_params']['spect_params'].get('win_length', 1200)
-    # n_fft = config['preprocess_params']['spect_params'].get('n_fft', 2048)
-    # norm_f0 = config['model_params'].get('norm_f0', True)
-    # frame_rate = sr // hop_length
-
+    # Load checkpoint if exists
+    start_iter = load_checkpoint(args, device, -1, wrapper) or 0
+    tracker.step = start_iter
 
     # Build datasets and dataloaders
     train_data = EDM_Render_Dataset(
-        root_path=root_path,
-        midi_path=os.path.join(midi_path, "train", "midi"),
-        duration=duration,
-        sample_rate=sample_rate,
-        min_note=min_note,
-        max_note=max_note,
-        stems=stems,
+        root_path=args.root_path,
+        midi_path=os.path.join(args.midi_path, "train", "midi"),
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        min_note=args.min_note,
+        max_note=args.max_note,
+        stems=args.stems,
     )
     
     val_data = EDM_Render_Dataset(
-        root_path=root_path,
-        midi_path=os.path.join(midi_path, "evaluation", "midi"),
-        duration=duration,
-        sample_rate=sample_rate,
-        min_note=min_note,
-        max_note=max_note,
-        stems=stems,
+        root_path=args.root_path,
+        midi_path=os.path.join(args.midi_path, "evaluation", "midi"),
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        min_note=args.min_note,
+        max_note=args.max_note,
+        stems=args.stems,
     )
-
-    train_loader = build_dataloader(
-        dataset=train_data, 
-        batch_size=batch_size, 
-        num_workers=num_workers, 
-        prefetch_factor=prefetch_factor,
-        split="train",
-    )
-    val_loader = build_dataloader(
-        dataset=val_data, 
-        batch_size=batch_size, 
-        num_workers=num_workers, 
-        prefetch_factor=prefetch_factor,
-        split="val",
-    )
-
-    scheduler_params = {
-        "warmup_steps": 200,
-        "base_lr": 0.0001,
-    }
-
-    model_params = recursive_munch(config['model_params'])
-    model = build_model(model_params)
-
-    for k in model:
-        model[k] = accelerator.prepare(model[k])
-
-    _ = [model[key].to(device) for key in model]
-
-    # initialize optimizers after preparing models for compatibility with FSDP
-    optimizer = build_optimizer(
-        {key: model[key] for key in model},
-        scheduler_params_dict={key: scheduler_params.copy() for key in model},
-        lr=float(scheduler_params['base_lr'])
-    )
-
-    for k, v in optimizer.optimizers.items():
-        optimizer.optimizers[k] = accelerator.prepare(optimizer.optimizers[k])
-        optimizer.schedulers[k] = accelerator.prepare(optimizer.schedulers[k])
-
-    # find latest checkpoint with name pattern of 'T2V_epoch_*_step_*.pth'
-    available_checkpoints = glob.glob(osp.join(log_dir, "FAcodec_epoch_*_step_*.pth"))
-    if len(available_checkpoints) > 0:
-        # find the checkpoint that has the highest step number
-        latest_checkpoint = max(
-            available_checkpoints, key=lambda x: int(x.split("_")[-1].split(".")[0])
-        )
-        earliest_checkpoint = min(
-            available_checkpoints, key=lambda x: int(x.split("_")[-1].split(".")[0])
-        )
-        # delete the earliest checkpoint
-        if (
-            earliest_checkpoint != latest_checkpoint
-            and accelerator.is_main_process
-            and len(available_checkpoints) > 4
-        ):
-            os.remove(earliest_checkpoint)
-            print(f"Removed {earliest_checkpoint}")
-    else:
-        latest_checkpoint = config.get("pretrained_model", "")
-
-
-    with accelerator.main_process_first():
-        if latest_checkpoint != '':
-            model, optimizer, start_epoch, iters = load_checkpoint(model, optimizer, latest_checkpoint,
-                  load_only_params=config.get('load_only_params', True), ignore_modules=[], is_distributed=accelerator.num_processes > 1)
-        else:
-            start_epoch = 0
-            iters = 0
-
-    content_criterion = FocalLoss(gamma=2).to(device)
-    stft_criterion = MultiScaleSTFTLoss().to(device)
-    mel_criterion = MelSpectrogramLoss(
-        n_mels=[5, 10, 20, 40, 80, 160, 320],
-        window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
-        mel_fmin=[0, 0, 0, 0, 0, 0, 0],
-        mel_fmax=[None, None, None, None, None, None, None],
-        pow=1.0,
-        mag_weight=0.0,
-        clamp_eps=1e-5,
-    ).to(device)
-    l1_criterion = L1Loss().to(device)
-
-
-    # accelerate prepare
-    train_loader, val_loader = accelerator.prepare(train_loader, val_loader)
     
+    # Accelerate dataloaders
+    train_loader = accelerator.prepare_dataloader(
+        train_data,
+        start_idx=tracker.step * args.batch_size,
+        num_workers=args.num_workers,
+        batch_size=args.batch_size,
+        collate_fn=train_data.collate,
+    )
+    train_loader = get_infinite_loader(train_loader)
+    val_loader = accelerator.prepare_dataloader(
+        val_data,
+        start_idx=0,
+        num_workers=args.num_workers,
+        batch_size=args.batch_size,
+        collate_fn=val_data.collate,
+    )
+    
+    # Trackers settings
+    global train_step, validate, save_checkpoint
+    train_step = tracker.log("train", "value", history=False)(
+        tracker.track("train", args.num_iters, completed=tracker.step)(train_step)
+    )
+    validate = tracker.track("val", len(val_loader))(validate)
+    save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
+
+    
+    # Loop
+    with tracker.live:
+        for tracker.step, batch in enumerate(train_loader, start=tracker.step):
+            train_step(args, accelerator, batch, tracker.step, wrapper)
+            
+
+            if tracker.step % args.save_interval == 0:
+                save_checkpoint(args, tracker.step, wrapper)
+            
+            # if tracker.step % args.validate_interval == 0:
+            #     validate(args, accelerator, val_loader, wrapper)
+                
+            if tracker.step == args.num_iters:
+                break
+
+    # Finish wandb run
+    if accelerator.local_rank == 0:
+        try:
+            wandb.finish()
+        except:
+            pass
+
+
+def save_checkpoint(args, iter, wrapper):
+    """Save model checkpoint and optimizer state"""
+    checkpoint_path = os.path.join(args.save_path, f'checkpoint_{iter}.pt')
+    
+    # Save generator
+    torch.save({
+        'generator_state_dict': wrapper.generator.state_dict(),
+        'optimizer_g_state_dict': wrapper.optimizer_g.state_dict(),
+        'scheduler_g_state_dict': wrapper.scheduler_g.state_dict(),
+        'discriminator_state_dict': wrapper.discriminator.state_dict(),
+        'optimizer_d_state_dict': wrapper.optimizer_d.state_dict(), 
+        'scheduler_d_state_dict': wrapper.scheduler_d.state_dict(),
+        'iter': iter
+    }, checkpoint_path)
+    
+    # Save latest checkpoint by creating a symlink
+    latest_path = os.path.join(args.save_path, 'checkpoint_latest.pt')
+    if os.path.exists(latest_path):
+        os.remove(latest_path)
+    os.symlink(checkpoint_path, latest_path)
+    
+    print(f"Saved checkpoint to {checkpoint_path}")
+
+
+def load_checkpoint(args, device, iter, wrapper):
+    """Load model checkpoint and optimizer state"""
+    if iter == -1:
+        # Load latest checkpoint
+        checkpoint_path = os.path.join(args.save_path, 'checkpoint_latest.pt')
+    else:
+        # Load specific checkpoint
+        checkpoint_path = os.path.join(args.save_path, f'checkpoint_{iter}.pt')
+    
+    if not os.path.exists(checkpoint_path):
+        print(f"No checkpoint found at {checkpoint_path}")
+        return
+        
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    
+    # Load generator
+    wrapper.generator.load_state_dict(checkpoint['generator_state_dict'])
+    wrapper.optimizer_g.load_state_dict(checkpoint['optimizer_g_state_dict'])
+    wrapper.scheduler_g.load_state_dict(checkpoint['scheduler_g_state_dict'])
+    
+    # Load discriminator
+    wrapper.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+    wrapper.optimizer_d.load_state_dict(checkpoint['optimizer_d_state_dict'])
+    wrapper.scheduler_d.load_state_dict(checkpoint['scheduler_d_state_dict'])
+    
+    print(f"Loaded checkpoint from {checkpoint_path}")
+    return checkpoint['iter']
+
+
+# @timer
+@torch.no_grad()
+def validate(args, accelerator, val_loader, wrapper):
+    output = {}
+    for batch in val_loader:
+        output = validate_step(args, accelerator, batch, wrapper)
+    
+    if hasattr(wrapper.optimizer_g, "consolidate_state_dict"):
+        print("Consolidating state dicts")
+        wrapper.optimizer_g.consolidate_state_dict()
+        wrapper.optimizer_d.consolidate_state_dict()
+    
+    # Log validation metrics to wandb
+    try:
+        import wandb
+        if wandb.run is not None and args.log_wandb:
+            wandb.log({f"val/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()})
+    except:
+        pass  # Silently continue if wandb logging fails
+    
+    return output
+        
+
+
+
+# @timer
+def validate_step(args, accelerator, batch, wrapper):
+    wrapper.generator.eval()
+    wrapper.discriminator.eval()
+    batch = util.prepare_batch(batch, accelerator.device)
+    
+    input_audio = batch['input'].to(accelerator.device)
+    content_match = batch['content_match'].to(accelerator.device)
+    timbre_match = batch['timbre_match'].to(accelerator.device)
+    
+    with torch.no_grad():
+        out = wrapper.generator(
+            audio_data=input_audio.audio_data,
+            content_match=content_match.audio_data,
+            timbre_match=timbre_match.audio_data,
+        )
+    output = {}        
+    recons = AudioSignal(out["audio"], args.sample_rate)
+    output["gen/stft-loss"] = wrapper.stft_loss(recons, input_audio)
+    output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
+    output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)    
+    return output
+
+
+# @timer
+def train_step(args, accelerator, batch, iter, wrapper):
+
+    train_start_time = time.time()
+    wrapper.generator.train()
+    wrapper.discriminator.train()
+    
+    # Load Batch Items
+    batch = util.prepare_batch(batch, accelerator.device)
+    
+    input_audio = batch['input'].to(accelerator.device)
+    content_match = batch['content_match'].to(accelerator.device)
+    timbre_match = batch['timbre_match'].to(accelerator.device)
+
+    # DAC Model
+    with accelerator.autocast():
+        out = wrapper.generator(
+            audio_data=input_audio.audio_data,
+            content_match=content_match.audio_data,
+            timbre_match=timbre_match.audio_data,
+        )
+        output = {}        
+        recons = AudioSignal(out["audio"], args.sample_rate)
+
+        # Discriminator Losses
+        output["adv/disc_loss"] = wrapper.gan_loss.discriminator_loss(recons, input_audio)
+
+    wrapper.optimizer_d.zero_grad()
+    accelerator.backward(output["adv/disc_loss"])
+    grad_norm_d = torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
+    wrapper.optimizer_d.step()
+    wrapper.scheduler_d.step()
+    
+    # Generator Losses
+    with accelerator.autocast():
+        output["gen/stft-loss"] = wrapper.stft_loss(recons, input_audio)
+        output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
+        output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)
+        
+        output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, input_audio)
+        output["vq/commitment_loss"] = out["vq/commitment_loss"]
+        output["vq/codebook_loss"] = out["vq/codebook_loss"]
+        
+        # Total Loss
+        output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
+
+    # Optimizer
+    wrapper.optimizer_g.zero_grad()
+    accelerator.backward(output["loss_gen_all"])
+    grad_norm_g = torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
+    wrapper.optimizer_g.step()
+    wrapper.scheduler_g.step()
+
+    # Logging
+    # output["other/learning_rate"] = wrapper.optimizer_g.param_groups[0]["lr"]
+    # output["other/batch_size"] = input_audio.batch_size
+    output["other/grad_norm_g"] = grad_norm_g
+    output["other/grad_norm_d"] = grad_norm_d
+    output["other/time_per_step"] = time.time() - train_start_time
+
+    # Log to wandb
+    if iter % 10 == 0:  # Log every 10 steps to avoid too frequent logging
+        try:
+            import wandb
+            if wandb.run is not None and args.log_wandb:
+                wandb.log({f"train/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()}, step=iter)
+        except:
+            pass  # Silently continue if wandb logging fails
+
+    return {k: v for k, v in sorted(output.items())}
+
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config_path', type=str, default='configs/config.yml')
+    parser = argparse.ArgumentParser(description="EDM-FAC")
+
+    config = yaml_config_hook("configs/config.yaml")
+    for k, v in config.items():
+        parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
-    main(args)
+
+
+    # Initialize accelerator
+    accelerator = ml.Accelerator()
+    if accelerator.local_rank != 0:
+        sys.tracebacklimit = 0
+    main(args, accelerator)
