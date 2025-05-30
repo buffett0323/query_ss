@@ -195,7 +195,7 @@ def main(args, accelerator):
                 save_checkpoint(args, tracker.step, wrapper)
             
             if tracker.step % args.validate_interval == 0:
-                validate(args, accelerator, val_loader, wrapper)
+                validate(args, accelerator, val_loader, wrapper, tracker.step)
             
             if tracker.step % args.sample_freq == 0:
                 save_samples(args, accelerator, tracker.step, wrapper)    
@@ -213,30 +213,21 @@ def main(args, accelerator):
 
 # @timer
 @torch.no_grad()
-def validate(args, accelerator, val_loader, wrapper):
+def validate(args, accelerator, val_loader, wrapper, iter):
     output = {}
     for batch in val_loader:
-        output = validate_step(args, accelerator, batch, wrapper)
+        output = validate_step(args, accelerator, batch, wrapper, iter)
     
     if hasattr(wrapper.optimizer_g, "consolidate_state_dict"):
-        print("Consolidating state dicts")
         wrapper.optimizer_g.consolidate_state_dict()
         wrapper.optimizer_d.consolidate_state_dict()
-    
-    # Log validation metrics to wandb
-    try:
-        import wandb
-        if wandb.run is not None and args.log_wandb:
-            wandb.log({f"val/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()})
-    except:
-        pass  # Silently continue if wandb logging fails
     
     return output
         
 
 # @timer
 @torch.no_grad()
-def validate_step(args, accelerator, batch, wrapper):
+def validate_step(args, accelerator, batch, wrapper, iter):
     wrapper.generator.eval()
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
@@ -253,8 +244,22 @@ def validate_step(args, accelerator, batch, wrapper):
     recons = AudioSignal(out["audio"], args.sample_rate)
     output["gen/stft-loss"] = wrapper.stft_loss(recons, input_audio)
     output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
-    output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)    
-    return output
+    output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)  
+    
+    
+    # Log validation metrics to wandb
+    try:
+        import wandb
+        if wandb.run is not None and args.log_wandb:
+            wandb.log(
+                {f"val/{k}": v.item() if torch.is_tensor(v) else v 
+                 for k, v in output.items()},
+                step=iter
+            )
+    except:
+        pass  # Silently continue if wandb logging fails
+      
+    return {k: v for k, v in sorted(output.items())}
 
 # @timer
 def train_step(args, accelerator, batch, iter, wrapper):
@@ -313,14 +318,17 @@ def train_step(args, accelerator, batch, iter, wrapper):
     output["other/grad_norm_g"] = grad_norm_g
     output["other/grad_norm_d"] = grad_norm_d
     output["other/time_per_step"] = time.time() - train_start_time
-    output["other/train_step"] = iter
+    # output["other/train_step"] = iter
 
     # Log to wandb
     if iter % args.log_interval == 0:  # Log every 10 steps to avoid too frequent logging
         try:
             import wandb
             if wandb.run is not None and args.log_wandb:
-                wandb.log({f"train/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()}, step=iter)
+                wandb.log(
+                    {f"train/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()}, 
+                    step=iter
+                )
         except:
             pass  # Silently continue if wandb logging fails
 
