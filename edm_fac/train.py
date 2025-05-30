@@ -137,6 +137,7 @@ def main(args, accelerator):
     train_data = EDM_Render_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path, 
+        data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         min_note=args.min_note,
@@ -148,6 +149,7 @@ def main(args, accelerator):
     val_data = EDM_Render_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path, 
+        data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         min_note=args.min_note,

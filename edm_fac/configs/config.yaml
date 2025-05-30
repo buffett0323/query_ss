@@ -1,5 +1,5 @@
-# path: /mnt/gestalt/home/buffett # NTU
-path: /home/buffett/dataset # Sinica
+path: /mnt/gestalt/home/buffett # NTU
+# path: /home/buffett/dataset # Sinica
 
 log_wandb: True
 wandb_project: edm-fac
@@ -8,6 +8,7 @@ wandb_name: train no predictors, only synthesis
 wandb_dir: ${path}/EDM_FAC_LOG
 save_path: ${path}/EDM_FAC_LOG
 ckpt_path: ${path}/EDM_FAC_LOG/ckpt
+data_path: ${path}/EDM_FAC_DATA
 root_path: ${path}/EDM_FAC_DATA/rendered_audio
 midi_path: ${path}/EDM_FAC_DATA/single_note_midi
 
@@ -22,7 +23,7 @@ seed: 42
 val_idx: [0, 1, 2, 3, 4, 5, 6, 7]
 
 
-num_workers: 16 # 8
+num_workers: 8
 prefetch_factor: 8
 duration: 0.4
 sample_rate: 44100

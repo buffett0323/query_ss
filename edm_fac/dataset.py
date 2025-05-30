@@ -22,6 +22,7 @@ class EDM_Render_Dataset(Dataset):
         self,
         root_path: str,
         midi_path: str,
+        data_path: str,
         duration: float = 0.38,
         sample_rate: int = 44100,
         min_note: int = 21,
@@ -32,6 +33,7 @@ class EDM_Render_Dataset(Dataset):
         midi_path = os.path.join(midi_path, split, "midi")
         self.root_path = Path(root_path)
         self.midi_path = Path(midi_path)
+        self.data_path = Path(data_path)
         self.duration = duration
         self.sample_rate = sample_rate
         self.stems = stems
@@ -62,8 +64,7 @@ class EDM_Render_Dataset(Dataset):
         
         
     def _get_offset_pos(self):
-        data_path = "/home/buffett/dataset/EDM_FAC_DATA"
-        with open(f"{data_path}/peak_records.json", "r") as f:
+        with open(f"{self.data_path}/peak_records.json", "r") as f:
             peak_records = json.load(f)
             
         for timbre, midi in itertools.product(
@@ -320,6 +321,7 @@ if __name__ == "__main__":
     train_data = EDM_Render_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
+        data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         min_note=args.min_note,
@@ -331,6 +333,7 @@ if __name__ == "__main__":
     val_data = EDM_Render_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
+        data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         min_note=args.min_note,
@@ -350,9 +353,9 @@ if __name__ == "__main__":
     #     val_data[i]['input'].write(f"sample_audio/val_data_{i}.wav")
     #     val_data[i]['content_match'].write(f"sample_audio/content_match_{i}.wav")
     #     val_data[i]['timbre_match'].write(f"sample_audio/timbre_match_{i}.wav")
-    train_loader = build_dataloader(train_data, batch_size=1, num_workers=0, prefetch_factor=1, split="train")
-    val_loader = build_dataloader(val_data, batch_size=1, num_workers=0, prefetch_factor=1, split="evaluation")
-    for batch in tqdm(train_loader, desc="Training"):
-        pass
-    for batch in tqdm(val_loader, desc="Validation"):
-        pass
+    # train_loader = build_dataloader(train_data, batch_size=1, num_workers=0, prefetch_factor=1, split="train")
+    # val_loader = build_dataloader(val_data, batch_size=1, num_workers=0, prefetch_factor=1, split="evaluation")
+    # for batch in tqdm(train_loader, desc="Training"):
+    #     pass
+    # for batch in tqdm(val_loader, desc="Validation"):
+    #     pass
