@@ -62,7 +62,8 @@ class EDM_Render_Dataset(Dataset):
         
         
     def _get_offset_pos(self):
-        with open("/mnt/gestalt/home/buffett/EDM_FAC_DATA/peak_records.json", "r") as f:
+        data_path = "/home/buffett/dataset/EDM_FAC_DATA"
+        with open(f"{data_path}/peak_records.json", "r") as f:
             peak_records = json.load(f)
             
         for timbre, midi in itertools.product(

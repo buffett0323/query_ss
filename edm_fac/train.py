@@ -110,6 +110,9 @@ def main(args, accelerator):
     util.seed(args.seed)
     print(f"Using device: {device}")
     
+    # Checkpoint direction
+    os.makedirs(args.ckpt_path, exist_ok=True)
+
     # Initialize wandb
     if args.log_wandb and accelerator.local_rank == 0:
         wandb.init(

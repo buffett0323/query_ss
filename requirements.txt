@@ -29,3 +29,5 @@ diffusers
 transformers
 nnAudio==0.3.3
 lmdb==1.6.2
+munch
+omegaconf
