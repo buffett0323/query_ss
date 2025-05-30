@@ -5,12 +5,14 @@ import numpy as np
 import torch
 import soundfile as sf
 import pretty_midi
+import argparse
 
 from audiotools import AudioSignal
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from typing import List, Tuple, Dict, Any
 from pathlib import Path
 from tqdm import tqdm
+from utils import yaml_config_hook
 
 
 class EDM_Render_Dataset(Dataset):
@@ -25,6 +27,7 @@ class EDM_Render_Dataset(Dataset):
         stems: list[str] = ["lead", "pad", "bass", "keys", "pluck"],
         split: str = "train",
     ):
+        midi_path = os.path.join(midi_path, split, "midi")
         self.root_path = Path(root_path)
         self.midi_path = Path(midi_path)
         self.duration = duration
@@ -192,6 +195,7 @@ class EDM_Render_Dataset(Dataset):
         file_duration = AudioSignal(wav_file).duration
         
         # 2. Sample a random offset
+        # TODO: make sure the offset have something playing, not silence
         assert file_duration >= self.duration, f"File duration {file_duration} is less than duration {self.duration}"
         offset = np.random.uniform(0, file_duration - self.duration)
 
@@ -284,31 +288,36 @@ def build_dataloader(
 
 
 if __name__ == "__main__":
-    dataset = EDM_Render_Dataset(
-        root_path="/mnt/gestalt/home/buffett/rendered_audio",
-        midi_path="/mnt/gestalt/home/buffett/single_note_midi/train/midi",
-        duration=10,
-        sample_rate=44100,
-        stems=["lead", "pad", "bass", "keys", "pluck"],
-    )
-    print(len(dataset))
-    print(dataset[0])
+    parser = argparse.ArgumentParser(description="EDM-FAC")
+
+    config = yaml_config_hook("configs/config.yaml")
+    for k, v in config.items():
+        parser.add_argument(f"--{k}", default=v, type=type(v))
+    args = parser.parse_args()
     
-    dataloader = build_dataloader(
-        dataset, 
-        batch_size=4, 
-        num_workers=0, 
+    train_data = EDM_Render_Dataset(
+        root_path=args.root_path,
+        midi_path=args.midi_path,
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        min_note=args.min_note,
+        max_note=args.max_note,
+        stems=args.stems,
         split="train"
     )
     
+    val_data = EDM_Render_Dataset(
+        root_path=args.root_path,
+        midi_path=args.midi_path,
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        min_note=args.min_note,
+        max_note=args.max_note,
+        stems=args.stems,
+        split="evaluation"
+    )
+    print(len(train_data))
+    print(train_data[0])
     
-    for batch in dataloader:
-        print(batch.keys())
-        print(batch['input'].shape)
-        print(batch['pitch'].shape)
-        print(batch['timbre_id'].shape)
-        print(batch['content_match'].shape)
-        print(batch['content_pitch'].shape)
-        print(batch['timbre_match'].shape)
-        print(batch['timbre_pitch'].shape)
-        break
+    print(len(val_data))
+    print(val_data[0])

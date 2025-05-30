@@ -11,7 +11,6 @@ warnings.simplefilter('ignore')
 
 from modules.commons import *
 from losses import *
-from tqdm import tqdm
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 
@@ -28,12 +27,12 @@ import dac
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-
 class Wrapper:
     def __init__(
         self,
         args,
-        accelerator
+        accelerator,
+        val_data
     ):
         self.generator = dac.model.MyDAC(
             timbre_classes=284,
@@ -74,7 +73,35 @@ class Wrapper:
             "vq/commitment_loss": 0.25,
             "vq/codebook_loss": 1.0,
         }
+        
+        self.val_data = val_data
+        
 
+@torch.no_grad()
+def save_samples(args, accelerator, tracker_step, wrapper):
+    samples = [wrapper.val_data[idx] for idx in args.val_idx]
+    batch = wrapper.val_data.collate(samples)
+    batch = util.prepare_batch(batch, accelerator.device)
+
+    out = wrapper.generator(
+        audio_data=batch['input'].audio_data,
+        content_match=batch['content_match'].audio_data,
+        timbre_match=batch['timbre_match'].audio_data,
+    )
+    
+    recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
+    inputs = AudioSignal(batch['input'].audio_data.cpu(), args.sample_rate)
+    os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}'), exist_ok=True)
+
+    for i, sample_idx in enumerate(args.val_idx):
+        single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
+        single_input = AudioSignal(inputs.audio_data[i], args.sample_rate)
+        
+        recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'recon_{sample_idx}.wav')
+        input_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'orig_{sample_idx}.wav')
+        
+        single_recon.write(recon_path)
+        single_input.write(input_path)
 
 
 def main(args, accelerator):
@@ -102,32 +129,36 @@ def main(args, accelerator):
         log_file=f"{args.save_path}/log.txt", 
         rank=accelerator.local_rank,
     )
-    wrapper = Wrapper(args, accelerator)
-
-    # Load checkpoint if exists
-    start_iter = load_checkpoint(args, device, -1, wrapper) or 0
-    tracker.step = start_iter
 
     # Build datasets and dataloaders
     train_data = EDM_Render_Dataset(
         root_path=args.root_path,
-        midi_path=os.path.join(args.midi_path, "train", "midi"),
+        midi_path=args.midi_path, 
         duration=args.duration,
         sample_rate=args.sample_rate,
         min_note=args.min_note,
         max_note=args.max_note,
         stems=args.stems,
+        split="train"
     )
     
     val_data = EDM_Render_Dataset(
         root_path=args.root_path,
-        midi_path=os.path.join(args.midi_path, "evaluation", "midi"),
+        midi_path=args.midi_path, 
         duration=args.duration,
         sample_rate=args.sample_rate,
         min_note=args.min_note,
         max_note=args.max_note,
         stems=args.stems,
+        split="evaluation"
     )
+    wrapper = Wrapper(args, accelerator, val_data)
+    
+    
+    # Load checkpoint if exists
+    start_iter = load_checkpoint(args, device, -1, wrapper) or 0
+    tracker.step = start_iter
+    
     
     # Accelerate dataloaders
     train_loader = accelerator.prepare_dataloader(
@@ -147,7 +178,7 @@ def main(args, accelerator):
     )
     
     # Trackers settings
-    global train_step, validate, save_checkpoint
+    global train_step, validate, save_checkpoint, save_samples
     train_step = tracker.log("train", "value", history=False)(
         tracker.track("train", args.num_iters, completed=tracker.step)(train_step)
     )
@@ -167,7 +198,7 @@ def main(args, accelerator):
                 validate(args, accelerator, val_loader, wrapper)
             
             if tracker.step % args.sample_freq == 0:
-                save_samples(args, accelerator, args.val_idx, tracker.step, wrapper)    
+                save_samples(args, accelerator, tracker.step, wrapper)    
             
                 
             if tracker.step == args.num_iters:
@@ -179,26 +210,6 @@ def main(args, accelerator):
             wandb.finish()
         except:
             pass
-
-
-def save_samples(args, accelerator, val_idx, tracker_step, wrapper):
-    samples = [wrapper.val_data[idx] for idx in val_idx]
-    batch = wrapper.val_data.collate(samples)
-    batch = util.prepare_batch(batch, accelerator.device)
-
-    with torch.no_grad():
-        out = wrapper.generator(
-            audio_data=batch['input'].audio_data,
-            content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_match'].audio_data,
-        )
-        recons = AudioSignal(out["audio"], args.sample_rate)
-        
-        # Save reconstructed audio
-        save_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}_sample_{val_idx}.wav')
-        recons.write(save_path)
-
-
 
 # @timer
 @torch.no_grad()
@@ -223,9 +234,8 @@ def validate(args, accelerator, val_loader, wrapper):
     return output
         
 
-
-
 # @timer
+@torch.no_grad()
 def validate_step(args, accelerator, batch, wrapper):
     wrapper.generator.eval()
     wrapper.discriminator.eval()
@@ -245,7 +255,6 @@ def validate_step(args, accelerator, batch, wrapper):
     output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
     output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)    
     return output
-
 
 # @timer
 def train_step(args, accelerator, batch, iter, wrapper):
@@ -315,7 +324,6 @@ def train_step(args, accelerator, batch, iter, wrapper):
             pass  # Silently continue if wandb logging fails
 
     return {k: v for k, v in sorted(output.items())}
-
 
 
 if __name__ == "__main__":

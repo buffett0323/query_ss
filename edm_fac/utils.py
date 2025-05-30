@@ -22,18 +22,18 @@ def yaml_config_hook(config_file):
 
     return cfg
 
+
+
 def get_infinite_loader(dataloader):
     while True:
         for batch in dataloader:
             yield batch
-            
-            
-            
+                        
             
             
 def save_checkpoint(args, iter, wrapper):
     """Save model checkpoint and optimizer state"""
-    checkpoint_path = os.path.join(args.save_path, f'checkpoint_{iter}.pt')
+    checkpoint_path = os.path.join(args.ckpt_path, f'checkpoint_{iter}.pt')
     
     # Save generator
     torch.save({
@@ -47,7 +47,7 @@ def save_checkpoint(args, iter, wrapper):
     }, checkpoint_path)
     
     # Save latest checkpoint by creating a symlink
-    latest_path = os.path.join(args.save_path, 'checkpoint_latest.pt')
+    latest_path = os.path.join(args.ckpt_path, 'checkpoint_latest.pt')
     if os.path.exists(latest_path):
         os.remove(latest_path)
     os.symlink(checkpoint_path, latest_path)
@@ -59,10 +59,10 @@ def load_checkpoint(args, device, iter, wrapper):
     """Load model checkpoint and optimizer state"""
     if iter == -1:
         # Load latest checkpoint
-        checkpoint_path = os.path.join(args.save_path, 'checkpoint_latest.pt')
+        checkpoint_path = os.path.join(args.ckpt_path, 'checkpoint_latest.pt')
     else:
         # Load specific checkpoint
-        checkpoint_path = os.path.join(args.save_path, f'checkpoint_{iter}.pt')
+        checkpoint_path = os.path.join(args.ckpt_path, f'checkpoint_{iter}.pt')
     
     if not os.path.exists(checkpoint_path):
         print(f"No checkpoint found at {checkpoint_path}")
