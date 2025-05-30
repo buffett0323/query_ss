@@ -36,3 +36,5 @@ DDDM_VC/
 simsiam/model_dict/
 simsiam/preprocess/amt/
 Dockerfile
+
+edm_fac/ref.py
