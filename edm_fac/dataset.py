@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import math
 import numpy as np
@@ -6,6 +7,7 @@ import torch
 import soundfile as sf
 import pretty_midi
 import argparse
+import itertools
 
 from audiotools import AudioSignal
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
@@ -55,8 +57,25 @@ class EDM_Render_Dataset(Dataset):
         self.file_index = []  # List of (timbre_id, content_id, full_path)
         self._build_index()
         self._shuffle_file_index()
+        self.peak_records = {}
+        self._get_offset_pos()
+        
+        
+    def _get_offset_pos(self):
+        with open("/mnt/gestalt/home/buffett/EDM_FAC_DATA/peak_records.json", "r") as f:
+            peak_records = json.load(f)
+            
+        for timbre, midi in itertools.product(
+            self.unique_timbres,
+            self.unique_midis
+        ):
+            name = f"{timbre}_{midi}"
+            self.peak_records[name] = [i for i in peak_records[name] if i <= 8]
 
-
+        print(f"-> Got {len(self.peak_records)} different tracks for {self.split}")
+        
+        
+        
     def _preprocess(self):
         """Build mappings for timbre, DI, and tone IDs"""
         with open('info/timbre_names.txt', 'r') as f:
@@ -197,11 +216,14 @@ class EDM_Render_Dataset(Dataset):
         # 2. Sample a random offset
         # TODO: make sure the offset have something playing, not silence
         assert file_duration >= self.duration, f"File duration {file_duration} is less than duration {self.duration}"
-        offset = np.random.uniform(0, file_duration - self.duration)
+        # offset = np.random.uniform(0, file_duration - self.duration)
+        name = f"{self.unique_timbres[timbre_id]}_{self.unique_midis[midi_id]}"
+        offset = np.random.choice(self.peak_records[name])
+        assert offset <= file_duration - self.duration, f"Offset {offset} is greater than file duration {file_duration} - duration {self.duration}"
 
         # 3. Load input audio with this offset
         input_signal = self._load_audio(wav_file, offset=offset)
-        input_pitch = self._midi_to_pitch_sequence(midi_path, self.duration)
+        # input_pitch = self._midi_to_pitch_sequence(midi_path, self.duration)
 
         # 4. Find matches for content and timbre
         content_match_idx = self._get_random_match(idx, 'content')
@@ -209,25 +231,25 @@ class EDM_Render_Dataset(Dataset):
 
         # Load content match
         content_match = self._load_audio(self.file_index[content_match_idx][2], offset=offset)
-        content_pitch = self._midi_to_pitch_sequence(self.file_index[content_match_idx][3], self.duration)
+        # content_pitch = self._midi_to_pitch_sequence(self.file_index[content_match_idx][3], self.duration)
 
         # Load timbre match
         timbre_match = self._load_audio(self.file_index[timbre_match_idx][2], offset=offset)
-        timbre_pitch = self._midi_to_pitch_sequence(self.file_index[timbre_match_idx][3], self.duration)
+        # timbre_pitch = self._midi_to_pitch_sequence(self.file_index[timbre_match_idx][3], self.duration)
 
-        # Add detailed checks for pitch equality
-        assert input_pitch.shape == content_pitch.shape, f"Shape mismatch: input_pitch {input_pitch.shape} != content_pitch {content_pitch.shape}"
-        assert input_pitch.shape == timbre_pitch.shape, f"Shape mismatch: input_pitch {input_pitch.shape} != timbre_pitch {timbre_pitch.shape}"
-        assert torch.allclose(input_pitch, content_pitch), "Pitch tensors are not exactly equal"
+
+        # assert input_pitch.shape == content_pitch.shape, f"Shape mismatch: input_pitch {input_pitch.shape} != content_pitch {content_pitch.shape}"
+        # assert input_pitch.shape == timbre_pitch.shape, f"Shape mismatch: input_pitch {input_pitch.shape} != timbre_pitch {timbre_pitch.shape}"
+        # assert torch.allclose(input_pitch, content_pitch), "Pitch tensors are not exactly equal"
 
         return {
             'input': input_signal,
-            'pitch': input_pitch,
+            # 'pitch': input_pitch,
             'timbre_id': timbre_id,
             'content_match': content_match,
-            'content_pitch': content_pitch,
+            # 'content_pitch': content_pitch,
             'timbre_match': timbre_match,
-            'timbre_pitch': timbre_pitch,
+            # 'timbre_pitch': timbre_pitch,
             'metadata': {
                 'input': {
                     'timbre_id': timbre_id,
@@ -252,12 +274,12 @@ class EDM_Render_Dataset(Dataset):
         """Custom collate function for batching"""
         return {
             'input': AudioSignal.batch([item['input'] for item in batch]),
-            'pitch': torch.stack([item['pitch'] for item in batch]),
+            # 'pitch': torch.stack([item['pitch'] for item in batch]),
             'timbre_id': torch.tensor([item['timbre_id'] for item in batch]),
             'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
-            'content_pitch': torch.stack([item['content_pitch'] for item in batch]),
+            # 'content_pitch': torch.stack([item['content_pitch'] for item in batch]),
             'timbre_match': AudioSignal.batch([item['timbre_match'] for item in batch]),
-            'timbre_pitch': torch.stack([item['timbre_pitch'] for item in batch]),
+            # 'timbre_pitch': torch.stack([item['timbre_pitch'] for item in batch]),
             'metadata': [item['metadata'] for item in batch]
         }
         
@@ -316,8 +338,16 @@ if __name__ == "__main__":
         stems=args.stems,
         split="evaluation"
     )
-    print(len(train_data))
-    print(train_data[0])
+    # print(len(train_data))
+    # print(train_data[0])
     
-    print(len(val_data))
-    print(val_data[0])
+    # print(len(val_data))
+    # print(val_data[0])
+    
+    os.makedirs("sample_audio", exist_ok=True)
+    for i in range(10):
+        # print(val_data[i]['input'].shape, val_data[i]['content_match'].shape, val_data[i]['timbre_match'].shape)
+        val_data[i]['input'].write(f"sample_audio/val_data_{i}.wav")
+        val_data[i]['content_match'].write(f"sample_audio/content_match_{i}.wav")
+        val_data[i]['timbre_match'].write(f"sample_audio/timbre_match_{i}.wav")
+        

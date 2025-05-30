@@ -1,8 +1,8 @@
 path: /mnt/gestalt/home/buffett
 
-log_wandb: False
+log_wandb: True
 wandb_project: edm-fac
-wandb_name: train w/o validation and sample
+wandb_name: train no predictors, only synthesis
 
 wandb_dir: ${path}/EDM_FAC_LOG
 save_path: ${path}/EDM_FAC_LOG
@@ -14,7 +14,7 @@ midi_path: ${path}/EDM_FAC_DATA/single_note_midi
 batch_size: 8 #4
 log_interval: 10
 save_interval: 1000
-sample_freq: 10 #1000
+sample_freq: 1000
 validate_interval: 1000
 num_iters: 250000
 seed: 42
@@ -23,7 +23,7 @@ val_idx: [0, 1, 2, 3, 4, 5, 6, 7]
 
 num_workers: 8 #4
 prefetch_factor: 8
-duration: 0.38
+duration: 0.4
 sample_rate: 44100
 min_note: 21
 max_note: 108

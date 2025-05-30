@@ -313,6 +313,7 @@ def train_step(args, accelerator, batch, iter, wrapper):
     output["other/grad_norm_g"] = grad_norm_g
     output["other/grad_norm_d"] = grad_norm_d
     output["other/time_per_step"] = time.time() - train_start_time
+    output["other/train_step"] = iter
 
     # Log to wandb
     if iter % args.log_interval == 0:  # Log every 10 steps to avoid too frequent logging
