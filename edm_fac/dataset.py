@@ -23,6 +23,7 @@ class EDM_Render_Dataset(Dataset):
         min_note: int = 21,
         max_note: int = 108,
         stems: list[str] = ["lead", "pad", "bass", "keys", "pluck"],
+        split: str = "train",
     ):
         self.root_path = Path(root_path)
         self.midi_path = Path(midi_path)
@@ -32,6 +33,7 @@ class EDM_Render_Dataset(Dataset):
         self.min_note = min_note
         self.max_note = max_note
         self.n_notes = max_note - min_note + 1
+        self.split = split
 
         # Create ID mappings for all three levels
         self.timbre_to_id = {}
@@ -58,7 +60,7 @@ class EDM_Render_Dataset(Dataset):
             for line in f:
                 self.unique_timbres.append(line.strip())
         
-        with open('info/midi_names.txt', 'r') as f:
+        with open(f'info/{self.split}_midi_names.txt', 'r') as f:
             for line in f:
                 self.unique_midis.append(line.strip())
 
@@ -71,9 +73,10 @@ class EDM_Render_Dataset(Dataset):
             self.midi_to_id[midi] = idx
             self.id_to_midi[idx] = midi
 
+
     def _build_index(self):
 
-        for stem in tqdm(self.stems, desc="Pre-loading information"):
+        for stem in tqdm(self.stems, desc=f"Pre-loading {self.split} info"):
             for timbre in self.unique_timbres:
                 for midi in self.unique_midis:
                     wav_path = os.path.join(self.root_path, stem, f"{timbre}_{midi}.wav")

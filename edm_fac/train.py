@@ -22,7 +22,7 @@ from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
 from dataset import EDM_Render_Dataset
-from utils import yaml_config_hook, get_infinite_loader
+from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
 import dac
 
 logger = logging.getLogger(__name__)
@@ -80,10 +80,8 @@ class Wrapper:
 def main(args, accelerator):
     
     device = accelerator.device
-    print(f"Using device: {device}")
-    
-    # Initialize tracker and models
     util.seed(args.seed)
+    print(f"Using device: {device}")
     
     # Initialize wandb
     if args.log_wandb and accelerator.local_rank == 0:
@@ -95,6 +93,7 @@ def main(args, accelerator):
         )
     
     Path(args.save_path).mkdir(exist_ok=True, parents=True)
+    Path(os.path.join(args.save_path, 'sample_audio')).mkdir(exist_ok=True, parents=True)
     tracker = Tracker(
         writer=(
             SummaryWriter(log_dir=f"{args.save_path}/logs") 
@@ -164,11 +163,12 @@ def main(args, accelerator):
             if tracker.step % args.save_interval == 0:
                 save_checkpoint(args, tracker.step, wrapper)
             
-            # if tracker.step % args.sample_freq == 0:
-            #     save_samples(args, val_idx, writer)
-                
-            # if tracker.step % args.validate_interval == 0:
-            #     validate(args, accelerator, val_loader, wrapper)
+            if tracker.step % args.validate_interval == 0:
+                validate(args, accelerator, val_loader, wrapper)
+            
+            if tracker.step % args.sample_freq == 0:
+                save_samples(args, accelerator, args.val_idx, tracker.step, wrapper)    
+            
                 
             if tracker.step == args.num_iters:
                 break
@@ -180,61 +180,24 @@ def main(args, accelerator):
         except:
             pass
 
-def save_samples(args, val_idx, writer):
-    pass
 
+def save_samples(args, accelerator, val_idx, tracker_step, wrapper):
+    samples = [wrapper.val_data[idx] for idx in val_idx]
+    batch = wrapper.val_data.collate(samples)
+    batch = util.prepare_batch(batch, accelerator.device)
 
-def save_checkpoint(args, iter, wrapper):
-    """Save model checkpoint and optimizer state"""
-    checkpoint_path = os.path.join(args.save_path, f'checkpoint_{iter}.pt')
-    
-    # Save generator
-    torch.save({
-        'generator_state_dict': wrapper.generator.state_dict(),
-        'optimizer_g_state_dict': wrapper.optimizer_g.state_dict(),
-        'scheduler_g_state_dict': wrapper.scheduler_g.state_dict(),
-        'discriminator_state_dict': wrapper.discriminator.state_dict(),
-        'optimizer_d_state_dict': wrapper.optimizer_d.state_dict(), 
-        'scheduler_d_state_dict': wrapper.scheduler_d.state_dict(),
-        'iter': iter
-    }, checkpoint_path)
-    
-    # Save latest checkpoint by creating a symlink
-    latest_path = os.path.join(args.save_path, 'checkpoint_latest.pt')
-    if os.path.exists(latest_path):
-        os.remove(latest_path)
-    os.symlink(checkpoint_path, latest_path)
-    
-    print(f"Saved checkpoint to {checkpoint_path}")
-
-
-def load_checkpoint(args, device, iter, wrapper):
-    """Load model checkpoint and optimizer state"""
-    if iter == -1:
-        # Load latest checkpoint
-        checkpoint_path = os.path.join(args.save_path, 'checkpoint_latest.pt')
-    else:
-        # Load specific checkpoint
-        checkpoint_path = os.path.join(args.save_path, f'checkpoint_{iter}.pt')
-    
-    if not os.path.exists(checkpoint_path):
-        print(f"No checkpoint found at {checkpoint_path}")
-        return
+    with torch.no_grad():
+        out = wrapper.generator(
+            audio_data=batch['input'].audio_data,
+            content_match=batch['content_match'].audio_data,
+            timbre_match=batch['timbre_match'].audio_data,
+        )
+        recons = AudioSignal(out["audio"], args.sample_rate)
         
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    # Load generator
-    wrapper.generator.load_state_dict(checkpoint['generator_state_dict'])
-    wrapper.optimizer_g.load_state_dict(checkpoint['optimizer_g_state_dict'])
-    wrapper.scheduler_g.load_state_dict(checkpoint['scheduler_g_state_dict'])
-    
-    # Load discriminator
-    wrapper.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
-    wrapper.optimizer_d.load_state_dict(checkpoint['optimizer_d_state_dict'])
-    wrapper.scheduler_d.load_state_dict(checkpoint['scheduler_d_state_dict'])
-    
-    print(f"Loaded checkpoint from {checkpoint_path}")
-    return checkpoint['iter']
+        # Save reconstructed audio
+        save_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}_sample_{val_idx}.wav')
+        recons.write(save_path)
+
 
 
 # @timer
@@ -268,15 +231,13 @@ def validate_step(args, accelerator, batch, wrapper):
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
     
-    input_audio = batch['input'].to(accelerator.device)
-    content_match = batch['content_match'].to(accelerator.device)
-    timbre_match = batch['timbre_match'].to(accelerator.device)
-    
+    input_audio = batch['input']
+
     with torch.no_grad():
         out = wrapper.generator(
             audio_data=input_audio.audio_data,
-            content_match=content_match.audio_data,
-            timbre_match=timbre_match.audio_data,
+            content_match=batch['content_match'].audio_data,
+            timbre_match=batch['timbre_match'].audio_data,
         )
     output = {}        
     recons = AudioSignal(out["audio"], args.sample_rate)
@@ -296,16 +257,14 @@ def train_step(args, accelerator, batch, iter, wrapper):
     # Load Batch Items
     batch = util.prepare_batch(batch, accelerator.device)
     
-    input_audio = batch['input'].to(accelerator.device)
-    content_match = batch['content_match'].to(accelerator.device)
-    timbre_match = batch['timbre_match'].to(accelerator.device)
+    input_audio = batch['input']
 
     # DAC Model
     with accelerator.autocast():
         out = wrapper.generator(
             audio_data=input_audio.audio_data,
-            content_match=content_match.audio_data,
-            timbre_match=timbre_match.audio_data,
+            content_match=batch['content_match'].audio_data,
+            timbre_match=batch['timbre_match'].audio_data,
         )
         output = {}        
         recons = AudioSignal(out["audio"], args.sample_rate)
