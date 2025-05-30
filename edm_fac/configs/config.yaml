@@ -1,6 +1,6 @@
 path: /mnt/gestalt/home/buffett
 
-log_wandb: True
+log_wandb: False
 wandb_project: edm-fac
 wandb_name: train no predictors, only synthesis
 

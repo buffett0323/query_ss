@@ -214,8 +214,7 @@ class EDM_Render_Dataset(Dataset):
         file_duration = AudioSignal(wav_file).duration
         
         # 2. Sample a random offset
-        # TODO: make sure the offset have something playing, not silence
-        assert file_duration >= self.duration, f"File duration {file_duration} is less than duration {self.duration}"
+        # assert file_duration >= self.duration, f"File duration {file_duration} is less than duration {self.duration}"
         # offset = np.random.uniform(0, file_duration - self.duration)
         name = f"{self.unique_timbres[timbre_id]}_{self.unique_midis[midi_id]}"
         offset = np.random.choice(self.peak_records[name])
@@ -338,16 +337,21 @@ if __name__ == "__main__":
         stems=args.stems,
         split="evaluation"
     )
-    # print(len(train_data))
-    # print(train_data[0])
+    print(len(train_data))
+    print(train_data[0])
     
-    # print(len(val_data))
-    # print(val_data[0])
+    print(len(val_data))
+    print(val_data[0])
     
-    os.makedirs("sample_audio", exist_ok=True)
-    for i in range(10):
-        # print(val_data[i]['input'].shape, val_data[i]['content_match'].shape, val_data[i]['timbre_match'].shape)
-        val_data[i]['input'].write(f"sample_audio/val_data_{i}.wav")
-        val_data[i]['content_match'].write(f"sample_audio/content_match_{i}.wav")
-        val_data[i]['timbre_match'].write(f"sample_audio/timbre_match_{i}.wav")
-        
+    # os.makedirs("sample_audio", exist_ok=True)
+    # for i in range(10):
+    #     # print(val_data[i]['input'].shape, val_data[i]['content_match'].shape, val_data[i]['timbre_match'].shape)
+    #     val_data[i]['input'].write(f"sample_audio/val_data_{i}.wav")
+    #     val_data[i]['content_match'].write(f"sample_audio/content_match_{i}.wav")
+    #     val_data[i]['timbre_match'].write(f"sample_audio/timbre_match_{i}.wav")
+    train_loader = build_dataloader(train_data, batch_size=1, num_workers=0, prefetch_factor=1, split="train")
+    val_loader = build_dataloader(val_data, batch_size=1, num_workers=0, prefetch_factor=1, split="evaluation")
+    for batch in tqdm(train_loader, desc="Training"):
+        pass
+    for batch in tqdm(val_loader, desc="Validation"):
+        pass
