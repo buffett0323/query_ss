@@ -66,7 +66,10 @@ class Wrapper:
         ).to(accelerator.device)
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
-        self.content_loss = FocalLoss(gamma=2).to(accelerator.device)
+        
+        # ✅ Switched both to CrossEntropyLoss for balanced classification
+        self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        self.content_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Loss parameters
         self.params = {
@@ -75,9 +78,23 @@ class Wrapper:
             "adv/loss_g": 1.0,
             "vq/commitment_loss": 0.25,
             "vq/codebook_loss": 1.0,
+            "pred/timbre_loss": 1.0,
+            "pred/content_loss": 10.0,
         }
         
         self.val_data = val_data
+
+    @staticmethod
+    def timbre_acc(pred_logits, target_labels):
+        """
+        pred_logits: [B, num_classes]
+        target_labels: [B]
+        """
+        preds = torch.argmax(pred_logits, dim=-1)
+        correct = (preds == target_labels).sum().item()
+        total = target_labels.size(0)
+        acc = correct / total
+        return acc
         
 
 @torch.no_grad()
@@ -164,8 +181,11 @@ def main(args, accelerator):
     
     
     # Load checkpoint if exists
-    start_iter = load_checkpoint(args, device, -1, wrapper) or 0
-    tracker.step = start_iter
+    if args.resume:
+        start_iter = load_checkpoint(args, device, -1, wrapper) or 0
+        tracker.step = start_iter
+    else:
+        tracker.step = 0
     
     
     # Accelerate dataloaders
@@ -190,7 +210,7 @@ def main(args, accelerator):
     train_step = tracker.log("train", "value", history=False)(
         tracker.track("train", args.num_iters, completed=tracker.step)(train_step)
     )
-    validate = tracker.track("val", len(val_loader))(validate)
+    validate = tracker.track("val", int(args.num_iters / args.validate_interval))(validate)
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
     save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
     
@@ -208,7 +228,6 @@ def main(args, accelerator):
             if tracker.step % args.sample_freq == 0:
                 save_samples(args, accelerator, tracker.step, wrapper)    
             
-                
             if tracker.step == args.num_iters:
                 break
 
@@ -252,8 +271,14 @@ def validate_step(args, accelerator, batch, wrapper, iter):
     recons = AudioSignal(out["audio"], args.sample_rate)
     output["gen/stft-loss"] = wrapper.stft_loss(recons, input_audio)
     output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
-    output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)  
+    output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)
     
+    # Timbre prediction loss and accuracy
+    output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
+    output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
+    output["pred/timbre_acc"] = wrapper.timbre_acc(out["pred_timbre_id"], batch['timbre_id'])
+    # output["pred/content_acc"] = wrapper.content_acc(out["pred_pitch"], batch['pitch'])
+
     
     # Log validation metrics to wandb
     try:
@@ -278,7 +303,6 @@ def train_step(args, accelerator, batch, iter, wrapper):
     
     # Load Batch Items
     batch = util.prepare_batch(batch, accelerator.device)
-    
     input_audio = batch['input']
 
     # DAC Model
@@ -296,8 +320,9 @@ def train_step(args, accelerator, batch, iter, wrapper):
 
     wrapper.optimizer_d.zero_grad()
     accelerator.backward(output["adv/disc_loss"])
+    accelerator.scaler.unscale_(wrapper.optimizer_d)
     grad_norm_d = torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
-    wrapper.optimizer_d.step()
+    accelerator.step(wrapper.optimizer_d)
     wrapper.scheduler_d.step()
     
     # Generator Losses
@@ -310,23 +335,27 @@ def train_step(args, accelerator, batch, iter, wrapper):
         output["vq/commitment_loss"] = out["vq/commitment_loss"]
         output["vq/codebook_loss"] = out["vq/codebook_loss"]
         
+        # Added predictor losses
+        output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
+        output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
+        
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
 
     # Optimizer
     wrapper.optimizer_g.zero_grad()
     accelerator.backward(output["loss_gen_all"])
+    accelerator.scaler.unscale_(wrapper.optimizer_g)
     grad_norm_g = torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
-    wrapper.optimizer_g.step()
+    accelerator.step(wrapper.optimizer_g)
     wrapper.scheduler_g.step()
+    accelerator.update()
 
     # Logging
     # output["other/learning_rate"] = wrapper.optimizer_g.param_groups[0]["lr"]
-    # output["other/batch_size"] = input_audio.batch_size
     output["other/grad_norm_g"] = grad_norm_g
     output["other/grad_norm_d"] = grad_norm_d
     output["other/time_per_step"] = time.time() - train_start_time
-    # output["other/train_step"] = iter
 
     # Log to wandb
     if iter % args.log_interval == 0:  # Log every 10 steps to avoid too frequent logging

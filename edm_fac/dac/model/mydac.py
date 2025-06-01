@@ -329,8 +329,6 @@ class MyDAC(BaseModel, CodecMixin):
         # Predictors
         pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_pitch = self.pitch_predictor(z)[0]
-
-        print(pred_timbre_id.shape, pred_pitch.shape)
         
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)

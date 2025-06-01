@@ -1,9 +1,9 @@
-path: /mnt/gestalt/home/buffett # NTU
-# path: /home/buffett/dataset # Sinica
+# path: /mnt/gestalt/home/buffett # NTU
+path: /home/buffett/dataset # Sinica
 
-log_wandb: True #False
+log_wandb: False #False
 wandb_project: edm-fac
-wandb_name: train only lead
+wandb_name: train only lead + predictors + timbre
 
 wandb_dir: ${path}/EDM_FAC_LOG
 save_path: ${path}/EDM_FAC_LOG
@@ -13,20 +13,20 @@ root_path: ${path}/EDM_FAC_DATA/rendered_audio_new
 midi_path: ${path}/EDM_FAC_DATA/single_note_midi
 
 
-batch_size: 4 #4
+batch_size: 8 #4
 log_interval: 100
 save_interval: 1000
 sample_freq: 1000
 validate_interval: 1000
-num_iters: 500000 #250000
-seed: 42
+num_iters: 1000000 #250000
+seed: 98
 val_idx: [0, 1, 2, 3, 4, 5, 6, 7]
 timbre_classes: 59
-# content_classes: 100
+resume: False
 
 num_workers: 8
 prefetch_factor: 8
-duration: 0.8
+duration: 1
 sample_rate: 44100
 min_note: 21
 max_note: 108
