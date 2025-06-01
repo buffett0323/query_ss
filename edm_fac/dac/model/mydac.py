@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from audiotools import AudioSignal
 from audiotools.ml import BaseModel
-from torch import nn
+from torch import nn, sin, pow
 
 from .base import CodecMixin
 from dac.nn.layers import Snake1d
@@ -15,6 +15,8 @@ from dac.nn.layers import WNConvTranspose1d
 from dac.nn.quantize import ResidualVectorQuantize
 from .encodec import SConv1d, SConvTranspose1d, SLSTM
 from .transformer import TransformerEncoder
+from alias_free_torch import *
+from einops.layers.torch import Rearrange
 
 def init_weights(m):
     if isinstance(m, nn.Conv1d):
@@ -62,6 +64,92 @@ class ResidualUnit(nn.Module):
             x = x[..., pad:-pad]
         return x + y
 
+
+class SnakeBeta(nn.Module):
+    """
+    A modified Snake function which uses separate parameters for the magnitude of the periodic components
+    Shape:
+        - Input: (B, C, T)
+        - Output: (B, C, T), same shape as the input
+    Parameters:
+        - alpha - trainable parameter that controls frequency
+        - beta - trainable parameter that controls magnitude
+    References:
+        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
+        https://arxiv.org/abs/2006.08195
+    Examples:
+        >>> a1 = snakebeta(256)
+        >>> x = torch.randn(256)
+        >>> x = a1(x)
+    """
+
+    def __init__(
+        self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False
+    ):
+        """
+        Initialization.
+        INPUT:
+            - in_features: shape of the input
+            - alpha - trainable parameter that controls frequency
+            - beta - trainable parameter that controls magnitude
+            alpha is initialized to 1 by default, higher values = higher-frequency.
+            beta is initialized to 1 by default, higher values = higher-magnitude.
+            alpha will be trained along with the rest of your model.
+        """
+        super(SnakeBeta, self).__init__()
+        self.in_features = in_features
+
+        # initialize alpha
+        self.alpha_logscale = alpha_logscale
+        if self.alpha_logscale:  # log scale alphas initialized to zeros
+            self.alpha = nn.Parameter(torch.zeros(in_features) * alpha)
+            self.beta = nn.Parameter(torch.zeros(in_features) * alpha)
+        else:  # linear scale alphas initialized to ones
+            self.alpha = nn.Parameter(torch.ones(in_features) * alpha)
+            self.beta = nn.Parameter(torch.ones(in_features) * alpha)
+
+        self.alpha.requires_grad = alpha_trainable
+        self.beta.requires_grad = alpha_trainable
+
+        self.no_div_by_zero = 0.000000001
+
+    def forward(self, x):
+        """
+        Forward pass of the function.
+        Applies the function to the input elementwise.
+        SnakeBeta := x + 1/b * sin^2 (xa)
+        """
+        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
+        beta = self.beta.unsqueeze(0).unsqueeze(-1)
+        if self.alpha_logscale:
+            alpha = torch.exp(alpha)
+            beta = torch.exp(beta)
+        x = x + (1.0 / (beta + self.no_div_by_zero)) * pow(sin(x * alpha), 2)
+
+        return x
+    
+    
+class CNNLSTM(nn.Module):
+    def __init__(self, indim, outdim, head, global_pred=False):
+        super().__init__()
+        self.global_pred = global_pred
+        self.model = nn.Sequential(
+            ResidualUnit(indim, dilation=1),
+            ResidualUnit(indim, dilation=2),
+            ResidualUnit(indim, dilation=3),
+            Activation1d(activation=SnakeBeta(indim, alpha_logscale=True)),
+            Rearrange("b c t -> b t c"),
+        )
+        self.heads = nn.ModuleList([nn.Linear(indim, outdim) for i in range(head)])
+
+    def forward(self, x):
+        # x: [B, C, T]
+        x = self.model(x)
+        if self.global_pred:
+            x = torch.mean(x, dim=1, keepdim=False)
+        outs = [head(x) for head in self.heads]
+        return outs
+    
 
 class EncoderBlock(nn.Module):
     def __init__(self, dim: int = 16, stride: int = 1, causal: bool = False):
@@ -253,8 +341,11 @@ class MyDAC(BaseModel, CodecMixin):
         self.apply(init_weights)
         
         # predictors
-        self.timbre_predictor = TransformerClassifier(latent_dim, timbre_classes, head=1, global_pred=True)
-        self.pitch_predictor = TransformerClassifier(latent_dim, pitch_nums, head=1, global_pred=False)
+        # self.timbre_predictor = TransformerClassifier(latent_dim, timbre_classes, head=1, global_pred=True)
+        # self.pitch_predictor = TransformerClassifier(latent_dim, pitch_nums, head=1, global_pred=False)
+        self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
+        self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
+        
         
         # conditional LayerNorm
         self.style_linear = nn.Linear(latent_dim, latent_dim * 2)
@@ -305,9 +396,9 @@ class MyDAC(BaseModel, CodecMixin):
         content_match = self.preprocess(content_match, sample_rate)
         timbre_match = self.preprocess(timbre_match, sample_rate)
         
-        z, codes, latents, commitment_loss, codebook_loss = self.encode(
-            audio_data, n_quantizers
-        )
+        # z, codes, latents, commitment_loss, codebook_loss = self.encode(
+        #     audio_data, n_quantizers
+        # )
         
         # Perturbation's encoders
         content_match_z = self.encoder(content_match)
@@ -326,14 +417,15 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
         
         
+        # Project timbre latent to style parameters
+        style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
+        gamma, beta = style.chunk(2, 1)  # (B, d, 1)
+        
+        
         # Predictors
         pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_pitch = self.pitch_predictor(z)[0]
         
-        # Project timbre latent to style parameters
-        style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
-        gamma, beta = style.chunk(2, 1)  # (B, d, 1)
-
 
         # Apply conditional normalization
         z = z.transpose(1, 2)
@@ -345,7 +437,6 @@ class MyDAC(BaseModel, CodecMixin):
         x = self.decode(z)
         return {
             "audio": x[..., :length],
-            "z": z,
             "codes": codes,
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
