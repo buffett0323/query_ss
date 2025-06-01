@@ -1,13 +1,13 @@
 # path: /mnt/gestalt/home/buffett # NTU
 path: /home/buffett/dataset # Sinica
-
+postfix: "0602"
 log_wandb: False #False
 wandb_project: edm-fac
 wandb_name: train only lead + predictors + timbre
 
-wandb_dir: ${path}/EDM_FAC_LOG
-save_path: ${path}/EDM_FAC_LOG
-ckpt_path: ${path}/EDM_FAC_LOG/ckpt
+wandb_dir: ${path}/EDM_FAC_LOG/${postfix}
+save_path: ${path}/EDM_FAC_LOG/${postfix}
+ckpt_path: ${path}/EDM_FAC_LOG/${postfix}/ckpt
 data_path: ${path}/EDM_FAC_DATA
 root_path: ${path}/EDM_FAC_DATA/rendered_audio_new
 midi_path: ${path}/EDM_FAC_DATA/single_note_midi
@@ -15,12 +15,12 @@ midi_path: ${path}/EDM_FAC_DATA/single_note_midi
 
 batch_size: 8 #4
 log_interval: 100
-save_interval: 1000
-sample_freq: 1000
-validate_interval: 1000
+save_interval: 2000
+sample_freq: 2000 #1000
+validate_interval: 1000 #1000
 num_iters: 1000000 #250000
-seed: 98
-val_idx: [0, 1, 2, 3, 4, 5, 6, 7]
+seed: 42
+val_idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 timbre_classes: 59
 resume: False
 
@@ -37,8 +37,7 @@ stems: ["lead"] #["lead", "pad", "bass", "keys", "pluck"]
 # preprocess_params:
 # spect_params:
 n_fft: 2048
-win_length: 1200
-hop_length: 300
+hop_length: 512
 
 # model_params:
 fixed: True

@@ -20,7 +20,7 @@ from audiotools import ml
 from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
-from dataset import EDM_Render_Dataset
+from dataset import EDM_Simple_Dataset, EDM_Simple_Dataset_Optimized
 from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
 import dac
 
@@ -55,6 +55,7 @@ class Wrapper:
         
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
+        # self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
         self.mel_loss = MelSpectrogramLoss(
             n_mels=[5, 10, 20, 40, 80, 160, 320],
             window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
@@ -62,7 +63,6 @@ class Wrapper:
             mel_fmax=[None, None, None, None, None, None, None],
             pow=1.0,
             mag_weight=0.0,
-            clamp_eps=1e-5,
         ).to(accelerator.device)
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
@@ -71,7 +71,7 @@ class Wrapper:
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.content_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
-        # Loss parameters
+        # Loss lambda parameters
         self.params = {
             "gen/mel-loss": 15.0,
             "adv/loss_feature": 2.0,
@@ -104,24 +104,34 @@ def save_samples(args, accelerator, tracker_step, wrapper):
     batch = util.prepare_batch(batch, accelerator.device)
 
     out = wrapper.generator(
-        audio_data=batch['input'].audio_data,
+        audio_data=batch['target'].audio_data,
         content_match=batch['content_match'].audio_data,
-        timbre_match=batch['timbre_match'].audio_data,
+        timbre_match=batch['timbre_converted'].audio_data,
     )
     
     recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
-    inputs = AudioSignal(batch['input'].audio_data.cpu(), args.sample_rate)
+    recons_gt = AudioSignal(batch['target'].audio_data.cpu(), args.sample_rate)
+    ref_content = AudioSignal(batch['content_match'].audio_data.cpu(), args.sample_rate)
+    ref_timbre = AudioSignal(batch['timbre_converted'].audio_data.cpu(), args.sample_rate)
+    
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}'), exist_ok=True)
 
+    # Conversion
     for i, sample_idx in enumerate(args.val_idx):
         single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
-        single_input = AudioSignal(inputs.audio_data[i], args.sample_rate)
+        single_recon_gt = AudioSignal(recons_gt.audio_data[i], args.sample_rate)
+        single_ref_content = AudioSignal(ref_content.audio_data[i], args.sample_rate)
+        single_ref_timbre = AudioSignal(ref_timbre.audio_data[i], args.sample_rate)
         
         recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'recon_{sample_idx}.wav')
-        input_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'orig_{sample_idx}.wav')
+        recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'gt_{sample_idx}.wav')
+        ref_content_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'ref_content_{sample_idx}.wav')
+        ref_timbre_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'ref_timbre_{sample_idx}.wav')
         
         single_recon.write(recon_path)
-        single_input.write(input_path)
+        single_recon_gt.write(recon_gt_path)
+        single_ref_content.write(ref_content_path)
+        single_ref_timbre.write(ref_timbre_path)
 
 
 def main(args, accelerator):
@@ -154,24 +164,26 @@ def main(args, accelerator):
     )
 
     # Build datasets and dataloaders
-    train_data = EDM_Render_Dataset(
+    train_data = EDM_Simple_Dataset_Optimized(
         root_path=args.root_path,
         midi_path=args.midi_path, 
         data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
+        hop_length=args.hop_length,
         min_note=args.min_note,
         max_note=args.max_note,
         stems=args.stems,
         split="train"
     )
     
-    val_data = EDM_Render_Dataset(
+    val_data = EDM_Simple_Dataset_Optimized(
         root_path=args.root_path,
         midi_path=args.midi_path, 
         data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
+        hop_length=args.hop_length,
         min_note=args.min_note,
         max_note=args.max_note,
         stems=args.stems,
@@ -195,6 +207,7 @@ def main(args, accelerator):
         num_workers=args.num_workers,
         batch_size=args.batch_size,
         collate_fn=train_data.collate,
+        # shuffle=True,  # <---- add this
     )
     train_loader = get_infinite_loader(train_loader)
     val_loader = accelerator.prepare_dataloader(
@@ -259,19 +272,19 @@ def validate_step(args, accelerator, batch, wrapper, iter):
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
     
-    input_audio = batch['input']
+    target_audio = batch['target']
 
     with torch.no_grad():
         out = wrapper.generator(
-            audio_data=input_audio.audio_data,
+            audio_data=target_audio.audio_data,
             content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_match'].audio_data,
+            timbre_match=batch['timbre_converted'].audio_data,
         )
     output = {}        
     recons = AudioSignal(out["audio"], args.sample_rate)
-    output["gen/stft-loss"] = wrapper.stft_loss(recons, input_audio)
-    output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
-    output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)
+    output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
+    output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
+    output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
     
     # Timbre prediction loss and accuracy
     output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
@@ -303,20 +316,20 @@ def train_step(args, accelerator, batch, iter, wrapper):
     
     # Load Batch Items
     batch = util.prepare_batch(batch, accelerator.device)
-    input_audio = batch['input']
+    target_audio = batch['target']
 
     # DAC Model
     with accelerator.autocast():
         out = wrapper.generator(
-            audio_data=input_audio.audio_data,
+            audio_data=target_audio.audio_data,
             content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_match'].audio_data,
+            timbre_match=batch['timbre_converted'].audio_data,
         )
         output = {}        
         recons = AudioSignal(out["audio"], args.sample_rate)
 
         # Discriminator Losses
-        output["adv/disc_loss"] = wrapper.gan_loss.discriminator_loss(recons, input_audio)
+        output["adv/disc_loss"] = wrapper.gan_loss.discriminator_loss(recons, target_audio)
 
     wrapper.optimizer_d.zero_grad()
     accelerator.backward(output["adv/disc_loss"])
@@ -327,11 +340,11 @@ def train_step(args, accelerator, batch, iter, wrapper):
     
     # Generator Losses
     with accelerator.autocast():
-        output["gen/stft-loss"] = wrapper.stft_loss(recons, input_audio)
-        output["gen/mel-loss"] = wrapper.mel_loss(recons, input_audio)
-        output["gen/l1-loss"] = wrapper.l1_loss(recons, input_audio)
+        output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
+        output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
+        output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
         
-        output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, input_audio)
+        output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
         output["vq/commitment_loss"] = out["vq/commitment_loss"]
         output["vq/codebook_loss"] = out["vq/codebook_loss"]
         
@@ -380,7 +393,10 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-
+    os.makedirs(args.wandb_dir, exist_ok=True)
+    os.makedirs(args.save_path, exist_ok=True)
+    os.makedirs(args.ckpt_path, exist_ok=True)
+    
     # Initialize accelerator
     accelerator = ml.Accelerator()
     if accelerator.local_rank != 0:
