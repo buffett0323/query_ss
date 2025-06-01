@@ -1,4 +1,5 @@
 from omegaconf import OmegaConf
+from tqdm import tqdm
 import os
 import torch
 
@@ -82,3 +83,18 @@ def load_checkpoint(args, device, iter, wrapper):
     
     print(f"Loaded checkpoint from {checkpoint_path}")
     return checkpoint['iter']
+
+
+
+def get_timbre_names(path):
+    timbres = set()
+    for file in tqdm(os.listdir(path)):
+        if file.endswith(".wav"):
+            timbres.add(file.split("_")[0])
+    
+    with open(f"info/timbre_names_{path.split('/')[-1]}.txt", "w") as f:
+        for timbre in timbres:
+            f.write(timbre + "\n")
+            
+    print(len(timbres))
+    

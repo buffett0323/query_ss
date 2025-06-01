@@ -22,6 +22,27 @@ def init_weights(m):
         nn.init.constant_(m.bias, 0)
 
 
+class TransformerClassifier(nn.Module):
+    def __init__(self, indim, outdim, head, global_pred=False):
+        super().__init__()
+        self.global_pred = global_pred
+        self.embedding = nn.Linear(indim, 64)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=64, nhead=8)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
+        self.heads = nn.ModuleList([nn.Linear(64, outdim) for _ in range(head)])
+
+    def forward(self, x):
+        # x: [B, C, T]
+        x = x.permute(2, 0, 1)  # [T, B, C]
+        x = self.embedding(x)  # [T, B, 64]
+        x = self.transformer(x)  # [T, B, 64]
+        x = x.permute(1, 0, 2)  # [B, T, 64]
+        if self.global_pred:
+            x = torch.mean(x, dim=1)  # [B, 64]
+        outs = [head(x) for head in self.heads]
+        return outs
+    
+    
 class ResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1, causal: bool = False):
         super().__init__()
@@ -183,7 +204,8 @@ class MyDAC(BaseModel, CodecMixin):
         sample_rate: int = 44100,
         lstm: int = 2,
         causal: bool = False,
-        timbre_classes: int = 284,
+        timbre_classes: int = 59,
+        pitch_nums: int = 88,
     ):
         super().__init__()
 
@@ -229,8 +251,11 @@ class MyDAC(BaseModel, CodecMixin):
         )
         self.sample_rate = sample_rate
         self.apply(init_weights)
-        self.timbre_predictor = nn.Linear(latent_dim, timbre_classes)
-
+        
+        # predictors
+        self.timbre_predictor = TransformerClassifier(latent_dim, timbre_classes, head=1, global_pred=True)
+        self.pitch_predictor = TransformerClassifier(latent_dim, pitch_nums, head=1, global_pred=False)
+        
         # conditional LayerNorm
         self.style_linear = nn.Linear(latent_dim, latent_dim * 2)
         self.style_linear.bias.data[:latent_dim] = 1
@@ -284,12 +309,11 @@ class MyDAC(BaseModel, CodecMixin):
             audio_data, n_quantizers
         )
         
-        # Train the encoders
+        # Perturbation's encoders
         content_match_z = self.encoder(content_match)
         timbre_match_z = self.encoder(timbre_match)
         
-        
-        # """ Perturbation """
+
         # Content match
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
             content_match_z, n_quantizers
@@ -302,10 +326,11 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
         
         
-        # # Predict timbre id
-        # pred_timbre_id = self.timbre_predictor(timbre_match_z)
-        # print("pred_timbre_id shape: ", pred_timbre_id.shape)
-        
+        # Predictors
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        pred_pitch = self.pitch_predictor(z)[0]
+
+        print(pred_timbre_id.shape, pred_pitch.shape)
         
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
@@ -327,5 +352,6 @@ class MyDAC(BaseModel, CodecMixin):
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
             "vq/codebook_loss": codebook_loss,
-            # "pred_timbre_id": pred_timbre_id,
+            "pred_timbre_id": pred_timbre_id,
+            "pred_pitch": pred_pitch,
         }

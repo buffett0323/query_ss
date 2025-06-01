@@ -1,19 +1,19 @@
 path: /mnt/gestalt/home/buffett # NTU
 # path: /home/buffett/dataset # Sinica
 
-log_wandb: True
+log_wandb: True #False
 wandb_project: edm-fac
-wandb_name: train no predictors, only synthesis
+wandb_name: train only lead
 
 wandb_dir: ${path}/EDM_FAC_LOG
 save_path: ${path}/EDM_FAC_LOG
 ckpt_path: ${path}/EDM_FAC_LOG/ckpt
 data_path: ${path}/EDM_FAC_DATA
-root_path: ${path}/EDM_FAC_DATA/rendered_audio
+root_path: ${path}/EDM_FAC_DATA/rendered_audio_new
 midi_path: ${path}/EDM_FAC_DATA/single_note_midi
 
 
-batch_size: 8 #4
+batch_size: 4 #4
 log_interval: 100
 save_interval: 1000
 sample_freq: 1000
@@ -21,15 +21,16 @@ validate_interval: 1000
 num_iters: 500000 #250000
 seed: 42
 val_idx: [0, 1, 2, 3, 4, 5, 6, 7]
-
+timbre_classes: 59
+# content_classes: 100
 
 num_workers: 8
 prefetch_factor: 8
-duration: 0.4
+duration: 0.8
 sample_rate: 44100
 min_note: 21
 max_note: 108
-stems: ["lead", "pad", "bass", "keys", "pluck"]
+stems: ["lead"] #["lead", "pad", "bass", "keys", "pluck"]
 
 
 
@@ -55,7 +56,7 @@ use_gr_content_global_f0: True
 
 # DAC:
 encoder_dim: 64
-encoder_rates:  [2, 4, 8, 8] #[2, 5, 5, 6]
+encoder_rates:  [2, 4, 8, 8] # -> 512 #[2, 5, 5, 6]
 latent_dim: 256
 decoder_dim: 1536
 decoder_rates:  [8, 8, 4, 2] #[ 6, 5, 5, 2 ]

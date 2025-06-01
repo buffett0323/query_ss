@@ -34,15 +34,18 @@ class Wrapper:
         accelerator,
         val_data
     ):
+        assert args.max_note - args.min_note + 1 == 88, "Pitch numbers must be 88"
         self.generator = dac.model.MyDAC(
-            timbre_classes=284,
             encoder_dim=args.encoder_dim,
             encoder_rates=args.encoder_rates,
             latent_dim=args.latent_dim,
             decoder_dim=args.decoder_dim,
             decoder_rates=args.decoder_rates,
             sample_rate=args.sample_rate,
+            timbre_classes=args.timbre_classes,
+            pitch_nums=args.max_note - args.min_note + 1, # 88
         ).to(accelerator.device)
+        
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
         self.scheduler_g = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_g, gamma=1.0)
 
