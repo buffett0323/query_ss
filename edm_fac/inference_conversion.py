@@ -272,8 +272,6 @@ class EDMFACInference:
             content_ref.write(output_path.replace(".wav", "_content_ref.wav"))
             timbre_ref.write(output_path.replace(".wav", "_timbre_ref.wav"))
 
-        print(f"Converted audio saved to: {output_path}")
-
 
         # Calculate metrics
         try:
@@ -361,8 +359,11 @@ class EDMFACInference:
             output_file = output_path / f"sample_{i}.wav" #f"{audio_info[0]}_{audio_info[1]}.wav"
 
             # Random pich one
-            random_pick_timbre = random.choice(timbre_names)
-            random_pick_content = random.choice(validation_midi_names)
+            timbre_names_wo_myself = [tn for tn in timbre_names if tn != timbre_ref_name]
+            content_names_wo_myself = [cn for cn in validation_midi_names if cn != content_ref_name]
+            
+            random_pick_timbre = random.choice(timbre_names_wo_myself)
+            random_pick_content = random.choice(content_names_wo_myself)
 
             content_ref_path = os.path.join(input_dir, f"{random_pick_timbre}_{content_ref_name}.wav")
             timbre_ref_path = os.path.join(input_dir, f"{timbre_ref_name}_{random_pick_content}.wav")
