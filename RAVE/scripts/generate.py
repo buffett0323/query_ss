@@ -6,7 +6,7 @@ import cached_conv as cc
 try:
     import rave
 except:
-    import sys, os 
+    import sys, os
     sys.path.append(os.path.abspath('.'))
     import rave
 
@@ -79,10 +79,10 @@ def main(argv):
 
     for i, (d, f) in enumerate(progress_bar):
         #TODO reset cache
-            
+
         try:
             x, sr = torchaudio.load(f)
-        except: 
+        except:
             logging.warning('could not open file %s.'%f)
             continue
         progress_bar.set_description(f)
@@ -105,7 +105,7 @@ def main(argv):
                 x = torch.stack(x, 0)
             else:
                 x = x[None]
-            
+
             # forward into model
             out = []
             for x_chunk in x:
@@ -122,5 +122,5 @@ def main(argv):
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         torchaudio.save(out_path, out[0].cpu(), sample_rate=model.sr)
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     app.run(main)

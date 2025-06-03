@@ -89,8 +89,8 @@ taxonomy = {
 
 def clean_npy_other_vox(data_root="/storage/home/hcoda1/1/kwatchar3/data/data/moisesdb/npyq"):
     npys = glob.glob(os.path.join(data_root, "**/*.npy"), recursive=True)
-    
-    
+
+
     npys = [npy for npy in npys if "other" in npy]
     npys = [npy for npy in npys if "vdbo_" not in npy]
     npys = [npy for npy in npys if "other_" not in npy]
@@ -98,17 +98,17 @@ def clean_npy_other_vox(data_root="/storage/home/hcoda1/1/kwatchar3/data/data/mo
     stems = set([
         os.path.basename(npy).split(".")[0] for npy in npys
     ])
-    
+
     assert len(stems) == 1
-    
+
     for npy in tqdm(npys):
         shutil.move(npy, npy.replace("other", "other_vocals"))
-    
-    
+
+
 
 
 def clean_track_inst(inst):
-    
+
     if "vocoder" in inst:
         inst = "other_vocals"
 
@@ -155,19 +155,19 @@ def save_taxonomy():
         json.dump(taxonomy, f, indent=4)
 
     taxonomy_coarse = list(taxonomy.keys())
-    
+
     with open("taxonomy_coarse.json", "w") as f:
         json.dump(taxonomy_coarse, f, indent=4)
-        
+
     taxonomy_fine = list(chain(*taxonomy.values()))
-    
+
     count_ = defaultdict(int)
     for t in taxonomy_fine:
         count_[t] += 1
-        
+
     with open("taxonomy_fine.json", "w") as f:
         json.dump(taxonomy_fine, f, indent=4)
-    
+
 
 
 possible_coarse = list(taxonomy.keys())
@@ -176,10 +176,10 @@ possible_fine = list(set(chain(*taxonomy.values())))
 
 def trim_and_mix(audios, length_=None):
     length = min([a.shape[-1] for a in audios])
-    
+
     if length_ is not None:
         length = min(length, length_)
-    
+
     audios = [a[..., :length] for a in audios]
     return np.sum(np.stack(audios, axis=0), axis=0), length
 
@@ -208,37 +208,37 @@ def convert_one(inout):
 
     all_tracks = []
     other_tracks = []
-    
+
     outfile = None
-    
+
     added_tracks = set()
     duplicated_tracks = set()
     track_to_stem = defaultdict(list)
     added_stems = set()
     duplicated_stems = set()
-    
+
     stem_name_to_stems = defaultdict(list)
-    
+
     for stem in stems:
         stem_name = stem.stemName
         stem_name_to_stems[stem_name].append(stem)
-    
-        
+
+
     for stem_name in tqdm(stem_name_to_stems):
         stem_tracks = []
         for stem in stem_name_to_stems[stem_name]:
             stem_name = stem.stemName
-            
+
             if stem_name in added_stems:
                 print(f"Duplicate stem {stem_name} in {song_id}")
                 duplicated_stems.add(stem_name)
-            
+
             added_stems.add(stem_name)
-            
+
             for track in stem.tracks:
                 track_inst = track.trackType
                 track_inst = clean_track_inst(track_inst)
-                
+
                 if track_inst in added_tracks:
                     if stem_name in track_to_stem[track_inst]:
                         continue
@@ -248,10 +248,10 @@ def convert_one(inout):
                     raise ValueError
                 else:
                     added_tracks.add(track_inst)
-                    
+
                 track_to_stem[track_inst].append(stem_name)
                 track_id = track.id
-                
+
                 audio, fs = ta.load(os.path.join(input_path, stem_name, f"{track_id}.wav"))
 
                 if fs != 44100:
@@ -284,7 +284,7 @@ def convert_one(inout):
                 outfile = None
                 stem_tracks.append(audio)
                 audio = None
-                
+
         stem_track, min_length = trim_and_mix(stem_tracks)
 
         assert outfile is None
@@ -292,29 +292,29 @@ def convert_one(inout):
         np.save(outfile, stem_track)
         saved_npy.append(outfile)
         outfile = None
-        
+
         all_tracks.append(stem_track)
-        
+
         if stem_name not in ["vocals", "drums", "bass"]:
             # print(f"Putting {stem_name} in other")
             other_tracks.append(stem_track)
-            
-        
+
+
     assert outfile is None
     all_track, min_length_ = trim_and_mix(all_tracks, min_length)
     outfile = os.path.join(output_root, f"mixture.npy")
     np.save(outfile, all_track)
-    
+
     if min_length_ != min_length:
         retrim_npys(saved_npy, min_length_)
         min_length = min_length_
-    
+
     saved_npy.append(outfile)
     outfile = None
-    
+
     other_track, min_length_ = trim_and_mix(other_tracks, min_length)
     np.save(os.path.join(output_root, f"vdbo_others.npy"), other_track)
-    
+
     if min_length_ != min_length:
         retrim_npys(saved_npy, min_length_)
         min_length = min_length_
@@ -385,7 +385,7 @@ def check_vdbo_one(f):
     m = np.load(os.path.join(f, "mixture.npy"))
     snr = 10 * np.log10(np.mean(np.square(m)) / np.mean(np.square(s - m)))
     print(snr)
-    
+
     return snr
 
 def check_vdbo(data_root="/storage/home/hcoda1/1/kwatchar3/data/data/moisesdb/npy2"):
@@ -793,7 +793,7 @@ def make_test_indices(
     splits_path="/storage/home/hcoda1/1/kwatchar3/data/data/moisesdb/splits.csv",
     test_split=5,
 ):
-    
+
     coarse_stems = set(taxonomy.keys())
     fine_stems = set(chain(*taxonomy.values()))
 
@@ -802,49 +802,49 @@ def make_test_indices(
     stems = pd.read_csv(stem_path)
 
     file_in_test = splits[splits["split"] == test_split]["song_id"].tolist()
-    
+
     stems_test = stems[stems["song_id"].isin(file_in_test)]
     metadata_test = metadata[metadata["song_id"].isin(file_in_test)]
     splits_test = splits[splits["split"] == test_split]
-    
+
     stems_test = stems_test.set_index("song_id")
     metadata_test = metadata_test.drop_duplicates("song_id").set_index("song_id")
     splits_test = splits_test.set_index("song_id")
-    
+
     stem_to_song_id = defaultdict(list)
     song_id_to_stem = defaultdict(list)
-    
+
     for song_id in file_in_test:
-        
+
         stems_ = stems_test.loc[song_id]
         stem_names = stems_.T
         stem_names = stem_names[stem_names == 1].index.tolist()
-        
+
         for stem in stem_names:
             stem_to_song_id[stem].append(song_id)
-            
+
         song_id_to_stem[song_id] = stem_names
-        
-        
+
+
     indices = []
     no_query = []
-    
+
     for song_id in file_in_test:
-        
+
         genre = metadata_test.loc[song_id, "genre"]
         # print(genre)
         artist = metadata_test.loc[song_id, "artist"]
         # print(artist)
-        
+
         stems_ = song_id_to_stem[song_id]
-        
+
         for stem in stems_:
             possible_query = stem_to_song_id[stem]
             possible_query = [p for p in possible_query if p != song_id]
-            
+
             if len(possible_query) == 0:
                 print(f"No possible query for {song_id} with {stem}")
-                
+
                 no_query.append(
                     {
                         "song_id": song_id,
@@ -852,42 +852,42 @@ def make_test_indices(
                     }
                 )
                 continue
-            
+
             query_df = metadata_test.loc[possible_query, ["genre", "artist"]]
-            
+
             assert len(query_df) > 0
-            
+
             query_df_ = query_df.copy()
-            
+
             same_genre = True
             different_artist = True
             query_df = query_df[(query_df["genre"] == genre) & (query_df["artist"] != artist)]
-            
+
             if len(query_df) == 0:
-                
+
                 same_genre = False
                 different_artist = True
-                
+
                 query_df = query_df_.copy()
                 query_df = query_df[(query_df["artist"] != artist)]
-            
+
             if len(query_df) == 0:
-                
+
                 same_genre = True
                 different_artist = False
-                
+
                 query_df = query_df_.copy()
                 query_df = query_df[(query_df["genre"] == genre)]
-            
+
             if len(query_df) == 0:
-                
+
                 same_genre = False
                 different_artist = False
-                
+
                 query_df = query_df_.copy()
-            
+
             query_id = query_df.sample(1).index[0]
-            
+
             indices.append(
                 {
                     "song_id": song_id,
@@ -895,25 +895,25 @@ def make_test_indices(
                     "stem": stem,
                     "same_genre": same_genre,
                     "different_artist": different_artist
-                }   
+                }
             )
-            
+
     indices = pd.DataFrame.from_records(indices)
     no_query = pd.DataFrame.from_records(no_query)
-    
+
     indices.to_csv(
         os.path.join(os.path.dirname(metadata_path), "test_indices.csv"), index=False
     )
-    
+
     no_query.to_csv(
         os.path.join(os.path.dirname(metadata_path), "no_query.csv"), index=False
     )
-    
+
     print("Total number of queries:", len(indices))
     print("Total number of no queries:", len(no_query))
-    
+
     query_type = indices.groupby(["same_genre", "different_artist"]).size()
-    
+
     print(query_type)
 
 

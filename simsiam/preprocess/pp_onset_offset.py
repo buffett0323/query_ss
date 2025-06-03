@@ -28,14 +28,14 @@ if __name__ == "__main__":
         '-rp', '1', '-ac', 'spec', '-hop', '300', '-atc', '1', '-pr', 'bf16-mixed'
     ]
     device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
-    
+
     # Step 2: Load model
     model = load_model_checkpoint(args=args, device=device).to(device)
 
     # Step 3: Load and process your audio file
     audio_path = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_npy/222dbfce-0c68-4d3f-b67a-edc5b62b9810_3/other.npy"
     audio_info = prepare_media(audio_path, source_type='audio_filepath')
-    
+
     # Load and process npy file
     waveform = np.load(audio_path)
     if waveform.ndim == 1:
@@ -53,14 +53,14 @@ if __name__ == "__main__":
     # Save
     torchaudio.save(output_path, waveform_tensor, sample_rate)
     print(f"Saved waveform to: {output_path}")
- 
+
 
     # Step 4: Run transcription and get notes
     notes, midifile = transcribe_get_notes(model, audio_info)
     midifile = to_data_url(midifile)
     html_script = create_html_from_midi(midifile) # html midiplayer
 
-    
+
     # Step 5: Print onset/offsets
     note_dicts = [
         {

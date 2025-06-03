@@ -1,3 +1,4 @@
+pre-commit==4.2.0
 nvitop
 numpy
 pandas

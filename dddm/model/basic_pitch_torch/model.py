@@ -34,7 +34,7 @@ def normalized_log(inputs: Tensor) -> Tensor:
     log_power = 10 * log_base_b(power + 1e-10, 10)
 
     log_power_min = torch.amin(log_power, dim=(1, 2)).reshape(inputs.shape[0], 1, 1)
-    log_power_offset = log_power - log_power_min    
+    log_power_offset = log_power - log_power_min
     log_power_offset_max = torch.amax(log_power_offset, dim=(1, 2)).reshape(inputs.shape[0], 1, 1)
     # equivalent to TF div_no_nan
     log_power_normalized = log_power_offset / log_power_offset_max
@@ -44,10 +44,10 @@ def normalized_log(inputs: Tensor) -> Tensor:
 
 
 def get_cqt(
-        inputs: Tensor, 
-        n_harmonics: int, 
-        use_batch_norm: bool, 
-        bn_layer: nn.BatchNorm2d, 
+        inputs: Tensor,
+        n_harmonics: int,
+        use_batch_norm: bool,
+        bn_layer: nn.BatchNorm2d,
     ):
     """Calculate the CQT of the input audio.
 
@@ -81,12 +81,12 @@ def get_cqt(
     x = cqt_layer(inputs)
     x = torch.transpose(x, 1, 2)
     x = normalized_log(x)
-    
+
     x = x.unsqueeze(1)
     if use_batch_norm:
         x = bn_layer(x)
     x = x.squeeze(1)
-    
+
     return x
 
 
@@ -107,9 +107,9 @@ class HarmonicStacking(nn.Module):
     """
 
     def __init__(
-        self, 
-        bins_per_semitone: int, 
-        harmonics: List[float], 
+        self,
+        bins_per_semitone: int,
+        harmonics: List[float],
         n_output_freqs: int,
     ):
         super().__init__()
@@ -120,7 +120,7 @@ class HarmonicStacking(nn.Module):
         self.shifts = [
             int(round(12.0 * self.bins_per_semitone * math.log2(h))) for h in self.harmonics
         ]
-    
+
     @torch.no_grad()
     def forward(self, x):
         # x: (batch, t, n_bins)
@@ -140,15 +140,15 @@ class HarmonicStacking(nn.Module):
 
 class BasicPitchTorch(nn.Module):
     def __init__(
-        self, 
+        self,
         stack_harmonics=[0.5, 1, 2, 3, 4, 5, 6, 7],
     ) -> None:
         super().__init__()
         self.stack_harmonics = stack_harmonics
         if len(stack_harmonics) > 0:
             self.hs = HarmonicStacking(
-                bins_per_semitone=CONTOURS_BINS_PER_SEMITONE, 
-                harmonics=stack_harmonics, 
+                bins_per_semitone=CONTOURS_BINS_PER_SEMITONE,
+                harmonics=stack_harmonics,
                 n_output_freqs=ANNOTATIONS_N_SEMITONES * CONTOURS_BINS_PER_SEMITONE
             )
             num_in_channels = len(stack_harmonics)
@@ -182,19 +182,19 @@ class BasicPitchTorch(nn.Module):
             nn.Conv2d(32 + 1, 1, kernel_size=3, stride=1, padding="same"),
             nn.Sigmoid()
         )
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         cqt = get_cqt(
-            x, 
-            len(self.stack_harmonics), 
-            True, 
+            x,
+            len(self.stack_harmonics),
+            True,
             self.bn_layer,
         )
         if hasattr(self, "hs"):
             cqt = self.hs(cqt)
         else:
             cqt = cqt.unsqueeze(1)
-                
+
         x_contour = self.conv_contour(cqt)
 
         # for strided conv, padding is different between PyTorch and TensorFlow
@@ -203,7 +203,7 @@ class BasicPitchTorch(nn.Module):
         # F.pad process from the last dimension, so it's (2, 2, 3, 3)
         x_contour_for_note = F.pad(x_contour, (2,2,3,3))
         x_note = self.conv_note(x_contour_for_note)
-        
+
         # (172, 264) --(1, 3)--> (172, 88), pad = ((1 * 171 - 172 + 5) / 2, (3 * 87 - 264 + 5) / 2) = (2, 1)
         # F.pad process from the last dimension, so it's (1, 1, 2, 2)
         cqt_for_onset = F.pad(cqt, (1,1,2,2))

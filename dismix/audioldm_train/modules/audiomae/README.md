@@ -9,13 +9,13 @@ pip install -r requirments.txt
 ```
 
 
-See the usage in example.py 
+See the usage in example.py
 
 
 
   ```
-  python example.py 
-  
+  python example.py
+
   """
   Load AudioMAE from /mnt/bn/data-xubo/project/Masked_AudioEncoder checkpoint/finetuned.pth / message: <All keys matched successfully>
   Start evaluation on AudioSet ...

@@ -101,7 +101,6 @@ rave.RAVE:
     phase_1_duration = 500000
     loss_weights = {'reg': 0.02, 'feature_matching': 20}
     update_discriminator_every = 4
-    enable_pqmf_encode = True 
-    enable_pqmf_decode = False 
+    enable_pqmf_encode = True
+    enable_pqmf_decode = False
     audio_monitor_epochs = 10
-    

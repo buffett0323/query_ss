@@ -32,10 +32,10 @@ def get_time_embedding(time_steps, temb_dim):
 
 class DIT(nn.Module):
     def __init__(
-        self, 
+        self,
         image_height,
-        image_width, 
-        im_channels, 
+        image_width,
+        im_channels,
         config
     ):
         super().__init__()

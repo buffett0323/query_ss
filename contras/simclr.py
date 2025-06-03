@@ -16,7 +16,7 @@ class GatedConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         """
         A single block of Gated Convolutional Neural Network.
-        
+
         Args:
             in_channels (int): Number of input channels.
             out_channels (int): Number of output channels.
@@ -67,17 +67,17 @@ class GatedCNN(nn.Module):
 class DilatedCNN(nn.Module):
     def __init__(self, in_channels=2, encoder_output_dim=128):
         super(DilatedCNN, self).__init__()
-        
+
         self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=3, stride=1, padding=1, dilation=1)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=2, dilation=2)
         self.conv3 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=4, dilation=4)
         self.conv4 = nn.Conv2d(256, encoder_output_dim, kernel_size=3, stride=1, padding=8, dilation=8)
-        
+
         self.bn1 = nn.BatchNorm2d(64)
         self.bn2 = nn.BatchNorm2d(128)
         self.bn3 = nn.BatchNorm2d(256)
         self.bn4 = nn.BatchNorm2d(encoder_output_dim)
-        
+
         self.pool = nn.AdaptiveAvgPool2d((1, 1))  # Global pooling to get fixed-size embeddings
 
     def forward(self, x):
@@ -87,7 +87,7 @@ class DilatedCNN(nn.Module):
         x = F.relu(self.bn4(self.conv4(x)))
         x = self.pool(x)  # Reduce spatial dimensions to 1x1
         return x.view(x.size(0), -1)  # Flatten to [batch_size, encoder_output_dim]
-    
+
 
 
 class SimCLR(nn.Module):
@@ -109,9 +109,9 @@ class SimCLR(nn.Module):
 
         z_i = self.projector(h_i)
         z_j = self.projector(h_j)
-        
+
         return h_i, h_j, z_i, z_j
-    
+
 
 
 class ContrastiveLearning(LightningModule):
@@ -122,7 +122,7 @@ class ContrastiveLearning(LightningModule):
         self.save_dir = self.args.model_dict_save_dir
         self.my_device = torch.device(device)
         os.makedirs(self.save_dir, exist_ok=True)
-        
+
         # Load Models
         self.transform = SimCLRTransform(args).to(device)
         if args.encoder_name == "DilatedCNN":
@@ -130,33 +130,33 @@ class ContrastiveLearning(LightningModule):
                 in_channels=self.args.channels,
                 encoder_output_dim=self.args.encoder_output_dim,
             ).to(device)
-            
-        else: 
+
+        else:
             self.encoder = GatedCNN(
-                in_channels=self.args.channels, 
+                in_channels=self.args.channels,
                 num_classes=self.args.encoder_output_dim,
             ).to(device)
-        
+
         self.model = SimCLR(
-            encoder=self.encoder, 
+            encoder=self.encoder,
             n_features=self.args.encoder_output_dim,
-            projection_dim=self.args.projection_dim, 
+            projection_dim=self.args.projection_dim,
         ).to(device)
-        
+
         self.criterion = NT_Xent(
-            self.args.batch_size, 
-            self.args.temperature, 
+            self.args.batch_size,
+            self.args.temperature,
             world_size=1,
         ).to(device)
-        
+
         self.save_hyperparameters()
         self.batch_size = args.batch_size
-    
+
 
     def forward(self, mel):
         mel = mel.to(self.my_device)
         x_i, x_j = self.transform(mel)
-        
+
         h_i, h_j, z_i, z_j = self.model(x_i, x_j) # SimCLR Model
         return h_i, h_j, z_i, z_j
 
@@ -164,36 +164,36 @@ class ContrastiveLearning(LightningModule):
     def training_step(self, batch, batch_idx):
         if batch.shape[0] != self.batch_size:
             return None
-        
+
         h_i, h_j, z_i, z_j = self(batch)
         loss = self.criterion(z_i, z_j)
-        
+
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
-    
-    
+
+
     def validation_step(self, batch, batch_idx):
         if batch.shape[0] != self.batch_size:
             return None
-        
+
         h_i, h_j, z_i, z_j = self(batch)
         loss = self.criterion(z_i, z_j)
 
         self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
-    
-    
+
+
     def test_step(self, batch, batch_idx):
         if batch.shape[0] != self.batch_size:
             return None
-        
+
         h_i, h_j, z_i, z_j = self(batch)
         loss = self.criterion(z_i, z_j)
 
         self.log('test_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
 
-    
+
     def configure_criterion(self):
         criterion = NT_Xent(self.args.batch_size, self.args.temperature)
         return criterion
@@ -202,12 +202,12 @@ class ContrastiveLearning(LightningModule):
         scheduler = None
         if self.args.optimizer == "Adam":
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr)
-        
+
         elif self.args.optimizer == "LARS": # TODO
             # optimized using LARS with linear learning rate scaling
             # (i.e. LearningRate = 0.3 × BatchSize/256) and weight decay of 10−6.
             learning_rate = 0.3 * self.args.batch_size / 256
-            
+
             # Base optimizer: SGD with momentum
             base_optimizer = torch.optim.SGD(
                 self.model.parameters(),
@@ -235,7 +235,7 @@ class ContrastiveLearning(LightningModule):
             return {"optimizer": optimizer, "lr_scheduler": scheduler}
         else:
             return {"optimizer": optimizer}
-        
+
     def save_model(self, checkpoint_name="simclr.pth"):
         """Save model state dictionary."""
         save_path = os.path.join(self.save_dir, checkpoint_name)

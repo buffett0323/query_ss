@@ -22,7 +22,7 @@ def process_file(file_name):
         sample_rate=SAMPLE_RATE,
         amp_thres=AMP_THRES
     )
-    
+
     if len(segments) >= 2:
         os.makedirs(os.path.join(SAVE_DIR, file_name), exist_ok=True)
         for i, segment in enumerate(segments):
@@ -44,12 +44,12 @@ if __name__ == "__main__":
             total=len(track_list),
             desc="Processing files"
         ))
-    
+
     # Filter out None results and create counter
     seg_counter = {k: v for result in results if result is not None for k, v in [result]}
-    
+
     print(f"Having {len(seg_counter.keys())} / {len(track_list)} usable tracks under {AMP_THRES} amplitude threshold")
-    
+
     # Save the counter
     with open("../info/chorus_audio_16000_095sec_npy_bass_other_seg_counter.json", "w") as f:
         json.dump(seg_counter, f, indent=4)

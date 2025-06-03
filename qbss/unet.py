@@ -82,11 +82,11 @@ class UnetTranspose2D(nn.Module):
         #layer7 up:
         x = self.uprelu7(x)
         x = self.upconvtrans7(x)
-        
+
         #layer 6 up:
         x = self.uprelu6(torch.cat([x6, x], 1))
         x = self.upconvtrans6(x)
-        
+
         #layer 5 up:
         x = self.uprelu5(torch.cat([x5, x], 1))
         x = self.upconvtrans5(x)
@@ -104,9 +104,9 @@ class UnetTranspose2D(nn.Module):
         #layer 2 up:
         x = self.uprelu2(torch.cat([x2, x], 1))
         x = self.upconvtrans2(x)
-        
+
         #layer 1 up:
         x = self.uprelu1(torch.cat([x1, x], 1))
         x = self.upconvtrans1(x)
-        
+
         return x, x_latent

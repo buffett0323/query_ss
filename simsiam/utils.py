@@ -16,8 +16,8 @@ from tqdm import tqdm
 
 
 def find_top_2_peak_segments(
-    npy_path, 
-    segment_duration=0.95, 
+    npy_path,
+    segment_duration=0.95,
     sample_rate=16000,
     amp_thres=0.5
 ):
@@ -35,12 +35,12 @@ def find_top_2_peak_segments(
     # Find peaks
     peaks, _ = scipy.signal.find_peaks(envelope, distance=sample_rate // 20)
     if len(peaks) == 0: return [] # print("No peaks found.")
-        
+
 
     # Get peak amplitudes and top 5
     peak_amplitudes = envelope[peaks]
     top_indices = np.argsort(peak_amplitudes)#[::-1]  # highest to lowest
-    
+
     top_peaks = peaks[top_indices]
     top_amplitudes = peak_amplitudes[top_indices]
     top_times = top_peaks / sample_rate
@@ -52,7 +52,7 @@ def find_top_2_peak_segments(
     for i, (amp, peak_idx, time_sec) in enumerate(sorted_peaks, 1):
         if amp < amp_thres:
             break
-       
+
         start_idx = peak_idx
         end_idx = start_idx + segment_samples
 
@@ -73,7 +73,7 @@ def plot_waveform(npy_path, savefig_name="sample_audio/waveform.png"):
     sample_rate = 16000
     if len(waveform.shape) == 1:
         waveform = waveform[np.newaxis, :]
-        
+
     num_samples = waveform.shape[1]
     duration = num_samples / sample_rate
     time_axis = np.linspace(0, duration, num_samples)
@@ -88,8 +88,8 @@ def plot_waveform(npy_path, savefig_name="sample_audio/waveform.png"):
     plt.savefig(savefig_name)
     plt.close()
     print("Saved the figure to ", savefig_name)
-    
-    
+
+
 def npy2audio(npy_path, savefig_name="sample_audio/temp_audio.wav"):
     waveform = np.load(npy_path)
 
@@ -151,7 +151,7 @@ def save_to_txt(filename, data):
     with open(filename, "w") as f:
         for item in data:
             f.write(f"{item}\n")
-            
+
 def load_from_txt(filename):
     with open(filename, "r") as f:
         return [line.strip() for line in f.readlines()]
@@ -181,27 +181,27 @@ def train_test_split_BPDataset(path="/home/buffett/NAS_NTU/beatport_analyze/vers
 def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_audio_16000_npy"):
     path_file = os.listdir(path)
     random.shuffle(path_file)
-    
+
     song_dict = defaultdict(lambda: "train")
     song_counter_dict = defaultdict(lambda: [])
     unique_songs = set()
-    
+
     for file in path_file:
         song_name, song_num = file.split("_")[0], int(file.split("_")[-1])
         if song_name == "ae7633e8-27df-4980-812c-9c6dacfb1d22":
             print(song_num)
         unique_songs.add(song_name)
         song_counter_dict[song_name].append(song_num)
-        
-    
+
+
     # Compute split sizes
     total_files = len(unique_songs)
     train_size = int(total_files * 9 / 10)
     valid_size = int(total_files * 0.5 / 10)
     test_size = total_files - train_size - valid_size  # Ensure all files are allocated
     print("Size check: ", "train", train_size, "valid", valid_size, "test", test_size)
-    
-    
+
+
     # Split dataset by song name
     for i, song_name in tqdm(enumerate(unique_songs)):
         if i < test_size:
@@ -210,11 +210,11 @@ def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_aud
             song_dict[song_name] = "valid"
         else:
             song_dict[song_name] = "train"
-            
+
 
     # Add song number to the song name
     train_files, valid_files, test_files = [], [], []
-    
+
     for song_name, song_split in tqdm(song_dict.items()):
         if song_split == "train":
             for i in song_counter_dict[song_name]:
@@ -225,7 +225,7 @@ def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_aud
         else:
             for i in song_counter_dict[song_name]:
                 test_files.append(f"{song_name}_{i}")
-    
+
 
     random.shuffle(train_files)
     random.shuffle(valid_files)
@@ -236,14 +236,14 @@ def split_dataset_by_song(path="/home/buffett/NAS_NTU/beatport_analyze/verse_aud
     save_to_txt("info/test_by_song_name_4secs.txt", test_files)
     print(f"Dataset split complete: {len(train_files)} train, {len(valid_files)} valid, {len(test_files)} test")
 
-    
-    
+
+
 def split_dataset_by_segment_dict(path="info/chorus_audio_16000_095sec_npy_seg_counter.json"):
     with open(path, "r") as f:
         seg_counter = json.load(f)
         bp_listdir = list(seg_counter.keys())
         random.shuffle(bp_listdir)
-    
+
     # Compute split sizes
     total_files = len(bp_listdir)
     train_size = int(total_files * 9 / 10)
@@ -251,10 +251,10 @@ def split_dataset_by_segment_dict(path="info/chorus_audio_16000_095sec_npy_seg_c
     test_size = total_files - train_size - valid_size  # Ensure all files are allocated
     print("Size check: ", "train", train_size, "valid", valid_size, "test", test_size)
 
-    
+
     # Split into train/valid/test
     train_files = bp_listdir[:train_size]
-    valid_files = bp_listdir[train_size:train_size+valid_size] 
+    valid_files = bp_listdir[train_size:train_size+valid_size]
     test_files = bp_listdir[train_size+valid_size:]
 
     # Create split dictionaries
@@ -266,22 +266,22 @@ def split_dataset_by_segment_dict(path="info/chorus_audio_16000_095sec_npy_seg_c
     with open("info/train_seg_counter.json", "w") as f:
         json.dump(train_dict, f, indent=4)
     with open("info/valid_seg_counter.json", "w") as f:
-        json.dump(valid_dict, f, indent=4) 
+        json.dump(valid_dict, f, indent=4)
     with open("info/test_seg_counter.json", "w") as f:
         json.dump(test_dict, f, indent=4)
 
     print(f"Dataset split complete: {len(train_dict)} train, {len(valid_dict)} valid, {len(test_dict)} test")
-    
-    
+
+
 def plot_spec_and_save(spectrogram, savefig_name, sr=16000):
     if isinstance(spectrogram, torch.Tensor):
         spectrogram = spectrogram.squeeze().numpy()
-                
+
     plt.figure(figsize=(6, 6))
     librosa.display.specshow(
         spectrogram,
-        x_axis='time', 
-        y_axis='mel', 
+        x_axis='time',
+        y_axis='mel',
         sr=sr,
     )
     plt.colorbar(format='%+2.0f dB')
@@ -298,7 +298,7 @@ def resize_spec(spectrogram, target_size=(256, 256)):
 def plot_and_save_logmel_spectrogram(x_i, x_j, song_name, output_dir, stage="original", sample_rate=16000):
     """
     Plots and saves the log-mel spectrograms for the transformed, normed, and augmented versions.
-    
+
     Args:
         x_i (Tensor): Transformed spectrogram of x_i
         x_j (Tensor): Transformed spectrogram of x_j
@@ -341,13 +341,13 @@ def plot_mel_spectrogram_librosa(log_mel_spec, output_dir, song_name, stage="ori
 
     # Plot Mel Spectrogram
     plt.figure(figsize=(10, 6), dpi=150)
-    librosa.display.specshow(log_mel_spec, x_axis='time', y_axis='mel', sr=sample_rate, 
+    librosa.display.specshow(log_mel_spec, x_axis='time', y_axis='mel', sr=sample_rate,
                              hop_length=160, n_fft=1024, n_mels=64, fmin=60, fmax=7800, cmap='inferno')
     plt.colorbar(format="%+2.0f dB")
     plt.title(f"{song_name} - {stage} Mel Spectrogram")
     plt.xlabel("Time (s)")
     plt.ylabel("Mel Frequency Bands")
-    
+
     # Save the plot
     plt.tight_layout()
     plot_filename = f"{song_name}_{stage}_mel_spec_librosa.png"
@@ -395,8 +395,8 @@ class ProgressMeter(object):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
-    
-    
+
+
 if __name__ == "__main__":
     # train_test_split_BPDataset()
     # split_dataset_by_song(path="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy")

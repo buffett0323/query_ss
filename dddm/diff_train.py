@@ -33,17 +33,17 @@ def main():
     """Assume Single Node Multi GPUs Training Only"""
     assert torch.cuda.is_available(), "CPU training is not allowed."
     hps = utils.get_hparams()
-    
+
     port = 50000 + random.randint(0, 100)
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = str(port)
     os.environ["CUDA_VISIBLE_DEVICES"] = hps.train.device
     n_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(",")) # torch.cuda.device_count()
-    
+
     print("Using port:", port)
     print("Using cuda device:", os.environ["CUDA_VISIBLE_DEVICES"])
     print("n_gpus: ", n_gpus)
-   
+
     mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
 
 
@@ -74,12 +74,12 @@ def run(rank, n_gpus, hps):
     train_dataset = BP_DDDM_Dataset(hps, split="train", training=True)
     train_sampler = DistributedSampler(train_dataset) if n_gpus > 1 else None
     train_loader = DataLoader(
-        train_dataset, 
-        batch_size=hps.train.batch_size, 
+        train_dataset,
+        batch_size=hps.train.batch_size,
         num_workers=hps.train.num_workers,
-        sampler=train_sampler, 
-        drop_last=True, 
-        persistent_workers=True, 
+        sampler=train_sampler,
+        drop_last=True,
+        persistent_workers=True,
         pin_memory=True,
         shuffle=True,
     )
@@ -87,9 +87,9 @@ def run(rank, n_gpus, hps):
     if rank == 0:
         test_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
         eval_loader = DataLoader(
-            test_dataset, 
-            batch_size=1, #hps.train.batch_size, 
-            num_workers=hps.train.num_workers, 
+            test_dataset,
+            batch_size=1, #hps.train.batch_size,
+            num_workers=hps.train.num_workers,
             pin_memory=True
         )
 
@@ -98,7 +98,7 @@ def run(rank, n_gpus, hps):
             hps.train.segment_size // hps.data.hop_length,
             **hps.model
         ).cuda()
-        
+
         path_ckpt = hps.data.voc_ckpt_path
         utils.load_checkpoint(path_ckpt, net_v, None)
         net_v.eval()
@@ -108,10 +108,10 @@ def run(rank, n_gpus, hps):
 
     model = DDDM(
         hps.data.n_mel_channels, hps.diffusion.spk_dim,
-        hps.diffusion.dec_dim, hps.diffusion.beta_min, 
+        hps.diffusion.dec_dim, hps.diffusion.beta_min,
         hps.diffusion.beta_max, hps
     ).cuda()
-     
+
     if rank == 0:
         if hps.wandb.log_wandb:
             wandb.init(
@@ -121,11 +121,11 @@ def run(rank, n_gpus, hps):
             )
             # Log model structure to wandb
             wandb.watch(model, log="all")
-            
+
         print('[Encoder] number of Parameters:', get_param_num(model.encoder))
         print('[Decoder] number of Parameters:', get_param_num(model.decoder))
-    
-    
+
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         hps.train.learning_rate,
@@ -136,7 +136,7 @@ def run(rank, n_gpus, hps):
     model = DDP(model, device_ids=[rank])
 
     if hps.train.resume:
-        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.data.model_save_dir, "G_*.pth"), model, optimizer) 
+        _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.data.model_save_dir, "G_*.pth"), model, optimizer)
         global_step = (epoch_str - 1) * len(train_loader)
     else:
         epoch_str = 1
@@ -148,18 +148,18 @@ def run(rank, n_gpus, hps):
     for epoch in tqdm(range(epoch_str, hps.train.epochs + 1)):
         if rank == 0:
             train_and_evaluate(rank, epoch, hps, [model, mel_fn, net_v], optimizer,
-                               scheduler_g, scaler, [train_loader, eval_loader], 
+                               scheduler_g, scaler, [train_loader, eval_loader],
                                logger, [writer, writer_eval], n_gpus)
         else:
             train_and_evaluate(rank, epoch, hps, [model, mel_fn, net_v], optimizer,
-                               scheduler_g, scaler, [train_loader, None], 
+                               scheduler_g, scaler, [train_loader, None],
                                None, None, n_gpus)
         scheduler_g.step()
 
     # # Testing
     # print("Testing")
     # evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=False)
-    
+
     # At the end of run(), destroy the process group to avoid NCCL errors
     dist.destroy_process_group()
 
@@ -175,7 +175,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
     global global_step
     if n_gpus > 1:
         train_loader.sampler.set_epoch(epoch)
-    
+
     # Training
     model.train()
     for batch_idx, (x, mel_x, length) in enumerate(tqdm(train_loader)):
@@ -183,7 +183,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         length = length.cuda(rank, non_blocking=True).squeeze()
         mel_x = mel_x.cuda(rank, non_blocking=True) # torch.Size([BS, 1, 256, 256]) --> Timbre Encoder Input
         mel_fn_x = mel_fn(x).cuda(rank, non_blocking=True) # torch.Size([BS, 80, 200]) --> Mel Spectrogram
-        
+
         optimizer.zero_grad()
 
         loss_diff, loss_mel = model.module.compute_loss(x, mel_x, mel_fn_x, length)#, hps.model.mixup_ratio)
@@ -203,16 +203,16 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         if rank == 0:
             if global_step % hps.train.log_interval == 0: # 500
                 lr = optimizer.param_groups[0]['lr']
-                
+
                 if hps.wandb.log_wandb:
                     wandb.log({
-                        "loss_diff": loss_diff.item(), 
-                        "loss_mel": loss_mel.item(), 
-                        "total_loss": loss_gen_all.item(), 
-                        "learning_rate": lr, 
+                        "loss_diff": loss_diff.item(),
+                        "loss_mel": loss_mel.item(),
+                        "total_loss": loss_gen_all.item(),
+                        "learning_rate": lr,
                         "step": global_step,
                     })
-                
+
                 losses = [loss_diff]
                 logger.info('Train Epoch: {} [{:.0f}%]'.format(
                     epoch,
@@ -220,8 +220,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                 logger.info([x.item() for x in losses] + [global_step, lr])
 
                 scalar_dict = {
-                    "loss/g/total": loss_gen_all, 
-                    "learning_rate": lr, 
+                    "loss/g/total": loss_gen_all,
+                    "learning_rate": lr,
                     "grad_norm_g": grad_norm_g
                 }
                 scalar_dict.update({"loss/g/diff": loss_diff, "loss/g/mel": loss_mel})
@@ -230,7 +230,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
                     writer=writer,
                     global_step=global_step,
                     scalars=scalar_dict)
-            
+
             # Evaluation
             if global_step % hps.train.eval_interval == 0: # EVAL: 10000
                 torch.cuda.empty_cache()
@@ -270,7 +270,7 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=Tru
             if batch_idx <= hps.train.save_audio_num:
                 y_hat = net_v(mel_rec)
                 enc_hat = net_v(enc_output)
-                
+
                 # plot_mel = torch.cat([mel_y, mel_rec, enc_output], dim=1)#torch.cat([mel_y, mel_rec, enc_output, ftr_out, src_out], dim=1)
                 # plot_mel = plot_mel.clip(min=-10, max=10)
                 # image_dict.update({
@@ -287,8 +287,8 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, validation=Tru
         enc_loss /= 100
         if hps.wandb.log_wandb:
             wandb.log({
-                "val_mel_loss": mel_loss, 
-                "val_enc_loss": enc_loss, 
+                "val_mel_loss": mel_loss,
+                "val_enc_loss": enc_loss,
                 "step": global_step,
             })
 

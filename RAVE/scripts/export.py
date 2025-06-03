@@ -24,7 +24,7 @@ from typing import Union, Optional
 try:
     import rave
 except:
-    import sys, os 
+    import sys, os
     sys.path.append(os.path.abspath('.'))
     import rave
 import rave.blocks
@@ -48,10 +48,10 @@ flags.DEFINE_float(
     upper_bound=.999,
     help='Fidelity to use during inference (Variational mode only)')
 
-flags.DEFINE_string('name', 
+flags.DEFINE_string('name',
                      default= None,
                      help = "custom name for the scripted model (default: run name)")
-flags.DEFINE_string('output', 
+flags.DEFINE_string('output',
                      default= None,
                      help = "output location of scripted model")
 flags.DEFINE_bool('ema_weights',
@@ -63,7 +63,7 @@ flags.DEFINE_integer('channels',
 flags.DEFINE_integer('sr',
                      default=None,
                      help='Optional resampling sample rate')
-flags.DEFINE_string('prior', 
+flags.DEFINE_string('prior',
                     default=None,
                     help = "path to prior (optional)")
 
@@ -78,7 +78,7 @@ class ScriptedRAVE(nn_tilde.Module):
                  pretrained: rave.RAVE,
                  channels: Optional[int] = None,
                  fidelity: float = .95,
-                 target_sr: bool = None, 
+                 target_sr: bool = None,
                  prior: prior.Prior = None) -> None:
 
         super().__init__()
@@ -151,7 +151,7 @@ class ScriptedRAVE(nn_tilde.Module):
             # scripting fails if cached conv is not initialized
             self.pqmf(torch.zeros(1, 1, x_len))
 
-        encode_shape = (pretrained.n_channels, 2**14) 
+        encode_shape = (pretrained.n_channels, 2**14)
 
         self.register_method(
             "encode",
@@ -190,7 +190,7 @@ class ScriptedRAVE(nn_tilde.Module):
 
         # init prior in case
         self._has_prior = False
-        
+
         if prior is not None:
             self._has_prior = True
             self.prior_module = prior
@@ -345,7 +345,7 @@ class ScriptedRAVE(nn_tilde.Module):
             return self.prior_module.forward(temp)
         else:
             return torch.tensor(0)
-        
+
 
 
 class VariationalScriptedRAVE(ScriptedRAVE):

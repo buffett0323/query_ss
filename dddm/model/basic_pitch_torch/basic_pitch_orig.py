@@ -98,12 +98,12 @@ def run_inference(
     overlap_len = n_overlapping_frames * FFT_HOP
     hop_size = AUDIO_N_SAMPLES - overlap_len
 
-    
+
     output_note = []
-    
+
     # Ensure the audio array is of type float32
     output: Dict[str, Any] = {"note": [], "onset": [], "contour": []}
-    
+
     for i in range(input_array.shape[0]):
         audio_array = input_array[i]
         audio_original_length = audio_array.shape[-1]
@@ -127,5 +127,5 @@ if __name__ == "__main__":
     basic_pitch_model = Model(ICASSP_2022_MODEL_PATH)
     audio_array = np.random.randn(8, 1, 44100*8) #np.load(audio_path)
     output = run_inference(audio_array, basic_pitch_model)
-    
+
     print(output.shape)

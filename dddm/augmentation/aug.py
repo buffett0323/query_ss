@@ -21,8 +21,8 @@ class Augment(nn.Module):
             'peak_centers',
             f_min * (f_max / f_min) ** (torch.arange(peaks) / (peaks - 1)),
             persistent=False)
- 
-    def forward(self, 
+
+    def forward(self,
                 wavs: torch.Tensor,
                 mode: str = 'linear',
                ):
@@ -39,50 +39,50 @@ class Augment(nn.Module):
             self.config.data.win_length,
             self.window,
             return_complex=True)
-        
+
         power, gain = self.sample(wavs) # for fs, ps
-        
+
         if power is not None:
             q_min, q_max = 2, 5
             q = q_min * (q_max / q_min) ** power
-            
+
             if gain is None:
                 gain = torch.zeros_like(q[:, :-2])
-                
-            bsize = wavs.shape[0] 
-            center = self.peak_centers[None].repeat(bsize, 1) 
+
+            bsize = wavs.shape[0]
+            center = self.peak_centers[None].repeat(bsize, 1)
             peaks = torch.prod(
                 self.peq.peaking_equalizer(center, gain, q[:, :-2]), dim=1)
             lowpass = self.peq.low_shelving(60, q[:, -2])
             highpass = self.peq.high_shelving(10000, q[:, -1])
-            
+
             filters = peaks * highpass * lowpass
             fft = fft * filters[..., None]
             auxs.update({'peaks': peaks, 'highpass': highpass, 'lowpass': lowpass})
-    
+
         # Formant shifting and Pitch shifting
-        fs_ratio = 1.4 
+        fs_ratio = 1.4
         ps_ratio = 2.0
-       
+
         code = self.coder.from_stft(fft / fft.abs().mean(dim=1)[:, None].clamp_min(1e-7))
         filter_ = self.coder.envelope(code)
         source = fft.transpose(1, 2) / (filter_ + 1e-7)
-        
+
         bsize = wavs.shape[0]
         def sampler(ratio):
             shifts = torch.rand(bsize, device=wavs.device) * (ratio - 1.) + 1.
             flip = torch.rand(bsize) < 0.5
             shifts[flip] = shifts[flip] ** -1
             return shifts
-        
+
         fs_shift = sampler(fs_ratio)
         ps_shift = sampler(ps_ratio)
 
         source = fft.transpose(1, 2) / (filter_ + 1e-7)
-         
+
         filter_ = self.interp(filter_, fs_shift, mode=mode)
         source = self.interp(source, ps_shift, mode=mode)
-       
+
         fft = (source * filter_).transpose(1, 2)
         out = torch.istft(
             fft,
@@ -91,12 +91,12 @@ class Augment(nn.Module):
             self.config.data.win_length,
             self.window)
         out = out / out.max(dim=-1, keepdim=True).values.clamp_min(1e-7)
-        
+
         return out
-    
+
     def sample(self, wavs: torch.Tensor):
         bsize, _ = wavs.shape
-        
+
         # parametric equalizer
         peaks = 8
         # quality factor
@@ -104,9 +104,9 @@ class Augment(nn.Module):
         # gains
         g_min, g_max = -12, 12
         gain = torch.rand(bsize, peaks, device=wavs.device) * (g_max - g_min) + g_min
-        
+
         return power, gain
-    
+
     @staticmethod
     def complex_interp(inputs: torch.Tensor, *args, **kwargs):
         mag = F.interpolate(inputs.abs(), *args, **kwargs)
@@ -127,14 +127,14 @@ class Augment(nn.Module):
             torch.complex64: Augment.complex_interp}
         assert inputs.dtype in INTERPOLATION, 'unsupported interpolation'
         interp_fn = INTERPOLATION[inputs.dtype]
-       
+
         _, _, channels = inputs.shape
-       
+
         interp = [
             interp_fn(
                 f[None], scale_factor=s.item(), mode=mode)[..., :channels]
             for f, s in zip(inputs, shifts)]
-       
+
         return torch.cat([
             F.pad(f, [0, channels - f.shape[-1]])
             for f in interp], dim=0)
@@ -166,7 +166,7 @@ class LinearPredictiveCoding(nn.Module):
         w = self.windows
         frames = F.pad(inputs, [0, w]).unfold(-1, w, self.strides)
         corrcoef = LinearPredictiveCoding.autocorr(frames)
-      
+
         return LinearPredictiveCoding.solve_toeplitz(
             corrcoef[..., :self.num_code + 1])
 
@@ -178,7 +178,7 @@ class LinearPredictiveCoding(nn.Module):
             [torch.float32; [B, T / strides, num_code]], linear-predictive coefficient.
         """
         corrcoef = torch.fft.irfft(inputs.abs().square(), dim=1)
-       
+
         return LinearPredictiveCoding.solve_toeplitz(
             corrcoef[:, :self.num_code + 1].transpose(1, 2))
 
@@ -211,11 +211,11 @@ class LinearPredictiveCoding(nn.Module):
         Returns:
             [torch.float32; [..., num_code]], solutions.
         """
-      
+
         solutions = F.pad(
             (-corrcoef[..., 1] / corrcoef[..., 0].clamp_min(1e-7))[..., None],
             [1, 0], value=1.)
-        
+
         extra = corrcoef[..., 0] + corrcoef[..., 1] * solutions[..., 1]
 
         ## solve residuals
@@ -228,5 +228,5 @@ class LinearPredictiveCoding(nn.Module):
             aug = F.pad(solutions, [0, 1])
             solutions = aug + lambda_value[..., None] * torch.flip(aug, dims=[-1])
             extra = (1. - lambda_value ** 2) * extra
-       
+
         return solutions[..., 1:]

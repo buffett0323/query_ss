@@ -10877,4 +10877,3 @@ Test sample: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy
   Neighbor 1: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/d497b67e-4aed-4569-952d-c9157ee2c585_3/other.npy
   Neighbor 2: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/cf220991-4b5d-4040-b571-e2906737dea5_3/other.npy
   Neighbor 3: /home/buffett/NAS_NTU/beatport_analyze/chorus_audio_16000_6secs_npy/32f0305a-2081-44f4-9e72-56bb0a07fd6a_1/other.npy
-

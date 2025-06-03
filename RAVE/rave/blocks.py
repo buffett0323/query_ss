@@ -518,9 +518,9 @@ class ConditionalAdaIN1d(nn.Module):
     cond: (B, 1024)    — timbre conditioning vector
     """
     def __init__(
-        self, 
+        self,
         dim: int, # 96->192->384->768
-        cond_dim: int = 1024, 
+        cond_dim: int = 1024,
         eps: float = 1e-5
     ):
         super().__init__()
@@ -528,8 +528,8 @@ class ConditionalAdaIN1d(nn.Module):
         self.eps = eps
 
     def forward(
-        self, 
-        x: torch.Tensor, 
+        self,
+        x: torch.Tensor,
         cond: Optional[torch.Tensor] = None
     ):
         if cond is None:
@@ -541,9 +541,9 @@ class ConditionalAdaIN1d(nn.Module):
         mean = x.mean(-1, keepdim=True)
         std  = x.std (-1, keepdim=True) + self.eps
         return gamma * (x - mean) / std + beta
-    
-    
-    
+
+
+
 class CC_CachedSequential(nn.Sequential):
     """
     Sequential operations with future-compensation tracking
@@ -698,7 +698,7 @@ class GeneratorV2(nn.Module):
         if data_size is None:
             data_size = n_channels
         else:
-            data_size = data_size * n_channels 
+            data_size = data_size * n_channels
         dilations_list = normalize_dilations(dilations, ratios)[::-1]
         ratios = ratios[::-1]
 
@@ -825,7 +825,7 @@ class VariationalEncoder(nn.Module):
         self.warmed_up = state
 
     def forward(
-        self, 
+        self,
         x: torch.Tensor,
         cond: Optional[torch.Tensor] = None
     ):

@@ -24,7 +24,7 @@ gpu_ids: [0, 1] #[0, 1]
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #128 #512 
+batch_size: 128 #128 #512
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100

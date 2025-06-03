@@ -126,7 +126,7 @@ if __name__ == "__main__":
     y, sr = torchaudio.load(example_path)
     print("Original sample rate: ", sr)
     y_salience = sad(y)
-    
+
     indices = sad.calculate_salient_indices(y)
     print(f"Initial shape: ({y[0].shape}, {y[1].shape}).\nShape after source activity detection: ({y_salience[0].shape}, {y_salience[1].shape})")
     print(f"Salient indices: {indices}")

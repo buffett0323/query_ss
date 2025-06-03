@@ -49,7 +49,7 @@ class EDM_Render_Dataset(Dataset):
         self.id_to_midi = {}
         self.timbre_to_files = {}
         self.content_to_files = {}
-        
+
         # Storing names
         self.unique_timbres = [] # timbre names
         self.unique_midis = [] # midi names
@@ -61,22 +61,22 @@ class EDM_Render_Dataset(Dataset):
         self._shuffle_file_index()
         self.peak_records = {}
         self._get_offset_pos()
-        
-        
+
+
     def _get_offset_pos(self):
         with open(f"{self.data_path}/onset_records_{self.stems[0]}_{self.split}.json", "r") as f:
             self.peak_records = json.load(f)
 
         print(f"-> Got {len(self.peak_records) * len(self.unique_timbres)} different tracks for {self.split}")
-        
-        
-        
+
+
+
     def _preprocess(self):
         """Build mappings for timbre, DI, and tone IDs"""
         with open(f'info/timbre_names_{self.stems[0]}.txt', 'r') as f:
             for line in f:
                 self.unique_timbres.append(line.strip())
-        
+
         with open(f'info/{self.split}_midi_names.txt', 'r') as f:
             for line in f:
                 self.unique_midis.append(line.strip())
@@ -94,20 +94,20 @@ class EDM_Render_Dataset(Dataset):
     def _build_index(self):
 
         for stem in tqdm(self.stems, desc=f"Pre-loading {self.split} info"):
-            
+
             for timbre in self.unique_timbres: # 1st for-loop: 59 timbres
                 for midi in self.unique_midis: # 2nd for-loop: 100 midis
                     wav_path = os.path.join(self.root_path, stem, f"{timbre}_{midi}.wav")
-                    
+
                     for timbre_selected in self.unique_timbres: # 3rd for-loop: 59 timbre pairs
                         target_wav_path = os.path.join(self.root_path, stem, f"{timbre_selected}_{midi}.wav")
-                        
+
                         # Transfer to class ids
                         midi_id = self.midi_to_id[midi]
                         timbre_id = self.timbre_to_id[timbre]
                         timbre_id_converted = self.timbre_to_id[timbre_selected]
                         counter = len(self.file_index)
-                        
+
                         if not os.path.exists(wav_path): continue
 
                         # Update mapping dictionaries
@@ -118,11 +118,11 @@ class EDM_Render_Dataset(Dataset):
                         if midi_id not in self.content_to_files:
                             self.content_to_files[midi_id] = []
                         self.content_to_files[midi_id].append(counter)
-                        
+
                         midi_path = os.path.join(self.midi_path, f"{midi}.mid")
                         self.file_index.append((timbre_id, midi_id, wav_path, midi_path, timbre_id_converted, target_wav_path))
-    
-    
+
+
     def _shuffle_file_index(self):
         """Shuffle the file index while maintaining matching relationships"""
         indices = list(range(len(self.file_index)))
@@ -135,7 +135,7 @@ class EDM_Render_Dataset(Dataset):
 
         for content_id in self.content_to_files:
             self.content_to_files[content_id] = [index_map[idx] for idx in self.content_to_files[content_id]]
-            
+
         for timbre_id in self.timbre_to_files:
             self.timbre_to_files[timbre_id] = [index_map[idx] for idx in self.timbre_to_files[timbre_id]]
 
@@ -147,8 +147,8 @@ class EDM_Render_Dataset(Dataset):
                 if self.file_index[idx][0] != curr_timbre_id
         ]
         return random.choice(possible_matches)
-    
-    
+
+
     def _get_random_match_timbre(self, timbre_id: int, content_id: int) -> int:
         possible_matches = [
             idx for idx in self.timbre_to_files[timbre_id]
@@ -187,14 +187,14 @@ class EDM_Render_Dataset(Dataset):
 
     def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
         signal, _ = sf.read(
-            file_path, 
-            start=int(offset*self.sample_rate), 
+            file_path,
+            start=int(offset*self.sample_rate),
             frames=int(self.duration*self.sample_rate)
         )
         signal = signal.mean(axis=1, keepdims=False)
         return AudioSignal(signal, self.sample_rate)
 
-    
+
     def __len__(self) -> int:
         return len(self.file_index)
 
@@ -204,14 +204,14 @@ class EDM_Render_Dataset(Dataset):
 
         # 1. Compute max offset for this file
         file_duration = AudioSignal(wav_path).duration
-        
+
         # 2. Sample a random offset
         # assert file_duration >= self.duration, f"File duration {file_duration} is less than duration {self.duration}"
         if self.peak_records:
             offset = np.random.choice(self.peak_records[self.id_to_midi[midi_id]])
         else:
             offset = np.random.uniform(0, file_duration - self.duration)
-        
+
         assert offset <= file_duration - self.duration, f"Offset {offset} is greater than file duration {file_duration} - duration {self.duration}"
 
         # 3. Load input audio with this offset
@@ -222,7 +222,7 @@ class EDM_Render_Dataset(Dataset):
         content_match_idx = self._get_random_match_content(idx)
         timbre_converted_idx = self._get_random_match_timbre(timbre_id_converted, midi_id)
 
-        
+
         """ Perturbation """
         # 1). Load content match
         content_match = self._load_audio(self.file_index[content_match_idx][2], offset=offset)
@@ -261,7 +261,7 @@ class EDM_Render_Dataset(Dataset):
                     'path': str(self.file_index[content_match_idx][2])
                 },
                 'timbre_converted': {
-                    'timbre_id': self.file_index[timbre_converted_idx][0], 
+                    'timbre_id': self.file_index[timbre_converted_idx][0],
                     'content_id': self.file_index[timbre_converted_idx][1],
                     'path': str(self.file_index[timbre_converted_idx][2])
                 },
@@ -285,8 +285,8 @@ class EDM_Render_Dataset(Dataset):
             'target_gt': AudioSignal.batch([item['target_gt'] for item in batch]),
             'metadata': [item['metadata'] for item in batch]
         }
-        
-        
+
+
 # For Training
 class EDM_Simple_Dataset(Dataset):
     def __init__(
@@ -322,7 +322,7 @@ class EDM_Simple_Dataset(Dataset):
         self.id_to_midi = {}
         self.timbre_to_files = {}
         self.content_to_files = {}
-        
+
         # Storing names
         self.unique_timbres = [] # timbre names
         self.unique_midis = [] # midi names
@@ -334,22 +334,22 @@ class EDM_Simple_Dataset(Dataset):
         self._shuffle_file_index()
         self.peak_records = {}
         self._get_offset_pos()
-        
-        
+
+
     def _get_offset_pos(self):
         with open(f"{self.data_path}/onset_records_{self.stems[0]}_{self.split}.json", "r") as f:
             self.peak_records = json.load(f)
 
         print(f"-> Got {len(self.peak_records) * len(self.unique_timbres)} different tracks for {self.split}")
-        
-        
-        
+
+
+
     def _preprocess(self):
         """Build mappings for timbre, DI, and tone IDs"""
         with open(f'info/timbre_names_{self.stems[0]}.txt', 'r') as f:
             for line in f:
                 self.unique_timbres.append(line.strip())
-        
+
         with open(f'info/{self.split}_midi_names.txt', 'r') as f:
             for line in f:
                 self.unique_midis.append(line.strip())
@@ -367,16 +367,16 @@ class EDM_Simple_Dataset(Dataset):
     def _build_index(self):
 
         for stem in tqdm(self.stems, desc=f"Pre-loading {self.split} info"):
-            
+
             for timbre in self.unique_timbres: # 1st for-loop: 59 timbres
                 for midi in self.unique_midis: # 2nd for-loop: 100 midis
                     wav_path = os.path.join(self.root_path, stem, f"{timbre}_{midi}.wav")
-                    
+
                     # Transfer to class ids
                     midi_id = self.midi_to_id[midi]
                     timbre_id = self.timbre_to_id[timbre]
                     counter = len(self.file_index)
-                    
+
                     if not os.path.exists(wav_path): continue
 
                     # Update mapping dictionaries
@@ -387,11 +387,11 @@ class EDM_Simple_Dataset(Dataset):
                     if midi_id not in self.content_to_files:
                         self.content_to_files[midi_id] = []
                     self.content_to_files[midi_id].append(counter)
-                    
+
                     midi_path = os.path.join(self.midi_path, f"{midi}.mid")
                     self.file_index.append((timbre_id, midi_id, wav_path, midi_path))
-    
-    
+
+
     def _shuffle_file_index(self):
         """Shuffle the file index while maintaining matching relationships"""
         indices = list(range(len(self.file_index)))
@@ -404,7 +404,7 @@ class EDM_Simple_Dataset(Dataset):
 
         for content_id in self.content_to_files:
             self.content_to_files[content_id] = [index_map[idx] for idx in self.content_to_files[content_id]]
-            
+
         for timbre_id in self.timbre_to_files:
             self.timbre_to_files[timbre_id] = [index_map[idx] for idx in self.timbre_to_files[timbre_id]]
 
@@ -412,19 +412,19 @@ class EDM_Simple_Dataset(Dataset):
     def _get_random_match_content(self, timbre_id: int, content_id: int) -> int:
         if self.split == "train":
             return random.choice(self.content_to_files[content_id])
-            
+
         else:
             possible_matches = [
                 idx for idx in self.content_to_files[content_id]
                     if self.file_index[idx][0] != timbre_id
             ]
             return random.choice(possible_matches)
-    
-    
+
+
     def _get_random_match_timbre(self, timbre_id: int, content_id: int) -> int:
         if self.split == "train":
             return random.choice(self.timbre_to_files[timbre_id])
-        
+
         else:
             possible_matches = [
                 idx for idx in self.timbre_to_files[timbre_id]
@@ -462,14 +462,14 @@ class EDM_Simple_Dataset(Dataset):
 
     def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
         signal, _ = sf.read(
-            file_path, 
-            start=int(offset*self.sample_rate), 
+            file_path,
+            start=int(offset*self.sample_rate),
             frames=int(self.duration*self.sample_rate)
         )
         signal = signal.mean(axis=1, keepdims=False)
         return AudioSignal(signal, self.sample_rate)
 
-    
+
     def __len__(self) -> int:
         return len(self.file_index)
 
@@ -480,7 +480,7 @@ class EDM_Simple_Dataset(Dataset):
         # 1. Sample a random offset
         midi_name = self.id_to_midi[midi_id]
         offset = np.random.choice(self.peak_records[midi_name])
-        
+
         # 2. Load input audio with this offset
         target_gt = self._load_audio(wav_path, offset=offset)
         pitch_info = self._midi_to_pitch_sequence(midi_path, self.duration)
@@ -489,7 +489,7 @@ class EDM_Simple_Dataset(Dataset):
         content_match_idx = self._get_random_match_content(timbre_id, midi_id)
         timbre_converted_idx = self._get_random_match_timbre(timbre_id, midi_id)
 
-        
+
         """ Perturbation """
         # 1). Load content match
         content_match = self._load_audio(self.file_index[content_match_idx][2], offset=offset)
@@ -498,12 +498,12 @@ class EDM_Simple_Dataset(Dataset):
         # 2). Load timbre match
         timbre_converted = self._load_audio(self.file_index[timbre_converted_idx][2], offset=offset)
         # timbre_pitch = self._midi_to_pitch_sequence(self.file_index[timbre_match_idx][3], self.duration) # No need
-        
+
         # # Validation use for conversion
         # if self.split == "evaluation":
         #     orig_audio_input = self._get_random_match_content(timbre_id, midi_id)
-            
-        
+
+
         return {
             # "input": orig_audio_input,
             'target': target_gt,
@@ -525,7 +525,7 @@ class EDM_Simple_Dataset(Dataset):
                     'path': str(self.file_index[content_match_idx][2])
                 },
                 'timbre_converted': {
-                    'timbre_id': self.file_index[timbre_converted_idx][0], 
+                    'timbre_id': self.file_index[timbre_converted_idx][0],
                     'content_id': self.file_index[timbre_converted_idx][1],
                     'path': str(self.file_index[timbre_converted_idx][2])
                 }
@@ -548,7 +548,7 @@ class EDM_Simple_Dataset(Dataset):
         }
 
 
-            
+
 def build_dataloader(
     dataset,
     batch_size=32,
@@ -571,8 +571,8 @@ def build_dataloader(
 
     return data_loader
 
-    
-    
+
+
 class EDM_Simple_Dataset_Optimized(Dataset):
     """
     Key changes:
@@ -581,7 +581,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
     3. Match Pre-computation (precompute_matches=True)
     4. Offset Caching
     5. Fast Accessor Methods
-    
+
     """
     def __init__(
         self,
@@ -611,7 +611,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
         self.max_note = max_note
         self.n_notes = max_note - min_note + 1
         self.split = split
-        
+
         # Caching options
         self.cache_audio = cache_audio
         self.cache_midi = cache_midi
@@ -624,7 +624,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
         self.id_to_midi = {}
         self.timbre_to_files = {}
         self.content_to_files = {}
-        
+
         # Storing names
         self.unique_timbres = []
         self.unique_midis = []
@@ -634,16 +634,16 @@ class EDM_Simple_Dataset_Optimized(Dataset):
         self.file_index = []
         self._build_index()
         self._shuffle_file_index()
-        
+
         # Load peak records
         self.peak_records = {}
         self._get_offset_pos()
-        
+
         # Initialize caches
         self.audio_cache = {} if cache_audio else None
         self.pitch_cache = {} if cache_midi else None
         self.match_cache = {} if precompute_matches else None
-        
+
         # Pre-load data if caching is enabled
         if cache_audio:
             self._preload_audio()
@@ -651,7 +651,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             self._preload_pitch_sequences()
         if precompute_matches:
             self._precompute_random_matches()
-        
+
     def _preload_audio(self):
         """Pre-load all audio files into memory"""
         print(f"Pre-loading {len(self.file_index)} audio files into memory...")
@@ -666,7 +666,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                 print(f"Error loading {wav_path}: {e}")
                 # Create dummy audio
                 self.audio_cache[idx] = np.zeros(int(8.0 * self.sample_rate))
-    
+
     def _preload_pitch_sequences(self):
         """Pre-compute all MIDI to pitch sequences"""
         print(f"Pre-computing pitch sequences for {len(set([midi_path for _, _, _, midi_path in self.file_index]))} MIDI files...")
@@ -681,7 +681,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                     print(f"Error processing MIDI {midi_path}: {e}")
                     n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
                     self.pitch_cache[midi_path] = torch.zeros((n_frames, self.n_notes))
-    
+
     def _precompute_random_matches(self):
         """Pre-compute random matches to avoid runtime computation"""
         print("Pre-computing random matches...")
@@ -689,13 +689,13 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             'content_matches': {},
             'timbre_matches': {}
         }
-        
+
         # Pre-compute multiple matches for each sample
         matches_per_sample = 10  # Number of pre-computed matches per sample
-        
+
         for idx in tqdm(range(len(self.file_index)), desc="Computing matches"):
             timbre_id, midi_id, _, _ = self.file_index[idx]
-            
+
             # Pre-compute content matches
             content_matches = []
             for _ in range(matches_per_sample):
@@ -709,7 +709,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                     match_idx = random.choice(possible_matches) if possible_matches else idx
                 content_matches.append(match_idx)
             self.match_cache['content_matches'][idx] = content_matches
-            
+
             # Pre-compute timbre matches
             timbre_matches = []
             for _ in range(matches_per_sample):
@@ -724,12 +724,12 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                 timbre_matches.append(match_idx)
             self.match_cache['timbre_matches'][idx] = timbre_matches
 
-    
+
     def _get_offset_pos(self):
         with open(f"{self.data_path}/onset_records_{self.stems[0]}_{self.split}.json", "r") as f:
             self.peak_records = json.load(f)
         print(f"-> Got {len(self.peak_records) * len(self.unique_timbres)} different tracks for {self.split}")
-        
+
         # Pre-compute offsets for faster access
         if hasattr(self, 'unique_midis'):
             self.offset_cache = {}
@@ -737,19 +737,19 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                 if midi_name in self.peak_records and len(self.peak_records[midi_name]) > 0:
                     # Pre-generate multiple random offsets
                     self.offset_cache[midi_name] = np.random.choice(
-                        self.peak_records[midi_name], 
-                        size=min(100, len(self.peak_records[midi_name]) * 10), 
+                        self.peak_records[midi_name],
+                        size=min(100, len(self.peak_records[midi_name]) * 10),
                         replace=True
                     )
                 else:
                     self.offset_cache[midi_name] = [0.0]
-    
+
     def _preprocess(self):
         """Build mappings for timbre, DI, and tone IDs"""
         with open(f'info/timbre_names_{self.stems[0]}.txt', 'r') as f:
             for line in f:
                 self.unique_timbres.append(line.strip())
-        
+
         with open(f'info/{self.split}_midi_names.txt', 'r') as f:
             for line in f:
                 self.unique_midis.append(line.strip())
@@ -768,12 +768,12 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             for timbre in self.unique_timbres:
                 for midi in self.unique_midis:
                     wav_path = os.path.join(self.root_path, stem, f"{timbre}_{midi}.wav")
-                    
+
                     midi_id = self.midi_to_id[midi]
                     timbre_id = self.timbre_to_id[timbre]
                     counter = len(self.file_index)
-                    
-                    if not os.path.exists(wav_path): 
+
+                    if not os.path.exists(wav_path):
                         continue
 
                     if timbre_id not in self.timbre_to_files:
@@ -783,10 +783,10 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                     if midi_id not in self.content_to_files:
                         self.content_to_files[midi_id] = []
                     self.content_to_files[midi_id].append(counter)
-                    
+
                     midi_path = os.path.join(self.midi_path, f"{midi}.mid")
                     self.file_index.append((timbre_id, midi_id, wav_path, midi_path))
-    
+
     def _shuffle_file_index(self):
         """Shuffle the file index while maintaining matching relationships"""
         indices = list(range(len(self.file_index)))
@@ -797,7 +797,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
 
         for content_id in self.content_to_files:
             self.content_to_files[content_id] = [index_map[idx] for idx in self.content_to_files[content_id]]
-            
+
         for timbre_id in self.timbre_to_files:
             self.timbre_to_files[timbre_id] = [index_map[idx] for idx in self.timbre_to_files[timbre_id]]
 
@@ -809,7 +809,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             start_frame = int(offset * self.sample_rate)
             end_frame = start_frame + int(self.duration * self.sample_rate)
             end_frame = min(end_frame, len(full_audio))
-            
+
             if end_frame <= start_frame:
                 # Create silence if offset is too large
                 signal = np.zeros(int(self.duration * self.sample_rate))
@@ -818,20 +818,20 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                 # Pad with zeros if too short
                 if len(signal) < int(self.duration * self.sample_rate):
                     signal = np.pad(signal, (0, int(self.duration * self.sample_rate) - len(signal)))
-                    
+
             return AudioSignal(signal, self.sample_rate)
         else:
             # Direct loading (original method)
             _, _, wav_path, _ = self.file_index[idx]
             return self._load_audio(wav_path, offset)
-    
+
     def _get_fast_pitch(self, midi_path: str) -> torch.Tensor:
         """Fast pitch sequence retrieval using cache or direct computation"""
         if self.cache_midi:
             return self.pitch_cache[midi_path]
         else:
             return self._midi_to_pitch_sequence(midi_path, self.duration)
-    
+
     def _get_fast_matches(self, idx: int):
         """Fast match retrieval using pre-computed matches"""
         if self.precompute_matches:
@@ -855,7 +855,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                     if self.file_index[idx][0] != timbre_id
             ]
             return random.choice(possible_matches)
-    
+
     def _get_random_match_timbre(self, timbre_id: int, content_id: int) -> int:
         if self.split == "train":
             return random.choice(self.timbre_to_files[timbre_id])
@@ -895,14 +895,14 @@ class EDM_Simple_Dataset_Optimized(Dataset):
 
     def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
         signal, _ = sf.read(
-            file_path, 
-            start=int(offset*self.sample_rate), 
+            file_path,
+            start=int(offset*self.sample_rate),
             frames=int(self.duration*self.sample_rate)
         )
         if len(signal.shape) > 1:
             signal = signal.mean(axis=1)
         return AudioSignal(signal, self.sample_rate)
-    
+
     def __len__(self) -> int:
         return len(self.file_index)
 
@@ -915,18 +915,18 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             offset = np.random.choice(self.offset_cache[midi_name])
         else:
             offset = np.random.choice(self.peak_records[midi_name]) if midi_name in self.peak_records else 0.0
-        
+
         # Fast audio and pitch loading
         target_gt = self._get_fast_audio(idx, offset)
         pitch_info = self._get_fast_pitch(midi_path)
 
         # Fast match retrieval
         content_match_idx, timbre_converted_idx = self._get_fast_matches(idx)
-        
+
         # Load matched audio
         content_match = self._get_fast_audio(content_match_idx, offset)
         timbre_converted = self._get_fast_audio(timbre_converted_idx, offset)
-        
+
         return {
             'target': target_gt,
             'pitch': pitch_info,
@@ -945,7 +945,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
                     'path': str(self.file_index[content_match_idx][2])
                 },
                 'timbre_converted': {
-                    'timbre_id': self.file_index[timbre_converted_idx][0], 
+                    'timbre_id': self.file_index[timbre_converted_idx][0],
                     'content_id': self.file_index[timbre_converted_idx][1],
                     'path': str(self.file_index[timbre_converted_idx][2])
                 }
@@ -965,7 +965,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
         }
 
 
-            
+
 def build_dataloader(
     dataset,
     batch_size=32,
@@ -996,7 +996,7 @@ if __name__ == "__main__":
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
-    
+
     train_data = EDM_Simple_Dataset_Optimized(
         root_path=args.root_path,
         midi_path=args.midi_path,
@@ -1009,7 +1009,7 @@ if __name__ == "__main__":
         stems=args.stems,
         split="train"
     )
-    
+
     val_data = EDM_Simple_Dataset_Optimized(
         root_path=args.root_path,
         midi_path=args.midi_path,
@@ -1025,21 +1025,19 @@ if __name__ == "__main__":
     print(len(train_data))
     print(len(val_data))
 
-    
+
     os.makedirs("sample_audio", exist_ok=True)
-    
-    
+
+
     for i in range(5):
         data = train_data[i]
         data['target'].write(f"sample_audio/target_{i}.wav")
         data['content_match'].write(f"sample_audio/content_match_{i}.wav")
         # data['timbre_converted'].write(f"sample_audio/timbre_converted_{i}.wav")
         print(data['metadata'])
-        
+
     train_loader = build_dataloader(train_data, batch_size=4, num_workers=8, prefetch_factor=8, split="train")
     # val_loader = build_dataloader(val_data, batch_size=4, num_workers=0, prefetch_factor=16, split="evaluation")
-    
+
     for data in tqdm(train_loader):
         pass
-    
-    

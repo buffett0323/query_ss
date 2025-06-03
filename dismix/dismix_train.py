@@ -23,7 +23,7 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message="TypedStorage is deprecated")
 torchvision.disable_beta_transforms_warning()
-torch.set_float32_matmul_precision('high') 
+torch.set_float32_matmul_precision('high')
 
 
 if __name__ == "__main__":
@@ -66,32 +66,32 @@ if __name__ == "__main__":
         batch_size=batch_size,
         dropout_rate=dropout_rate,
         num_frames=num_frames,
-        input_dim=128, 
-        latent_dim=64, 
-        hidden_dim=256, 
+        input_dim=128,
+        latent_dim=64,
+        hidden_dim=256,
         gru_hidden_dim=256,
         pitch_classes=52,
         output_dim=128,
         learning_rate=lr,
-        num_layers=2,   
+        num_layers=2,
         clip_value=0.5,
     )
 
 
     # Log model and hyperparameters in wandb
-    if log_wandb: 
+    if log_wandb:
         project = "Dismix_jsb_multi"
         name = wanbd_proj_name
         save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
         wandb_logger = WandbLogger(
-            project=project, 
-            name=name, 
-            save_dir=save_dir, 
+            project=project,
+            name=name,
+            save_dir=save_dir,
             log_model=False,  # Avoid logging full model files to WandB
         )
     else:
         wandb_logger = None
-        
+
 
     # GPU Accelerator Settings
     accelerator = "gpu"

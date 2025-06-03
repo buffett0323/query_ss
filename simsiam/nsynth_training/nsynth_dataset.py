@@ -50,7 +50,7 @@ class NsynthDataset(Dataset):
 
         if split != "train":
             data_dir = data_dir.replace("nsynth-train", f"nsynth-{split}")
-            
+
         self.data_path_list = [
             os.path.join(data_dir, file)
             for file in tqdm(os.listdir(data_dir), desc="Loading NSynth Dataset")
@@ -66,7 +66,7 @@ class NsynthDataset(Dataset):
 
     def __len__(self):
         return len(self.data_path_list)
-    
+
 
     def __getitem__(self, idx):
         # Load audio data from .npy
@@ -77,7 +77,7 @@ class NsynthDataset(Dataset):
 
 
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simsiam_BP")
 
     config = yaml_config_hook("config/nsynth_convnext.yaml")
@@ -94,14 +94,13 @@ if __name__ == "__main__":
         window_size=args.window_size,
         hop_length=args.hop_length,
     )
-    
+
     dataloader = DataLoader(train_dataset, batch_size=16, shuffle=False)
 
     segment_dict = dict()
     energy_track, eliminated_track = [], []
-    
+
     for i in tqdm(range(len(train_dataset))):
         x, path = train_dataset[i]
         print(x.shape, path)
         break
-        

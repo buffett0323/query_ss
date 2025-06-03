@@ -514,7 +514,7 @@ class PasstFiLMConditionedBandit(BaseConditionedBandit):
             original_fs=fs,
             passt_fs=32000,
         )
-        
+
         self.film = FiLM(
             self.query_encoder.PASST_EMB_DIM,
             emb_dim,
@@ -522,62 +522,62 @@ class PasstFiLMConditionedBandit(BaseConditionedBandit):
             multiplicative=multiplicative_film,
             depth=film_depth,
         )
-        
+
         if pretrain_encoder is not None:
             self.load_pretrained_encoder(pretrain_encoder)
-            
+
             for p in self.band_split.parameters():
                 p.requires_grad = not freeze_encoder
-                
+
             for p in self.tf_model.parameters():
                 p.requires_grad = not freeze_encoder
-            
-        
-        
+
+
+
     def load_pretrained_encoder(self, path):
-        
+
         state_dict = torch.load(path, map_location="cpu")["state_dict"]
-        
+
         state_dict_ = {k.replace("model.", "") if k.startswith("model.") else k: v for k, v in state_dict.items()}
-        
+
         state_dict = {}
 
         for k, v in state_dict_.items():
             if "mask_estim" in k:
                 continue
-            
+
             if "tf_seqband" in k:
                 k = k.replace("tf_seqband", "tf_model.seqband")
-            
+
             state_dict[k] = v
-            
-        
+
+
         res = self.load_state_dict(state_dict, strict=False)
-        
+
         for k in res.unexpected_keys:
             if "mask_estim" in k:
                 continue
             print(f"Unexpected key: {k}")
-        
+
         for k in res.missing_keys:
             print(f"Missing key: {k}")
             for kw in ["band_split", "tf_model"]:
                 if kw in k:
                     raise ValueError(f"Missing key: {k}")
-                
+
             for kw in ["mask_estim", "query_encoder"]:
                 if kw in k:
                     continue
-            
+
 
 
     def adapt_query(self, q, batch):
-        
+
         w = self.query_encoder(batch.query.audio)
         q = torch.permute(q, (0, 3, 1, 2)) # (batch, n_band, n_time, emb_dim) -> (batch, emb_dim, n_band, n_time)
         q = self.film(q, w)
         q = torch.permute(q, (0, 2, 3, 1)) # -> (batch, n_band, n_time, emb_dim)
-        
+
         return q
 
 

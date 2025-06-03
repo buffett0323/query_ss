@@ -43,13 +43,13 @@ from augmentation import PrecomputedNorm, NormalizeBatch
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="MoCoV2_BP")
-    
+
     config = yaml_config_hook("config/moco_config.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
-    
+
     args = parser.parse_args()
-    
+
     # Initial settings
     if args.seed is not None:
         random.seed(args.seed)
@@ -71,7 +71,7 @@ def main() -> None:
 
     ngpus_per_node = torch.cuda.device_count()
     print("ngpus:", ngpus_per_node)
-    
+
     # Distributed training
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
@@ -109,8 +109,8 @@ def main_worker(gpu, ngpus_per_node, args):
         rank=args.rank,
     )
     dist.barrier(device_ids=[args.gpu])  # ✅ Prevent NCCL unknown device warning
-        
-    
+
+
     # Only initialize WandB on the master process (rank 0)
     if args.rank == 0 and args.log_wandb:
         wandb.init(
@@ -119,16 +119,16 @@ def main_worker(gpu, ngpus_per_node, args):
             notes=args.wandb_notes,
             config=vars(args),  # Store args
         )
-    
-    
+
+
     # create model
     print("=> Creating model '{}'".format(args.arch))
     model = MoCo(
-        args, 
-        dim=args.moco_dim, 
-        K=args.moco_K, 
-        m=args.moco_m, 
-        T=args.moco_T, 
+        args,
+        dim=args.moco_dim,
+        K=args.moco_K,
+        m=args.moco_m,
+        T=args.moco_T,
         mlp=args.moco_mlp
     )
     # print(model)
@@ -216,7 +216,7 @@ def main_worker(gpu, ngpus_per_node, args):
         amp_name=args.amp_name,
         loading_mode="pairs",
     )
-    
+
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -234,7 +234,7 @@ def main_worker(gpu, ngpus_per_node, args):
         persistent_workers=args.persistent_workers,
         prefetch_factor=args.prefetch_factor,
     )
-    
+
     # MelSpectrogram
     to_spec = nnAudio.features.MelSpectrogram(
         sr=args.sample_rate,
@@ -248,7 +248,7 @@ def main_worker(gpu, ngpus_per_node, args):
         power=2,
         verbose=False,
     ).to(args.gpu)
-    
+
     # Normalization: PrecomputedNorm
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(args.gpu)
     post_norm = NormalizeBatch().to(args.gpu)
@@ -256,7 +256,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # Training loop
     os.makedirs(args.model_dict_save_path, exist_ok=True)
-    
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
@@ -265,7 +265,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # train for one epoch
         train_loss = train(train_loader, model, criterion, optimizer, epoch, args,\
             to_spec, pre_norm, post_norm)
-        
+
         # Log only from master process
         if args.gpu == 0 and args.log_wandb:
             wandb.log({"train_loss_epoch": train_loss, "epoch": epoch})
@@ -283,7 +283,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     filename="checkpoint_{:04d}.pth.tar".format(epoch),
                     save_dir=args.model_dict_save_path,
                 )
-                
+
     if args.distributed:
         dist.destroy_process_group()
 
@@ -295,8 +295,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
     losses_pair1 = AverageMeter('Loss-Sel', ':.4f')
     losses_pair2 = AverageMeter('Loss-Aug', ':.4f')
     progress = ProgressMeter(
-        len(train_loader), 
-        [batch_time, data_time, losses_pair1, losses_pair2], 
+        len(train_loader),
+        [batch_time, data_time, losses_pair1, losses_pair2],
         prefix=f"Epoch: [{epoch}]",
     )
 
@@ -311,7 +311,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         x_2 = x_2.cuda(non_blocking=True)
         x_i = x_i.cuda(non_blocking=True)
         x_j = x_j.cuda(non_blocking=True)
-        
+
         # Mel-spec transform and normalize
         x_1 = (to_spec(x_1) + torch.finfo().eps).log()
         x_2 = (to_spec(x_2) + torch.finfo().eps).log()
@@ -322,16 +322,16 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         x_2 = pre_norm(x_2).unsqueeze(1)
         x_i = pre_norm(x_i).unsqueeze(1)
         x_j = pre_norm(x_j).unsqueeze(1)
-        
+
         # Form a batch and post-normalize it.
         bs = x_i.shape[0]
         paired_inputs = torch.cat([x_1, x_2, x_i, x_j], dim=0)
         paired_inputs = post_norm(paired_inputs)
-        
+
         # compute output
         output1, target1 = model(im_q=paired_inputs[:bs], im_k=paired_inputs[bs:2*bs])
         loss_pair1 = criterion(output1, target1)
-        
+
         output2, target2 = model(im_q=paired_inputs[2*bs:3*bs], im_k=paired_inputs[3*bs:])
         loss_pair2 = criterion(output2, target2)
 
@@ -356,12 +356,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
 
         if i % args.print_freq == 0:
             progress.display(i)
-            
+
             # Log training loss per step only from GPU 0
             if args.log_wandb:
                 step = epoch * len(train_loader) + i
                 wandb.log({
-                    "train_loss_step": total_loss, 
+                    "train_loss_step": total_loss,
                     "step": step,
                     "loss_pair1": loss_pair1.item(),
                     "loss_pair2": loss_pair2.item(),
@@ -372,13 +372,13 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
 
 
 def save_checkpoint(
-    state, 
+    state,
     filename: str = "checkpoint.pth.tar",
     save_dir: str = "/mnt/gestalt/home/buffett/moco_model_dict/bass_other_new_amp08"
 ) -> None:
-    
+
     torch.save(state, os.path.join(save_dir, filename))
-  
+
 
 
 

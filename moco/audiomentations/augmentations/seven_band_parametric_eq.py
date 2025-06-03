@@ -48,7 +48,7 @@ class SevenBandParametricEQ(BaseWaveformTransform):
         """
         super().__init__(p)
         assert min_gain_db <= max_gain_db
-        
+
         self.min_gain_db = min_gain_db
         self.max_gain_db = max_gain_db
 

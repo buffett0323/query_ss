@@ -119,8 +119,8 @@ def main():
     scaler = GradScaler(f"cuda:{hps.train.device}", enabled=hps.train.fp16_run)
 
     for epoch in range(epoch_str, hps.train.epochs + 1):
-        train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
-                        scheduler_g, scaler, writer, writer_eval, 
+        train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer,
+                        scheduler_g, scaler, writer, writer_eval,
                         hps, epoch, device, logger)
         scheduler_g.step()
 
@@ -162,8 +162,8 @@ def train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
                 })
 
             utils.summarize(
-                writer=writer, 
-                global_step=global_step, 
+                writer=writer,
+                global_step=global_step,
                 scalars={
                 "loss/g/total": loss_gen_all,
                 "learning_rate": lr,
@@ -230,7 +230,7 @@ def evaluate(hps, model, mel_fn, net_v, eval_loader, writer_eval, device):
         audio_sampling_rate=hps.data.sampling_rate,
         audios=audio_dict,
         scalars={
-            "val/mel": mel_loss, 
+            "val/mel": mel_loss,
             "val/enc_mel": enc_loss,
         },
     )

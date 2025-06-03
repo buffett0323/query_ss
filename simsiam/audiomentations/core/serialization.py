@@ -16,7 +16,7 @@ def shorten_class_name(class_fullname: str) -> str:
     if top_module == "audiomentations":
         return class_name
     return class_fullname
-    
+
 class SerializableMeta(ABCMeta):
     """A metaclass that is used to register classes in `SERIALIZABLE_REGISTRY` or `NON_SERIALIZABLE_REGISTRY`
     so they can be found later while deserializing transformation pipeline using classes full names.

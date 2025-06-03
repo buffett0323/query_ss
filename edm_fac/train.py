@@ -45,14 +45,14 @@ class Wrapper:
             timbre_classes=args.timbre_classes,
             pitch_nums=args.max_note - args.min_note + 1, # 88
         ).to(accelerator.device)
-        
+
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
         self.scheduler_g = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_g, gamma=1.0)
 
         self.discriminator = dac.model.Discriminator().to(accelerator.device)
         self.optimizer_d = torch.optim.AdamW(self.discriminator.parameters(), lr=args.base_lr)
         self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=1.0)
-        
+
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
         # self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
@@ -66,7 +66,7 @@ class Wrapper:
         ).to(accelerator.device)
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
-        
+
         # ✅ Switched both to CrossEntropyLoss for balanced classification
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.content_loss = nn.CrossEntropyLoss().to(accelerator.device)
@@ -81,7 +81,7 @@ class Wrapper:
             "pred/timbre_loss": 1.0,
             "pred/content_loss": 10.0,
         }
-        
+
         self.val_data = val_data
 
     @staticmethod
@@ -95,7 +95,7 @@ class Wrapper:
         total = target_labels.size(0)
         acc = correct / total
         return acc
-        
+
 
 @torch.no_grad()
 def save_samples(args, accelerator, tracker_step, wrapper):
@@ -108,12 +108,12 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         content_match=batch['content_match'].audio_data,
         timbre_match=batch['timbre_converted'].audio_data,
     )
-    
+
     recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
     recons_gt = AudioSignal(batch['target'].audio_data.cpu(), args.sample_rate)
     ref_content = AudioSignal(batch['content_match'].audio_data.cpu(), args.sample_rate)
     ref_timbre = AudioSignal(batch['timbre_converted'].audio_data.cpu(), args.sample_rate)
-    
+
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}'), exist_ok=True)
 
     # Conversion
@@ -122,12 +122,12 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         single_recon_gt = AudioSignal(recons_gt.audio_data[i], args.sample_rate)
         single_ref_content = AudioSignal(ref_content.audio_data[i], args.sample_rate)
         single_ref_timbre = AudioSignal(ref_timbre.audio_data[i], args.sample_rate)
-        
+
         recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'recon_{sample_idx}.wav')
         recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'gt_{sample_idx}.wav')
         ref_content_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'ref_content_{sample_idx}.wav')
         ref_timbre_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'ref_timbre_{sample_idx}.wav')
-        
+
         single_recon.write(recon_path)
         single_recon_gt.write(recon_gt_path)
         single_ref_content.write(ref_content_path)
@@ -135,11 +135,11 @@ def save_samples(args, accelerator, tracker_step, wrapper):
 
 
 def main(args, accelerator):
-    
+
     device = accelerator.device
     util.seed(args.seed)
     print(f"Using device: {device}")
-    
+
     # Checkpoint direction
     os.makedirs(args.ckpt_path, exist_ok=True)
 
@@ -151,22 +151,22 @@ def main(args, accelerator):
             config=vars(args),
             dir=args.wandb_dir
         )
-    
+
     Path(args.save_path).mkdir(exist_ok=True, parents=True)
     Path(os.path.join(args.save_path, 'sample_audio')).mkdir(exist_ok=True, parents=True)
     tracker = Tracker(
         writer=(
-            SummaryWriter(log_dir=f"{args.save_path}/logs") 
+            SummaryWriter(log_dir=f"{args.save_path}/logs")
                 if accelerator.local_rank == 0 else None
-        ), 
-        log_file=f"{args.save_path}/log.txt", 
+        ),
+        log_file=f"{args.save_path}/log.txt",
         rank=accelerator.local_rank,
     )
 
     # Build datasets and dataloaders
     train_data = EDM_Simple_Dataset_Optimized(
         root_path=args.root_path,
-        midi_path=args.midi_path, 
+        midi_path=args.midi_path,
         data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
@@ -176,10 +176,10 @@ def main(args, accelerator):
         stems=args.stems,
         split="train"
     )
-    
+
     val_data = EDM_Simple_Dataset_Optimized(
         root_path=args.root_path,
-        midi_path=args.midi_path, 
+        midi_path=args.midi_path,
         data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
@@ -190,16 +190,16 @@ def main(args, accelerator):
         split="evaluation"
     )
     wrapper = Wrapper(args, accelerator, val_data)
-    
-    
+
+
     # Load checkpoint if exists
     if args.resume:
         start_iter = load_checkpoint(args, device, -1, wrapper) or 0
         tracker.step = start_iter
     else:
         tracker.step = 0
-    
-    
+
+
     # Accelerate dataloaders
     train_loader = accelerator.prepare_dataloader(
         train_data,
@@ -217,7 +217,7 @@ def main(args, accelerator):
         batch_size=args.batch_size,
         collate_fn=val_data.collate,
     )
-    
+
     # Trackers settings
     global train_step, validate, save_checkpoint, save_samples
     train_step = tracker.log("train", "value", history=False)(
@@ -226,21 +226,21 @@ def main(args, accelerator):
     validate = tracker.track("val", int(args.num_iters / args.validate_interval))(validate)
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
     save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
-    
+
     # Loop
     with tracker.live:
         for tracker.step, batch in enumerate(train_loader, start=tracker.step):
             train_step(args, accelerator, batch, tracker.step, wrapper)
-            
+
             if tracker.step % args.save_interval == 0:
                 save_checkpoint(args, tracker.step, wrapper)
-            
+
             if tracker.step % args.validate_interval == 0:
                 validate(args, accelerator, val_loader, wrapper, tracker.step)
-            
+
             if tracker.step % args.sample_freq == 0:
-                save_samples(args, accelerator, tracker.step, wrapper)    
-            
+                save_samples(args, accelerator, tracker.step, wrapper)
+
             if tracker.step == args.num_iters:
                 break
 
@@ -257,13 +257,13 @@ def validate(args, accelerator, val_loader, wrapper, iter):
     output = {}
     for batch in val_loader:
         output = validate_step(args, accelerator, batch, wrapper, iter)
-    
+
     if hasattr(wrapper.optimizer_g, "consolidate_state_dict"):
         wrapper.optimizer_g.consolidate_state_dict()
         wrapper.optimizer_d.consolidate_state_dict()
-    
+
     return output
-        
+
 
 # @timer
 @torch.no_grad()
@@ -271,7 +271,7 @@ def validate_step(args, accelerator, batch, wrapper, iter):
     wrapper.generator.eval()
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
-    
+
     target_audio = batch['target']
 
     with torch.no_grad():
@@ -280,31 +280,31 @@ def validate_step(args, accelerator, batch, wrapper, iter):
             content_match=batch['content_match'].audio_data,
             timbre_match=batch['timbre_converted'].audio_data,
         )
-    output = {}        
+    output = {}
     recons = AudioSignal(out["audio"], args.sample_rate)
     output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
     output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-    
+
     # Timbre prediction loss and accuracy
     output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
     output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
     output["pred/timbre_acc"] = wrapper.timbre_acc(out["pred_timbre_id"], batch['timbre_id'])
     # output["pred/content_acc"] = wrapper.content_acc(out["pred_pitch"], batch['pitch'])
 
-    
+
     # Log validation metrics to wandb
     try:
         import wandb
         if wandb.run is not None and args.log_wandb:
             wandb.log(
-                {f"val/{k}": v.item() if torch.is_tensor(v) else v 
+                {f"val/{k}": v.item() if torch.is_tensor(v) else v
                  for k, v in output.items()},
                 step=iter
             )
     except:
         pass  # Silently continue if wandb logging fails
-      
+
     return {k: v for k, v in sorted(output.items())}
 
 # @timer
@@ -313,7 +313,7 @@ def train_step(args, accelerator, batch, iter, wrapper):
     train_start_time = time.time()
     wrapper.generator.train()
     wrapper.discriminator.train()
-    
+
     # Load Batch Items
     batch = util.prepare_batch(batch, accelerator.device)
     target_audio = batch['target']
@@ -325,7 +325,7 @@ def train_step(args, accelerator, batch, iter, wrapper):
             content_match=batch['content_match'].audio_data,
             timbre_match=batch['timbre_converted'].audio_data,
         )
-        output = {}        
+        output = {}
         recons = AudioSignal(out["audio"], args.sample_rate)
 
         # Discriminator Losses
@@ -337,21 +337,21 @@ def train_step(args, accelerator, batch, iter, wrapper):
     grad_norm_d = torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
     accelerator.step(wrapper.optimizer_d)
     wrapper.scheduler_d.step()
-    
+
     # Generator Losses
     with accelerator.autocast():
         output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
         output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
         output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-        
+
         output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
         output["vq/commitment_loss"] = out["vq/commitment_loss"]
         output["vq/codebook_loss"] = out["vq/codebook_loss"]
-        
+
         # Added predictor losses
         output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
         output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
-        
+
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
 
@@ -376,7 +376,7 @@ def train_step(args, accelerator, batch, iter, wrapper):
             import wandb
             if wandb.run is not None and args.log_wandb:
                 wandb.log(
-                    {f"train/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()}, 
+                    {f"train/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()},
                     step=iter
                 )
         except:
@@ -396,7 +396,7 @@ if __name__ == "__main__":
     os.makedirs(args.wandb_dir, exist_ok=True)
     os.makedirs(args.save_path, exist_ok=True)
     os.makedirs(args.ckpt_path, exist_ok=True)
-    
+
     # Initialize accelerator
     accelerator = ml.Accelerator()
     if accelerator.local_rank != 0:

@@ -216,4 +216,3 @@ def quant_noise(module, p, block_size):
 
     module.register_forward_pre_hook(_forward_pre_hook)
     return module
-

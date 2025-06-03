@@ -975,37 +975,37 @@ class MoisesDBRandomChunkBalancedRandomQueryDataset(
             query_file,
             augment,
         )
-        
+
         self.stem_to_n_songs = {k: len(v) for k, v in self.stem_to_song.items()}
         self.trainable_stems = [k for k, v in self.stem_to_n_songs.items() if v > 1]
         self.n_allowed_stems = len(self.allowed_stems)
-        
-        
-        
+
+
+
     def __getitem__(self, index: int):
-        
+
         stem = self.allowed_stems[index % self.n_allowed_stems]
         song_ids_with_stem = self.stem_to_song[stem]
-        
+
         song_id = song_ids_with_stem[index % self.stem_to_n_songs[stem]]
-        
+
         mix_identifier = dict(song_id=song_id)
-        
+
         audio = self._get_audio([stem, self.mixture_stem], identifier=mix_identifier, check_dbfs=True)
         mixture = audio[self.mixture_stem].copy()
-        
+
         if self.use_own_query:
             query_id = song_id
             query_identifier = dict(song_id=query_id)
         else:
             query_id = random.choice(song_ids_with_stem)
             query_identifier = dict(song_id=query_id)
-            
+
         query = self.get_query_stem(stem=stem, identifier=query_identifier)
         query = query.copy()
-        
+
         sources = {"target": audio[stem].copy()}
-        
+
         return input_dict(
             mixture=mixture,
             sources=sources,
@@ -1017,8 +1017,8 @@ class MoisesDBRandomChunkBalancedRandomQueryDataset(
             },
             modality="audio",
         )
-        
-        
+
+
 
 
 class MoisesDBDeterministicChunkDeterministicQueryDataset(

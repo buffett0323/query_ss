@@ -128,7 +128,7 @@ def main():
         power=2,
         verbose=False,
     ).cuda()
-    
+
     # Normalization: PrecomputedNorm
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).cuda()
     post_norm = NormalizeBatch().cuda()
@@ -137,13 +137,13 @@ def main():
     # training loop
     os.makedirs(args.model_dict_save_path, exist_ok=True)
     print(f"Training for {args.epochs} epochs in '{args.train_mode}' mode")
-    
+
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
         adjust_learning_rate(optimizer, init_lr, epoch, args)
-        
+
         # Training
-        train_loss, no_nan_exists = train(train_loader, model, criterion, optimizer, epoch, 
+        train_loss, no_nan_exists = train(train_loader, model, criterion, optimizer, epoch,
                            args, to_spec, pre_norm, post_norm)
 
         if args.log_wandb:
@@ -155,11 +155,11 @@ def main():
                     'epoch': epoch + 1,
                     'state_dict': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
-                }, 
-                filename=f'checkpoint_{epoch:04d}.pth.tar', 
+                },
+                filename=f'checkpoint_{epoch:04d}.pth.tar',
                 save_dir=args.model_dict_save_path
             )
-        
+
         if not no_nan_exists:
             print(f"Found NaN in the model at epoch {epoch}")
             break
@@ -168,40 +168,40 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     no_nan_exists = True
-    
+
     if args.train_mode == "augmentation":
         losses = AverageMeter('Loss', ':.4f')
         progress = ProgressMeter(len(train_loader), [batch_time, data_time, losses], prefix=f"Epoch: [{epoch}]")
-    
+
         model.train()
         end = time.time()
-    
+
         for i, (x_i, x_j, _, _) in enumerate(train_loader):
             data_time.update(time.time() - end)
-    
+
             x_i = x_i.cuda(non_blocking=True)
             x_j = x_j.cuda(non_blocking=True)
-    
+
             # Mel-spec transform and normalize
             x_i = (to_spec(x_i) + torch.finfo().eps).log()
             x_j = (to_spec(x_j) + torch.finfo().eps).log()
 
             x_i = pre_norm(x_i).unsqueeze(1)
             x_j = pre_norm(x_j).unsqueeze(1)
-    
+
             # Form a batch and post-normalize it.
             bs = x_i.shape[0]
             paired_inputs = torch.cat([x_i, x_j], dim=0)
             paired_inputs = post_norm(paired_inputs)
-            
+
             # Forward pass
             p1, p2, z1, z2 = model(x1=paired_inputs[:bs], x2=paired_inputs[bs:])
-            
+
             # Check for NaN values in z1 and z2
             if i % 100 == 0:
                 print("z1:", z1)
                 print("z2:", z2)
-            
+
             if torch.isnan(z1).any() or torch.isnan(z2).any():
                 no_nan_exists = False
                 print(f"NaN detected in batch {i}")
@@ -211,30 +211,30 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
                 print("z1:", z1)
                 print("z2:", z2)
                 break
-            
+
             # Calculate Loss
             loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
-    
+
             # Calculate Avg_std_train
             z1_std = F.normalize(z1, dim=1).std(dim=0).mean()
             z2_std = F.normalize(z2, dim=1).std(dim=0).mean()
             avg_std = (z1_std + z2_std) / 2
-    
+
             losses.update(loss.item(), x_i.size(0))
-    
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-    
+
             batch_time.update(time.time() - end)
             end = time.time()
-    
+
             if i % args.print_freq == 0:
                 progress.display(i)
                 if args.log_wandb:
                     step = epoch * len(train_loader) + i
                     wandb.log({"train_loss_step": loss.item(), "avg_std_train": avg_std, "step": step})
-    
+
         return losses.avg, no_nan_exists
 
 
@@ -243,8 +243,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         losses_pair1 = AverageMeter('Loss1', ':.4f')
         losses_pair2 = AverageMeter('Loss2', ':.4f')
         progress = ProgressMeter(
-            len(train_loader), 
-            [batch_time, data_time, losses_pair1, losses_pair2], 
+            len(train_loader),
+            [batch_time, data_time, losses_pair1, losses_pair2],
             prefix=f"Epoch: [{epoch}]",
         )
 
@@ -258,7 +258,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
             x_2 = x_2.cuda(non_blocking=True)
             x_i = x_i.cuda(non_blocking=True)
             x_j = x_j.cuda(non_blocking=True)
-            
+
             # Mel-spec transform and normalize
             x_1 = (to_spec(x_1) + torch.finfo().eps).log()
             x_2 = (to_spec(x_2) + torch.finfo().eps).log()
@@ -269,25 +269,25 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
             x_2 = pre_norm(x_2).unsqueeze(1)
             x_i = pre_norm(x_i).unsqueeze(1)
             x_j = pre_norm(x_j).unsqueeze(1)
-            
+
             # Form a batch and post-normalize it.
             bs = x_1.shape[0]
             paired_inputs = torch.cat([x_1, x_2, x_i, x_j], dim=0)
             paired_inputs = post_norm(paired_inputs)
-            
+
             # Split the batch into 4 parts
             x_1, x_2 = paired_inputs[:bs], paired_inputs[bs:2*bs]
             x_i, x_j = paired_inputs[2*bs:3*bs], paired_inputs[3*bs:]
-            
+
             # Augmentation
             # x_i = seq_pert(x_i).unsqueeze(1)
             # x_j = seq_pert(x_j).unsqueeze(1)
 
 
             # Pair 1: Different segments
-            p1, p2, z1, z2 = model(x1=x_1, x2=x_2)  
+            p1, p2, z1, z2 = model(x1=x_1, x2=x_2)
             loss_pair1 = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
-            
+
             # Pair 2: Same segment but different augmentation
             p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
             loss_pair2 = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
@@ -313,15 +313,15 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
                 progress.display(i)
                 if args.log_wandb:
                     step = epoch * len(train_loader) + i
-                    wandb.log({"train_loss_step": total_loss, "loss_1_segment": loss_pair1.item(), 
+                    wandb.log({"train_loss_step": total_loss, "loss_1_segment": loss_pair1.item(),
                             "loss_2_augmentation": loss_pair2.item(), "avg_std_train": avg_std, "step": step})
 
         return (losses_pair1.avg + losses_pair2.avg) / 2
-    
-    
+
+
     else:
         return 0
-    
+
 
 
 def adjust_learning_rate(optimizer, init_lr, epoch, args):
@@ -332,14 +332,14 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
     else:
         # After warm-up, use cosine decay
         lr = init_lr * 0.5 * (1. + math.cos(math.pi * (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)))
-    
+
     # Update learning rate for optimizer
     for param_group in optimizer.param_groups:
         if param_group.get('fix_lr', False):
             param_group['lr'] = init_lr
         else:
             param_group['lr'] = lr
-    
+
     # Log learning rate to WandB
     if args.log_wandb:
         wandb.log({"learning_rate": lr, "epoch": epoch})

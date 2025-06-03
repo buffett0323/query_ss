@@ -239,17 +239,17 @@ if __name__ == "__main__":
     batch_size = 2
     seq_len = 10
     hidden_dim = 256
-    
+
     # Create random input tensor (B, T, d)
     x = torch.randn(batch_size, seq_len, hidden_dim)
-    
+
     # Create random key padding mask (B, T)
     key_padding_mask = torch.ones(batch_size, seq_len)
     key_padding_mask[:, -2:] = 0  # Set last 2 positions as padding
-    
+
     # Create random condition tensor for CLN (B, T, d)
     condition = torch.randn(batch_size, seq_len, hidden_dim)
-    
+
     # Test without CLN
     print("\nTesting TransformerEncoder without CLN:")
     encoder = TransformerEncoder(

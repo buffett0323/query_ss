@@ -126,18 +126,18 @@ os.makedirs(test_folder, exist_ok=True)
 
 # Training loop
 for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
-    
+
     model.train()
     train_loss = 0.0
-    
+
     # Second loop with tqdm for batch progress
     for batch_idx, batch in enumerate(tqdm(datamodule.train_dataloader(), desc=f"Epoch {epoch+1} Batch Progress", leave=False)):
         batch = InputType.from_dict(batch)
         batch = to_device(batch)
-        
+
         optimizer.zero_grad()
-        
-        # Forward pass        
+
+        # Forward pass
         batch = model(batch)
 
         # Compute the loss
@@ -152,15 +152,15 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
                 "Batch Index": batch_idx + 1,
                 "Epoch": epoch + 1
             })
-        
+
         # Update tqdm description with loss
         if not wandb_use:
             tqdm.write(f"Batch {batch_idx+1}, Loss: {train_loss:.4f}")
-        
+
         # Backward pass and optimization
         loss.backward()
         optimizer.step()
-    
+
     scheduler.step()
 
     # Log epoch loss
@@ -176,18 +176,18 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
             for batch in tqdm(datamodule.val_dataloader()):
                 batch = InputType.from_dict(batch)
                 batch = to_device(batch)
-                
-                # Forward pass        
+
+                # Forward pass
                 batch = model(batch)
-        
+
                 # Compute the loss
                 loss, D_ss, D_real, D_imag = criterion(batch)
                 val_loss += loss.item()
 
                 # Calculate metrics
                 val_metric_handler.calculate_snr(
-                    batch.estimates.target.audio, 
-                    batch.sources.target.audio, 
+                    batch.estimates.target.audio,
+                    batch.sources.target.audio,
                     batch.metadata.stem
                 )
                 os.makedirs(f"{val_folder}/Epoch_{epoch}", exist_ok=True)
@@ -198,7 +198,7 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
 
                 with open(f"{val_folder}/Epoch_{epoch}/metrics.json", "w") as json_file:
                     json.dump(json_metrics, json_file, indent=4)
-                                
+
                 for i, (pred, gt, stem) in enumerate(zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem)):
                     snr = safe_signal_noise_ratio(pred.cpu(), gt.cpu())
                     snr_mean = (snr[0] + snr[1]) / 2
@@ -212,13 +212,13 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
             # Record the validation SNR
             val_snr = val_metric_handler.get_mean_median()
 
-        
+
         print(f"Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}, Val SNR: {val_snr}")
-        
+
         if wandb_use:
             wandb.log({"val_loss": val_loss})
             wandb.log(val_snr)
-            
+
         # Early stop
         if val_loss < min_val_loss:
             min_val_loss = val_loss
@@ -227,12 +227,12 @@ for epoch in tqdm(range(num_epochs), desc="Epoch Progress"):
             early_stop_counter += 1
             if early_stop_counter >= early_stop_thres:
                 break
-            
+
     if wandb_use:
         wandb.log({"train_loss": train_loss})
 
-    
-    
+
+
 # Test step after all epochs
 model.eval()
 test_loss = 0.0
@@ -243,8 +243,8 @@ with torch.no_grad():
     for batch in tqdm(datamodule.test_dataloader()):
         batch = InputType.from_dict(batch)
         batch = to_device(batch)
-    
-        # Forward pass        
+
+        # Forward pass
         batch = model(batch)
 
         # Compute the loss
@@ -253,8 +253,8 @@ with torch.no_grad():
 
         # Calculate metrics
         test_metric_handler.calculate_snr(
-            batch.estimates.target.audio, 
-            batch.sources.target.audio, 
+            batch.estimates.target.audio,
+            batch.sources.target.audio,
             batch.metadata.stem
         )
 
@@ -265,8 +265,8 @@ with torch.no_grad():
 
         with open(f"{test_folder}/metrics.json", "w") as json_file:
             json.dump(json_metrics, json_file, indent=4)
-                                
-                    
+
+
         for i, (pred, gt, stem) in enumerate(zip(batch.estimates.target.audio, batch.sources.target.audio, batch.metadata.stem)):
             snr = safe_signal_noise_ratio(pred.cpu(), gt.cpu())
             snr_mean = (snr[0] + snr[1]) / 2
@@ -280,12 +280,12 @@ with torch.no_grad():
     # Get the final result of test SNR
     test_snr = test_metric_handler.get_mean_median()
     print("Test snr:", test_snr)
-        
-        
+
+
 print(f"Final Test Loss: {test_loss}")
 if wandb_use:
     wandb.log({"test_loss": test_loss})
     wandb.log(test_snr)
-    
+
 
 if wandb_use: wandb.finish()

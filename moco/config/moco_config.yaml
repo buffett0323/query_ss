@@ -83,7 +83,7 @@ moco_m: 0.999  # moco momentum of updating key encoder
 moco_T: 0.2 # MoCoV2 -> 0.2, MoCoV1 -> 0.07  # softmax temperature
 moco_mlp: true # MoCoV2 -> true, MoCoV1 -> false # use mlp head
 moco_aug_plus: true # MoCoV2 -> true, MoCoV1 -> false  # use moco v2 data augmentation
-moco_cos: true # MoCoV2 -> true, MoCoV1 -> false  # use cosine lr schedule 
+moco_cos: true # MoCoV2 -> true, MoCoV1 -> false  # use cosine lr schedule
 
 # knn options
 knn_k: 3 #200

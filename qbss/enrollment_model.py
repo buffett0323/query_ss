@@ -47,7 +47,7 @@ class MyModel(nn.Module):
         q_enc="Passt",
     ):
         super(MyModel, self).__init__()
-        
+
         self.embedding_size = embedding_size
         self.query_size = query_size
         self.fs = fs
@@ -58,7 +58,7 @@ class MyModel(nn.Module):
         self.mix_query_mode = mix_query_mode
         self.eps = eps
         self.q_enc = q_enc
-        
+
         self.stft = torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
             win_length=win_length,
@@ -72,7 +72,7 @@ class MyModel(nn.Module):
             center=True,
             onesided=True,
         )
-        
+
         self.istft = torchaudio.transforms.InverseSpectrogram(
             n_fft=n_fft,
             win_length=win_length,
@@ -85,31 +85,31 @@ class MyModel(nn.Module):
             center=True,
             onesided=True,
         )
-        
+
 
         if q_enc == "beats":
             self.instantiate_beats(beats_check_point_pth='beats/pt_dict/BEATs_iter3_plus_AS2M.pt')
-            
+
         elif q_enc == "Passt":
             self.passt = Passt(
                 original_fs=fs,
                 passt_fs=32000,
             )
-            
+
         self.unet = UnetTranspose2D( # UnetIquery(
-            fc_dim=64, 
-            num_downs=7, 
-            ngf=64, 
+            fc_dim=64,
+            num_downs=7,
+            ngf=64,
             use_dropout=False,
         )
-        
+
         self.mlp = MLP(
             input_dim=512*36, # 256 * 128
-            hidden_dim=query_size, 
-            output_dim=self.n_masks, 
+            hidden_dim=query_size,
+            output_dim=self.n_masks,
             num_layers=3,
         )
-        
+
         if self.mix_query_mode == "Transformer":
             self.net_maskformer = TransformerPredictor(
                 in_channels=query_size, #256, #args.in_channels,
@@ -128,22 +128,22 @@ class MyModel(nn.Module):
         elif self.mix_query_mode == "FiLM":
             self.film = FiLM(
                 cond_embedding_dim=embedding_size, #768,
-                channels=query_size, #512, 
-                additive=True, 
+                channels=query_size, #512,
+                additive=True,
                 multiplicative=True
             )
         elif self.mix_query_mode == "Hyper_FiLM":
             hypernet = FiLMHyperNetwork(
                 query_dim=embedding_size, #768,
                 channels=query_size, #512,
-                depth=2, 
+                depth=2,
                 activation="ELU"
             )
             self.hyper_film = Hyper_FiLM(
                 cond_embedding_dim=embedding_size, #768,
-                channels=query_size, #512, 
-                hypernetwork=hypernet, 
-                additive=True, 
+                channels=query_size, #512,
+                hypernetwork=hypernet,
+                additive=True,
                 multiplicative=True
             )
 
@@ -159,7 +159,7 @@ class MyModel(nn.Module):
         BEATs_model.load_state_dict(checkpoint['model'])
         self.beats = BEATs_model.eval().cuda()
 
-        
+
     def beats_query(self, wav):
         padding_mask = torch.zeros(1, wav.shape[1]).bool().cuda()  # Move padding mask to GPU
         embed = []
@@ -168,12 +168,12 @@ class MyModel(nn.Module):
 
         embed = torch.cat(embed, dim=0)
         return embed
-    
-    
+
+
     def mask(self, x, m):
         return x * m
-    
-    
+
+
     def pre_process(self, batch: InputType):
         """
             Transform from Binaural into Mono
@@ -185,25 +185,25 @@ class MyModel(nn.Module):
         # Compute the STFT spectrogram
         with torch.no_grad():
             batch.mixture.spectrogram = self.stft(batch.mixture.audio)
-            
+
             if "sources" in batch.keys():
                 for stem in batch.sources.keys():
                     # Transform to mono
                     batch.sources[stem].audio = batch.sources[stem].audio.mean(dim=1, keepdim=True)
-                    
+
         return batch
-    
-    
-    
+
+
+
     def forward(self, batch: InputType): # def forward(self, x, Z, tgt):
-        
+
         """
         input shape:
             x: [Batch size, C, N]
             Z: [Batch size, D=768] (Query)
             tgt: target stem audio
         """
-        
+
         # Preprocessing
         batch = self.pre_process(batch)
 
@@ -225,43 +225,43 @@ class MyModel(nn.Module):
             2. Transformer Self attention or Cross attention
             3. Hyper Network FiLM Condition + MLP
         """
-        
+
         # First Way: FiLM Condition + MLP
         if self.mix_query_mode == "FiLM":
             x_latent = self.film(x_latent, Z) # BF: torch.Size([BS, 512, 64, 36]) torch.Size([BS, 768]) -> torch.Size([BS, 512, 64, 36])
             x_latent = x_latent.permute(0, 2, 1, 3) # torch.Size([BS, 64, 256, 32*4])
             x_latent = self.mlp(x_latent) # ([BS=2, C_e=64, N=2->1])
-            
+
             # Mask estim
             pred_mask = torch.einsum('bcft,bcn->bnft', x, x_latent) # torch.Size([4, 2->1, 512, 256*4])
-        
+
         # Second Way: Self-attention + MLP
         elif self.mix_query_mode == "Transformer":
             pred_mask = self.net_maskformer(x_latent, x, batch.metadata["stem"], Z)
-                    
-                    
-        # Third Way: Hyper Network FiLM Condition + MLP            
+
+
+        # Third Way: Hyper Network FiLM Condition + MLP
         elif self.mix_query_mode == "Hyper_FiLM":
             x_latent = self.hyper_film(x_latent, Z) # BF: torch.Size([BS, 512, 64, 36]) torch.Size([BS, 768]) -> torch.Size([BS, 512, 64, 36])
             x_latent = x_latent.permute(0, 2, 1, 3) # torch.Size([BS, 64, 256, 32*4])
             x_latent = self.mlp(x_latent) # ([BS=2, C_e=64, N=2->1])
-            
+
             # Mask estim
             pred_mask = torch.einsum('bcft,bcn->bnft', x, x_latent) # torch.Size([4, 2->1, 512, 256*4])
-            
+
         else:
             print("Wrong mix_query_mode!")
-            
-        
+
+
         # Mask with original spectrogram
         target = self.mask(batch.mixture.spectrogram, pred_mask)
         gt_mask = self.stft(batch.sources["target"].audio) / (batch.mixture.spectrogram + self.eps)
-        
+
         batch.masks = SimpleishNamespace(
-            pred=pred_mask, 
+            pred=pred_mask,
             ground_truth=gt_mask,
         )
-        
+
         # Write the predicted results back to batch data
         batch.estimates["target"] = SimpleishNamespace(
             audio=self.istft(target) #, spectrogram=s
@@ -283,10 +283,10 @@ class MLP(nn.Module):
     """Multi-layer perceptron with support for spatial dimensions."""
 
     def __init__(
-        self, 
-        input_dim, 
-        hidden_dim, 
-        output_dim, 
+        self,
+        input_dim,
+        hidden_dim,
+        output_dim,
         num_layers=3,
     ):
         super().__init__()
@@ -298,11 +298,11 @@ class MLP(nn.Module):
 
     def forward(self, x):
         BS, C_e, T, W = x.shape  # [Batch_size, C_e, T, W]
-        
+
         # Use reshape instead of view to flatten the spatial dimensions (T and W)
         x = x.reshape(BS, C_e, -1)  # New shape: [Batch_size, C_e, T * W]
-        
+
         for i, layer in enumerate(self.layers):
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        
+
         return x

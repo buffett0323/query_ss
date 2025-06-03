@@ -17,13 +17,13 @@ THRES = 8
 SR = 44100
 
 for js in tqdm(os.listdir(json_folder)):
-    
+
     with open(os.path.join(json_folder, js), "r", encoding="utf-8") as file:
         data = json.load(file)  # Load JSON content
 
     # Print the JSON content
-    # print(json.dumps(data))#, indent=4)) 
-    
+    # print(json.dumps(data))#, indent=4))
+
     data_path = data["path"]
     y, sr = torchaudio.load(data_path)
 
@@ -42,20 +42,20 @@ for js in tqdm(os.listdir(json_folder)):
             # Save as .npy file
             segment_folder = os.path.join(output_path, f"{name}_{counter}")
             os.makedirs(segment_folder, exist_ok=True)
-            
+
             # Save the mix
             torchaudio.save(f"{segment_folder}/mix.wav", mix_seg, SR, format="wav")
-            
+
             for stem in ["drums", "bass", "other", "vocals"]:
                 ht_stem, _ = torchaudio.load(os.path.join(htdemucs_folder, name, f"{stem}.wav"))#, sr=sr)
                 stem_seg = ht_stem[:, start_sample:end_sample]
                 torchaudio.save(f"{segment_folder}/{stem}.wav", stem_seg, SR, format="wav")
-                
+
             # Mix bass and other stems together
             bass_seg, _ = torchaudio.load(f"{segment_folder}/bass.wav")
             other_seg, _ = torchaudio.load(f"{segment_folder}/other.wav")
             bass_other_mix = bass_seg + other_seg
             torchaudio.save(f"{segment_folder}/bass_other.wav", bass_other_mix, SR, format="wav")
-            
+
 
     break

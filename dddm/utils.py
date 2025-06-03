@@ -148,15 +148,15 @@ def load_filepaths_and_text(filename, split="|"):
 
 
 def get_hparams(
-        init=True, 
+        init=True,
         config_path="./ckpt/config.json",
         model_dir="/mnt/gestalt/home/buffett/timbre_transfer_logs/"
     ):
     # parser = argparse.ArgumentParser()
-    # parser.add_argument('-c', '--config', type=str, 
+    # parser.add_argument('-c', '--config', type=str,
     #                     default="./ckpt/config.json",
     #                     help='JSON file for configuration')
-    # parser.add_argument('-m', '--model', type=str, 
+    # parser.add_argument('-m', '--model', type=str,
     #                     default="/mnt/gestalt/home/buffett/timbre_transfer_logs/",
     #                     help='Model name')
 

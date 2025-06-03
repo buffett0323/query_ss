@@ -95,7 +95,7 @@ rave.RAVE:
     latent_size = %LATENT_SIZE
     pqmf = @pqmf.CachedPQMF
     sampling_rate = %SAMPLING_RATE
-    encoder = @blocks.VariationalEncoder  
+    encoder = @blocks.VariationalEncoder
     decoder = @blocks.Generator
     discriminator = @discriminator.MultiScaleDiscriminator
     phase_1_duration = %PHASE_1_DURATION

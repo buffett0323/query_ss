@@ -125,10 +125,10 @@ if __name__ == "__main__":
 
     criterion = L1SNR_Recons_Loss(mask_type="L1")
     query_ss_model = QuerySSModel(
-        config=config, 
-        model=model, 
-        criterion=criterion, 
-        stems=stems, 
+        config=config,
+        model=model,
+        criterion=criterion,
+        stems=stems,
         lr=1e-3,
     )
 
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         wandb_logger = WandbLogger(project="Query_ss")
     else:
         wandb_logger = None
-        
+
 
 
     call_backs = [

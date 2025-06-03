@@ -679,7 +679,7 @@ class Decoder(nn.Module):
         h = self.conv_out(h)
         if self.tanh_out:
             h = torch.tanh(h)
-        
+
         # Crop or interpolate to ensure the width is 400
         h = F.interpolate(h, size=(1, 400), mode='bilinear', align_corners=False)
         return h.squeeze(dim=2)

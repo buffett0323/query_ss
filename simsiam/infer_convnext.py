@@ -90,7 +90,7 @@ def main():
         test_dataset, batch_size=64, shuffle=True,
         num_workers=args.workers, pin_memory=True, drop_last=True)
 
-    
+
     # MelSpectrogram
     to_spec = nnAudio.features.MelSpectrogram(
         sr=args.sample_rate,
@@ -118,117 +118,117 @@ def main():
         # Training memory loader
         for x_i, _, path in tqdm(memory_loader, desc='Training Dataset Feature extracting'):
             x_i = x_i.to(device, non_blocking=True)
-            
+
             # Mel-spec transform and normalize
             x_i = (to_spec(x_i) + torch.finfo().eps).log()
             x_i = pre_norm(x_i).unsqueeze(1)
-            
+
             # Form a batch and post-normalize it.
             bs = x_i.shape[0]
             paired_inputs = post_norm(x_i)
-            
+
             # Forward pass
             feature = model.encoder(paired_inputs)
             feature = F.normalize(feature, dim=1)
-            
+
             feature_bank.append(feature)
             feature_paths.extend(path)
 
         feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()  # [D, N]
         print(f"Training Feature bank shape: {feature_bank.shape}")
-        
-        
+
+
         # Testing memory loader
         feature_bank_test, label_bank_test, feature_paths_test = [], [], []
         for x_i, label, path in tqdm(test_loader, desc='Testing Dataset Feature extracting'):
             x_i = x_i.to(device, non_blocking=True)
-            label = label.to(device, non_blocking=True)      
-            
+            label = label.to(device, non_blocking=True)
+
             # Mel-spec transform and normalize
             x_i = (to_spec(x_i) + torch.finfo().eps).log()
             x_i = pre_norm(x_i).unsqueeze(1)
-            
+
             # Form a batch and post-normalize it.
             bs = x_i.shape[0]
             paired_inputs = post_norm(x_i)
-            
+
             # Forward pass
             feature = model.encoder(paired_inputs)
             feature = F.normalize(feature, dim=1)
-            
+
             feature_bank_test.append(feature)
             label_bank_test.append(label)
             feature_paths_test.extend(path)
-            
+
         feature_bank_test = torch.cat(feature_bank_test, dim=0).t().contiguous()  # [D, N]
         label_bank_test = torch.cat(label_bank_test, dim=0).t().contiguous()  # [D, N]
         print(f"Testing Feature bank shape: {feature_bank_test.shape}")
         print(f"Testing Label bank shape: {label_bank_test.shape}")
-        
-        
+
+
         # KNN Evaluation
         with open('info/test_matches_convnext_epoch499.txt', 'w') as f:
             for x_i, label, test_path in tqdm(test_loader, desc='KNN Evaluation'):
                 x_i = x_i.to(device, non_blocking=True)
-                
+
                 # Mel-spec transform and normalize
                 x_i = (to_spec(x_i) + torch.finfo().eps).log()
                 x_i = pre_norm(x_i).unsqueeze(1)
-                
+
                 # Form a batch and post-normalize it.
                 bs = x_i.shape[0]
                 paired_inputs = post_norm(x_i)
-                
+
                 # Forward pass
                 feature = model.encoder(paired_inputs)
                 feature = F.normalize(feature, dim=1)
 
-                """ 
-                1. Storing Training Memory Dataset Knn-similar sounds 
+                """
+                1. Storing Training Memory Dataset Knn-similar sounds
                 """
                 top_k_indices, _ = knn_predict(
                     feature, feature_bank, knn_k=args.knn_k, knn_t=args.knn_t
                 )
-                
+
                 """
-                2. Storing Testing Memory Dataset Knn-similar sounds: 
+                2. Storing Testing Memory Dataset Knn-similar sounds:
                 see whether the nearest top 3 are same label, and same sound
                 """
                 top_k_indices_test, _ = knn_predict(
                     feature, feature_bank_test, knn_k=args.knn_k, knn_t=args.knn_t
                 )
-                
+
                 # Write to file
                 for i in range(len(test_path)):
                     test_sample_path = test_path[i]
-                    
+
                     f.write("-----KNN-Prediction-----\n")
-                    
+
                     # For Training
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
                     f.write(f"python npy2mp3.py --output_mp3 target.mp3    {os.path.join(args.seg_dir, test_sample_path, 'other_seg_0.npy')}\n")
-                    
+
                     for rank, neighbor_path in enumerate(nearest_paths, 1):
                         f.write(f"python npy2mp3.py --output_mp3 top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
                     f.write("\n")
-                    
-                    
-                    # For Testing 
+
+
+                    # For Testing
                     nearest_paths_test = [feature_paths_test[idx] for idx in top_k_indices_test[i].tolist()]
                     nearest_labels_test = [label_bank_test[idx] for idx in top_k_indices_test[i].tolist()]
 
                     for rank, neighbor_path in enumerate(nearest_paths_test, 1):
                         f.write(f"python npy2mp3.py --output_mp3 test_top{rank}.mp3    {os.path.join(args.seg_dir, neighbor_path, 'other_seg_0.npy')}\n")
                     f.write("\n")
-                    
-                    
+
+
                     # Labels
                     f.write("-----Labels-----\n")
                     f.write(f"Testing sample label: {label[i]}\n")
                     for rank, neighbor_label in enumerate(nearest_labels_test, 1):
                         f.write(f"test_target{rank}: {neighbor_label}\n")
                     f.write("\n")
-                    
+
 
 
 

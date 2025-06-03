@@ -45,7 +45,7 @@ class SimSiam(nn.Module):
                                         nn.BatchNorm1d(pred_dim),
                                         nn.ReLU(inplace=True), # hidden layer
                                         nn.Linear(pred_dim, dim)) # output layer
-    
+
 
     def forward(self, x1, x2):
         """
@@ -64,10 +64,10 @@ class SimSiam(nn.Module):
         p2 = self.predictor(z2) # NxC
 
         return p1, p2, z1.detach(), z2.detach()
-    
-    
+
+
 if __name__ == "__main__":
-    
+
     model_names = sorted(name for name in models.__dict__
         if name.islower() and not name.startswith("__")
         and callable(models.__dict__[name]))

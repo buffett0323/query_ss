@@ -62,7 +62,7 @@ def prepare_media(source_path_or_url: os.PathLike,
         # Load waveform from .npy
         waveform = np.load(audio_file)
         print("Waveform shape:", waveform.shape)
-        
+
         # If shape is (T,), make it (1, T) as mono
         if waveform.shape[0] == 2:
             waveform = np.mean(waveform, axis=0, keepdims=True)

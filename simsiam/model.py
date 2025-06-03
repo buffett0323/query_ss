@@ -26,9 +26,9 @@ class SimSiam(nn.Module):
     SimSiam model with Wavegram_Logmel128_Cnn14 as the encoder.
     """
     def __init__(
-        self, 
-        args, 
-        dim=2048, 
+        self,
+        args,
+        dim=2048,
         pred_dim=512,
     ):
         super(SimSiam, self).__init__()
@@ -55,17 +55,17 @@ class SimSiam(nn.Module):
             ) # output layer
             self.encoder.fc2[7].bias.requires_grad = False # hack: not use bias as it is followed by BN
 
-            
+
         elif self.args.encoder_name == "SwinTransformer":
             self.encoder = SwinTransformer(
-                img_size=args.img_size, 
-                window_size=args.swint_window_size, 
-                in_chans=args.channels, 
+                img_size=args.img_size,
+                window_size=args.swint_window_size,
+                in_chans=args.channels,
                 num_classes=dim,  # num_classes = 0 --> self.head = nn.Identity
             )
             prev_dim = self.encoder.num_features
             print("self.encoder.head", self.encoder.head)
-            
+
             # **Build a separate 3-layer projector**
             self.encoder.head = nn.Sequential(
                 nn.Linear(prev_dim, prev_dim, bias=False),
@@ -78,8 +78,8 @@ class SimSiam(nn.Module):
                 nn.BatchNorm1d(dim, affine=False)
             ) # output layer
             self.encoder.head[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
-            
-        
+
+
         elif self.args.encoder_name == "ConvNeXt":
             if args.convnext_model == "tiny":
                 depths = [3, 3, 9, 3]
@@ -95,16 +95,16 @@ class SimSiam(nn.Module):
                 dims = [192, 384, 768, 1536]
             else:
                 raise ValueError(f"Invalid model: {args.convnext_model}")
-            
+
             print("Using ConvNeXt model: {}".format(args.convnext_model))
-                
+
             self.encoder = ConvNeXt(
                 in_chans=args.channels,
                 num_classes=dim,
                 depths=depths,
                 dims=dims,
             )
-            
+
             # **Build a separate 3-layer projector**
             prev_dim = self.encoder.head.weight.shape[1]; print("prev_dim", prev_dim)
             self.encoder.head = nn.Sequential(
@@ -119,11 +119,11 @@ class SimSiam(nn.Module):
             ) # output layer
             self.encoder.head[6].bias.requires_grad = False # hack: not use bias as it is followed by BN
 
-            
+
         else:
             self.encoder = nn.Identity()
-        
-        
+
+
         # **Build a 2-layer predictor**
         self.predictor = nn.Sequential(
             nn.Linear(dim, pred_dim, bias=False),
@@ -131,7 +131,7 @@ class SimSiam(nn.Module):
             nn.ReLU(inplace=True),  # Hidden layer
             nn.Linear(pred_dim, dim)  # Output layer
         )
-        
+
 
     def forward(self, x1, x2):
         # Compute features for both views
@@ -153,7 +153,7 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    
+
     # Load models
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     model = SimSiam(
@@ -161,8 +161,8 @@ if __name__ == "__main__":
         dim=args.dim,
         pred_dim=args.pred_dim,
     ).to(device)
-    
-    
+
+
     train_dataset = SegmentBPDataset(
         data_dir=args.seg_dir,
         split="train",
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         tstr_min_rate=args.tstr_min_rate,
         tstr_max_rate=args.tstr_max_rate,
     )
-    
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=16, #args.batch_size,
@@ -195,7 +195,7 @@ if __name__ == "__main__":
         persistent_workers=args.persistent_workers,
         prefetch_factor=8, #4,
     )
-    
+
     to_spec = nnAudio.features.MelSpectrogram(
         sr=args.sample_rate,
         n_fft=args.n_fft,
@@ -208,23 +208,23 @@ if __name__ == "__main__":
         power=2,
         verbose=False,
     ).to(device)
-    
+
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).to(device)
     post_norm = NormalizeBatch().to(device)
 
     for x_i, x_j, _, _ in train_loader:
         x_i = x_i.to(device, non_blocking=True)
         x_j = x_j.to(device, non_blocking=True)
-        
+
         x_i = (to_spec(x_i) + torch.finfo().eps).log()
         x_i = pre_norm(x_i).unsqueeze(1)
         x_j = (to_spec(x_j) + torch.finfo().eps).log()
         x_j = pre_norm(x_j).unsqueeze(1)
-        
+
         bs = x_i.shape[0]
         paired_inputs = torch.cat([x_i, x_j], dim=0)
         paired_inputs = post_norm(paired_inputs)
-        
+
         p1, p2, z1, z2 = model(x1=paired_inputs[:bs], x2=paired_inputs[bs:])
         print(z1, z2)
         break

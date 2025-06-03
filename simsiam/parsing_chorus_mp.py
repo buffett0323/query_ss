@@ -22,7 +22,7 @@ with open("info/chorus_audio_16000_npy_track_list.txt", "r") as f:
 
 def process_one(file_name, seg_time, sample_rate, amp_thres, save_dir, data_dir):
     file_path = os.path.join(data_dir, file_name, "other.npy")
-    
+
     segments = find_top_2_peak_segments(file_path, seg_time, sample_rate, amp_thres)
     print(file_name, "-------", len(segments))
 
@@ -33,9 +33,9 @@ def process_one(file_name, seg_time, sample_rate, amp_thres, save_dir, data_dir)
         for i, segment in enumerate(segments):
             segment_path = os.path.join(track_save_dir, f"other_seg_{i}.npy")
             np.save(segment_path, segment)
-        
+
         return file_name, len(segments)
-    
+
     return file_name, 0
 
 

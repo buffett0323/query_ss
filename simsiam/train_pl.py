@@ -35,13 +35,13 @@ def main():
 
     args = parser.parse_args()
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
-    
+
     # Loading Wandb logger
     if args.log_wandb:
         wandb_logger = WandbLogger(
-            project=args.wandb_project_name, 
+            project=args.wandb_project_name,
             name=args.wandb_name,
-            save_dir='/data/buffett' if os.path.exists('/data/buffett') else '.', 
+            save_dir='/data/buffett' if os.path.exists('/data/buffett') else '.',
             log_model=False,  # Avoid logging full model files to WandB
         )
     else:
@@ -50,7 +50,7 @@ def main():
     # Initialize DataModule
     dm = BPDataModule(
         args=args,
-        data_dir=args.data_dir, 
+        data_dir=args.data_dir,
     )
 
     # Initialize Model
@@ -71,7 +71,7 @@ def main():
         monitor="val_loss",  # Metric to monitor
         mode="min",  # Save model with the minimum validation loss
     )
-    
+
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
         min_delta=0.00,
@@ -91,8 +91,8 @@ def main():
         check_val_every_n_epoch=args.check_val_every_n_epoch,  # Perform validation every 2 epochs
         logger=wandb_logger,
         callbacks=[
-            TQDMProgressBar(refresh_rate=10), 
-            checkpoint_callback, 
+            TQDMProgressBar(refresh_rate=10),
+            checkpoint_callback,
             early_stop_callback,
         ],
     )
@@ -100,7 +100,7 @@ def main():
     print("-------Start Training-------")
     trainer.fit(model, dm)
     print("-------Finish Training-------")
-    
+
     # # Test best model
     # best_model_path = checkpoint_callback.best_model_path
     # print(f"Best Model Path: {best_model_path}")

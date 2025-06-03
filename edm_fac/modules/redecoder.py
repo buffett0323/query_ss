@@ -60,4 +60,3 @@ class Redecoder(torch.nn.Module):
         for i in range(input_ids.size(-1)):
             input_id = input_ids[..., i]
             prompt_out = self.encoder(input_id, prompt_out, timbre, inference_params=inference_params)
-

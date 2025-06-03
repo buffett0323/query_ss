@@ -112,7 +112,7 @@ class SpecAugment(nn.Module):
                 t0s = torch.randint(0, T - t, (B,), device=device)
                 for i in range(B):
                     out[i, :, t0s[i]:t0s[i] + t] = 0
-        
+
         return out
 
 
@@ -136,7 +136,7 @@ def time_warp(spec, W=5):
 
 
 def spec_augment(mel_spectrogram, time_warping_para=80, frequency_masking_para=27,
-                 time_masking_para=100, frequency_mask_num=1, time_mask_num=1, 
+                 time_masking_para=100, frequency_mask_num=1, time_mask_num=1,
                  p1=0.4, p2=0.5):
     """Spec augmentation Calculation Function.
     'SpecAugment' have 3 steps for audio data augmentation.
@@ -173,7 +173,7 @@ def spec_augment(mel_spectrogram, time_warping_para=80, frequency_masking_para=2
             f = int(f)
             f0 = random.randint(0, v-f)
             warped_mel_spectrogram[:, f0:f0+f, :] = 0
-    
+
 
     # Step 3 : Time masking
     if random.random() <= p2:

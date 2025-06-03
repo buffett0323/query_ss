@@ -98,7 +98,7 @@ class BetaWarmupCallback(pl.Callback):
 
         warmup_ratio = self.state["training_steps"] / self.warmup_len
 
-        if self.log_warmup: 
+        if self.log_warmup:
             beta = math.log(self.initial_value) * (1 - warmup_ratio) + math.log(
                 self.target_value) * warmup_ratio
             pl_module.beta_factor = math.exp(beta)
@@ -214,7 +214,7 @@ class RAVE(pl.LightningModule):
         self.register_buffer("fidelity", torch.zeros(latent_size))
 
         self.latent_size = latent_size
-        
+
         # Instantiate FiLM conditioner
         self.film = FiLM(timbre_embedding_dim, latent_size)
 
@@ -259,14 +259,14 @@ class RAVE(pl.LightningModule):
         x = self.spectrogram(x)[..., :-1]
         x = torch.log1p(x).reshape(*batch_size, -1, x.shape[-1])
         return x
-        
+
     def encode(self, x, return_mb: bool = False):
         x_enc = x
         if self.input_mode == "pqmf":
             x_enc = _pqmf_encode(self.pqmf, x_enc)
         elif self.input_mode == "mel":
             x_enc = self._mel_encode(x)
-            
+
         z = self.encoder(x_enc)
         if return_mb:
             if self.input_mode == "pqmf":
@@ -310,8 +310,8 @@ class RAVE(pl.LightningModule):
         x_raw, timbre_emb = batch
         x_raw.requires_grad = True
         timbre_emb.requires_grad = False
-        
-        
+
+
         batch_size = x_raw.shape[:-2]
         self.encoder.set_warmed_up(self.warmed_up)
         self.decoder.set_warmed_up(self.warmed_up)
@@ -332,10 +332,10 @@ class RAVE(pl.LightningModule):
             y_multiband = y
             y_raw = _pqmf_decode(self.pqmf, y, batch_size=batch_size, n_channels=self.n_channels)
         else:
-            y_raw = y 
+            y_raw = y
             y_multiband = _pqmf_encode(self.pqmf, y)
 
-        # TODO this has been added for training with num_samples = 65536 samples, output padding seems to mess with output dimensions. 
+        # TODO this has been added for training with num_samples = 65536 samples, output padding seems to mess with output dimensions.
         # this may probably conflict with cached_conv
         y_raw = y_raw[..., :x_raw.shape[-1]]
         y_multiband = y_multiband[..., :x_multiband.shape[-1]]
@@ -457,10 +457,10 @@ class RAVE(pl.LightningModule):
             mean = None
 
         z = self.encoder.reparametrize(z)[0]
-        
+
         # FiLM
         z = self.film(z, timbre_emb)
-        
+
         y = self.decode(z)
 
         distance = self.audio_distance(x, y)
@@ -537,4 +537,3 @@ class RAVE(pl.LightningModule):
         model = ['```'] + model + ['```']
         model = '\n'.join(model)
         tb.add_text("model", model)
-

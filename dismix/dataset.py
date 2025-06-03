@@ -27,15 +27,15 @@ def custom_collate_fn(batch):
     pitch_annotation = torch.stack([item[2] for item in batch])
     return mix_melspec, stems_melspec, pitch_annotation
 
-   
+
 def music_object_collate_fn(batch):
     chord_spec = torch.stack([item[0] for item in batch], dim=0)
     note_specs = [item[1] for item in batch] # cannot be torch stack since it possibly have different shape
     midi_label = [item[2] for item in batch]
     inst_label = [item[3] for item in batch]
     return chord_spec, note_specs, midi_label, inst_label
-   
-   
+
+
 def spec_crop(image, height, width):
     return crop(image, top=0, left=0, height=height, width=width)
 
@@ -81,7 +81,7 @@ def plot_multiple_spectrograms(specgrams: list,
                                ylabel='Mel Bins',
                                colorbar_label='Decibels / dB',
                                aspect="auto"):
-    
+
     fig, axs = plt.subplots(
         1, len(specgrams), figsize=figsize)
 
@@ -92,7 +92,7 @@ def plot_multiple_spectrograms(specgrams: list,
         plt.suptitle(
             suptitle,
             fontsize=int(36 * max(figsize) / 32) if fontsize is None else fontsize)
-    
+
     for i, spec in enumerate(specgrams):
         if title is not None:
             assert len(title) == len(specgrams)
@@ -103,7 +103,7 @@ def plot_multiple_spectrograms(specgrams: list,
             axs[i].set_yticks([])
         axs[i].set_xlabel(xlabel)
         im = axs[i].imshow(spec, origin="lower", aspect=aspect, vmin=vmin, vmax=vmax)
-    
+
     fig.colorbar(im, ax=axs.ravel().tolist(), label=colorbar_label)
     plt.show()
     return fig
@@ -142,7 +142,7 @@ def compare_spectrograms(specs1: list,
         assert len(subtitle1) == len(specs1), 'subtitle1 length: {}, specs1 length: {}'.format(len(subtitle1), len(specs1))
     if subtitle2 is not None:
         assert len(subtitle2) == len(specs2), 'subtitle2 length: {}, specs2 length: {}'.format(len(subtitle2), len(specs2))
-    
+
     fig, axs = plt.subplots(
         2, num_specs, figsize=figsize)
 
@@ -156,9 +156,9 @@ def compare_spectrograms(specs1: list,
             axs[0, i].set_yticks([])
             if subtitle1 is not None:
                 axs[0, i].title.set_text(subtitle1[i])
-                
+
         im = axs[0, i].imshow(spec1, origin="lower", aspect=aspect, vmin=vmin, vmax=vmax)
-        
+
     for j, spec2 in enumerate(specs2):
         axs[1, j].set_xlabel(xlabel)
         if j == 0:
@@ -213,7 +213,7 @@ class MusicalObjectDataset(Dataset):
         self.spec_list = sorted(
             glob.glob(
                 os.path.join(
-                    self.root, 
+                    self.root,
                     f"{self.split}_npy",
                     '{}_spec-*-of-*.npy'.format(spec)
                     )
@@ -222,15 +222,15 @@ class MusicalObjectDataset(Dataset):
         self.instrument_list = np.load(
             os.path.join(self.out_path, '{}_instrument_order.npy'.format(split)),
             allow_pickle=True)
-        
+
         self.examples = torch.load(
             os.path.join(self.out_path, '{}_examples.pt'.format(split)), weights_only=True)
-        
+
         # notes = torch.unique(self.examples)
         # self.notes = notes[notes.nonzero(as_tuple=True)]
         self.notes = self.metadata["note_list"]
         self.instrument_tokens = np.array(self.metadata["instrument_tokens"])
-    
+
     def __getitem__(self, index):
         spec_file = self.spec_list[index]
         # print(spec_file)
@@ -254,7 +254,7 @@ class MusicalObjectDataset(Dataset):
             note_spec_list.append(note_spec)
 
         note_tensors = torch.cat(note_spec_list, dim=0)
-        
+
         if self.transform is not None:
             spec = self.transform(spec)
             note_tensors = self.transform(note_tensors)
@@ -262,13 +262,13 @@ class MusicalObjectDataset(Dataset):
         midi_label = chord2int(chord, self.notes)
         instrument_label = instrument_to_int(instrument_list, self.instrument_tokens)
 
-        # Mixture, note, midi label, instrument_label: 
+        # Mixture, note, midi label, instrument_label:
         # torch.Size([1, 128, 35]) torch.Size([4, 128, 35]) tensor([18, 20, 25, 34]) tensor([0, 1, 1, 2])
         return spec.squeeze(0), note_tensors, midi_label, instrument_label
 
     def __len__(self):
         return len(self.spec_list)
-    
+
 
 class MusicalObjectDataModule(LightningDataModule):
     def __init__(self,
@@ -287,7 +287,7 @@ class MusicalObjectDataModule(LightningDataModule):
                  test_transforms = None,
                  *args,
                  **kwargs):
-        
+
         super(MusicalObjectDataModule, self).__init__(
             *args, **kwargs
         )
@@ -298,7 +298,7 @@ class MusicalObjectDataModule(LightningDataModule):
         self.to_db = to_db
         self.spec = spec
         self.top_db = top_db
-        
+
         self.num_workers = num_workers
         self.seed = seed
         self.shuffle = shuffle
@@ -318,7 +318,7 @@ class MusicalObjectDataModule(LightningDataModule):
                 spec=self.spec,
                 top_db=self.top_db,
                 transform=self.train_transforms)
-            
+
             self.val_ds = MusicalObjectDataset(
                 root=self.root,
                 split='valid',
@@ -326,7 +326,7 @@ class MusicalObjectDataModule(LightningDataModule):
                 spec=self.spec,
                 top_db=self.top_db,
                 transform=self.val_transforms)
-        
+
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             self.test_ds = MusicalObjectDataset(
@@ -336,7 +336,7 @@ class MusicalObjectDataModule(LightningDataModule):
                 spec=self.spec,
                 top_db=self.top_db,
                 transform=self.test_transforms)
-            
+
     def train_dataloader(self):
         """The train dataloader."""
         return self._data_loader(
@@ -354,7 +354,7 @@ class MusicalObjectDataModule(LightningDataModule):
         return self._data_loader(
             self.test_ds,
             shuffle=False)
-            
+
     def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
         return DataLoader(
             dataset,
@@ -365,7 +365,7 @@ class MusicalObjectDataModule(LightningDataModule):
             pin_memory=self.pin_memory,
             collate_fn=music_object_collate_fn,
         )
-    
+
     @property
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
@@ -375,24 +375,24 @@ class MusicalObjectDataModule(LightningDataModule):
     def num_notes(self) -> int:
         self.setup(stage = 'fit')
         return len(self.train_ds.notes)
-    
+
     @property
     def num_instruments(self) -> int:
         self.setup(stage = 'fit')
         return len(self.train_ds.instrument_tokens)
-    
+
 
 class CocoChoraleDataset(Dataset):
     def __init__(
-        self, 
+        self,
         N_s=4,
         file_dir='/home/buffett/NAS_189/cocochorales_full_v1_output/main_dataset',
         split='train',
         segment_duration=4.0,
         ensemble="random",
-        sample_rate=16000, 
-        n_mels=64, 
-        n_fft=1024, 
+        sample_rate=16000,
+        n_mels=64,
+        n_fft=1024,
         hop_length=160,
         num_pitches=129,
     ):
@@ -413,36 +413,36 @@ class CocoChoraleDataset(Dataset):
         self.segment_length = int(self.sample_rate // self.hop_length * self.segment_duration)
         self.file_dir = os.path.join(file_dir, split)
         self.file_path = [os.path.join(self.file_dir, i) for i in os.listdir(path=self.file_dir) if i.startswith(f'{ensemble}_track')]
-    
-    
+
+
     def get_pitch_sequence(self, dataframe, start):
         end = start + self.segment_length
         pitch_sequence = []
-        
+
         for _, row in dataframe.iterrows():
             onset = row['onset']
             offset = row['offset']
             pitch = row['pitch']
-            
+
             # Check if the current note overlaps with the specified range
             if onset < end and offset > start:
                 # Determine the overlap range
                 overlap_start = max(onset, start)
                 overlap_end = min(offset, end)
                 pitch_sequence.extend([int(pitch)] * int(overlap_end - overlap_start))
-        
+
         return pitch_sequence
 
 
     def __len__(self):
         return len(self.file_path)
-    
-    
+
+
     def __getitem__(self, idx):
         audio_path = self.file_path[idx]
         mix_melspec = np.load(os.path.join(audio_path, 'mix_melspec.npy')) #, mmap_mode='r')
         stems_melspec = np.load(os.path.join(audio_path, 'stems_melspec.npy')) #, mmap_mode='r')
-        
+
         # Randomly sample segment
         start_frame = np.random.randint(0, mix_melspec.shape[-1] - self.segment_length + 1)
         mix_melspec = mix_melspec[:, :, start_frame:start_frame + self.segment_length]
@@ -455,19 +455,19 @@ class CocoChoraleDataset(Dataset):
             csv_file = os.path.join(csv_folder, csv_file)
             csv_df = pd.read_csv(csv_file)
             pitch_sequence = self.get_pitch_sequence(csv_df, start_frame)
-            pitch_annotation.append(pitch_sequence)  
-        
+            pitch_annotation.append(pitch_sequence)
+
         pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
         pitch_annotation = torch.cat(pitch_annotation, dim=0)
 
 
         return torch.tensor(mix_melspec), torch.tensor(stems_melspec), pitch_annotation
 
-    
+
     def process_file(self):
         for audio_path in tqdm(self.file_path):
             mix_audio = os.path.join(audio_path, 'mix.wav')
-        
+
             with open(os.path.join(audio_path, 'metadata.yaml'), 'r') as file:
                 stems = yaml.safe_load(file).get('instrument_name', {})
             stems_audio = [os.path.join(audio_path, 'stems_audio', f'{i+1}_{j}.wav') for i, j in stems.items()]
@@ -480,12 +480,12 @@ class CocoChoraleDataset(Dataset):
             mix_melspec = self.transform(mix_wav)
             stems_melspec = [self.transform(i) for i in stems_wav]
             stems_melspec = torch.cat(stems_melspec, dim=0)
-            
+
             # TODO: Store mix_melspec and stems_melspec
             np.save(os.path.join(audio_path, 'mix_melspec.npy'), mix_melspec)
             np.save(os.path.join(audio_path, 'stems_melspec.npy'), np.array(stems_melspec))
-            
-           
+
+
             # TODO: Store the csv file for pitch_annotation
             # # Get pitch annotation by reading pickle
             # csv_folder = audio_path.replace('main_dataset', 'note_expression')
@@ -494,15 +494,15 @@ class CocoChoraleDataset(Dataset):
             #     csv_file = os.path.join(csv_folder, csv_file)
             #     csv_df = pd.read_csv(csv_file, encoding='utf-8') #, errors='ignore')
             #     csv_data = csv_df.to_numpy()
-                
+
             #     npy_path = csv_file.replace('.csv', '.npy')
             #     np.save(npy_path, csv_data)
-            
-            
+
+
     # def __getitem__(self, idx): # Slower load data version
     #     audio_path = self.file_path[idx]
     #     mix_audio = os.path.join(audio_path, 'mix.wav')
-        
+
     #     with open(os.path.join(audio_path, 'metadata.yaml'), 'r') as file:
     #         stems = yaml.safe_load(file).get('instrument_name', {})
     #     stems_audio = [os.path.join(audio_path, 'stems_audio', f'{i+1}_{j}.wav') for i, j in stems.items()]
@@ -514,7 +514,7 @@ class CocoChoraleDataset(Dataset):
     #     # Apply MelSpectrogram
     #     mix_melspec = self.transform(mix_wav)
     #     stems_melspec = [self.transform(i) for i in stems_wav]
-        
+
     #     # Randomly sample segment
     #     start_frame = np.random.randint(0, mix_melspec.shape[-1] - self.segment_length + 1)
     #     mix_melspec = mix_melspec[:, :, start_frame:start_frame + self.segment_length]
@@ -527,16 +527,16 @@ class CocoChoraleDataset(Dataset):
     #         csv_file = os.path.join(csv_folder, csv_file)
     #         csv_df = pd.read_csv(csv_file)
     #         pitch_sequence = self.get_pitch_sequence(csv_df, start_frame)
-    #         pitch_annotation.append(pitch_sequence)  
-        
+    #         pitch_annotation.append(pitch_sequence)
+
     #     pitch_annotation = [torch.tensor(i).unsqueeze(0) if not isinstance(i, torch.Tensor) else i for i in pitch_annotation]
 
     #     stems_melspec = torch.cat(stems_melspec, dim=0)
     #     pitch_annotation = torch.cat(pitch_annotation, dim=0)
 
     #     return mix_melspec, stems_melspec, pitch_annotation
-    
-    
+
+
 class CocoChoraleDataModule(LightningDataModule):
     def __init__(
         self,
@@ -550,7 +550,7 @@ class CocoChoraleDataModule(LightningDataModule):
         *args,
         **kwargs
     ):
-        
+
         super(CocoChoraleDataModule, self).__init__(*args, **kwargs)
 
         self.root = root
@@ -566,11 +566,11 @@ class CocoChoraleDataModule(LightningDataModule):
         if stage == "fit" or stage is None:
             self.train_ds = CocoChoraleDataset(file_dir=self.root, split='train')
             self.val_ds = CocoChoraleDataset(file_dir=self.root, split='valid')
-        
+
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             self.test_ds = CocoChoraleDataset(file_dir=self.root, split='test')
-            
+
     def train_dataloader(self):
         """The train dataloader."""
         return self._data_loader(
@@ -588,7 +588,7 @@ class CocoChoraleDataModule(LightningDataModule):
         return self._data_loader(
             self.test_ds,
             shuffle=False)
-            
+
     def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
         return DataLoader(
             dataset,
@@ -598,7 +598,7 @@ class CocoChoraleDataModule(LightningDataModule):
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
         )
-    
+
     @property
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
@@ -608,7 +608,7 @@ class CocoChoraleDataModule(LightningDataModule):
     # def num_notes(self) -> int:
     #     self.setup(stage = 'fit')
     #     return len(self.train_ds.notes)
-    
+
     # @property
     # def num_instruments(self) -> int:
     #     self.setup(stage = 'fit')
@@ -617,20 +617,20 @@ class CocoChoraleDataModule(LightningDataModule):
 
 
 if __name__ == '__main__':
-    
+
     # check that all datasets load correctly
     comp_path = "/home/buffett/NAS_NTU"
     root = f"{comp_path}/MusicSlots/data/jsb_multi"
     num_frames = 10
     batch_size = 16
-    
+
     dm = MusicalObjectDataModule(
         root=root,
         batch_size=batch_size,
         num_workers=24,
     )
     dm.setup(stage='fit')
-    
+
     img_transforms = [transforms.Lambda(partial(spec_crop, height=128, width=num_frames))]
 
     train_transforms = transforms.Compose(img_transforms)
@@ -639,7 +639,7 @@ if __name__ == '__main__':
     dm.train_transforms = train_transforms
     dm.test_transforms = test_transforms
     dm.val_transforms = test_transforms
-    
+
     # mix_melspec, stems_melspec, pitch_annotation = dm.train_ds[0]
     # print(mix_melspec.shape, stems_melspec.shape, pitch_annotation.shape)
     # mix_melspec, stems_melspec, pitch_annotation = dm.val_ds[0]
@@ -647,14 +647,9 @@ if __name__ == '__main__':
     for i in range(100):
         x_m, x_s_i, pitch_annotation, instrument_label = dm.train_ds[i]
         print(x_m.shape, x_s_i.shape, pitch_annotation)#, instrument_label)
-        
+
     # for batch in dm.train_dataloader():
     #     x_m, x_s_i, pitch_annotation, instrument_label = batch
     #     x_s_i = torch.cat(x_s_i, dim=0)
     #     print(x_m.shape, x_s_i.shape, len(pitch_annotation), instrument_label)
     #     break
-    
-    
-        
-
-

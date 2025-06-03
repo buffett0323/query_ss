@@ -30,7 +30,7 @@ val_kwargs:
   npy_memmap: true
   mixture_stem: mixture
   use_own_query: false
-  allowed_stems: 
+  allowed_stems:
     [
       "bass",
       "drums",

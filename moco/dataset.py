@@ -67,7 +67,7 @@ class SegmentBPDataset(Dataset):
     ):
         # Load segment info list
         print(f"Loading {split} segment counter from {amp_name}, with {loading_mode} mode")
-        
+
         with open(f"info/{split}_segments{amp_name}.json", "r") as f:
             self.seg_counter = json.load(f)
             self.bp_listdir = list(self.seg_counter.keys())
@@ -81,7 +81,7 @@ class SegmentBPDataset(Dataset):
         self.eval_id = eval_id
         self.sample_rate = sample_rate
         self.loading_mode = loading_mode
-        
+
         # Augmentation
         self.pre_augment = Compose([
             SeqPerturb_Reverse(
@@ -101,8 +101,8 @@ class SegmentBPDataset(Dataset):
         ])
         self.post_augment = Compose([
             PitchShift(
-                min_semitones=semitone_range[0], 
-                max_semitones=semitone_range[1], 
+                min_semitones=semitone_range[0],
+                max_semitones=semitone_range[1],
                 p=p_ps
             ), # Pitch Shift # S3T settings: Pitch shift the sound up or down without changing the tempo.
             TimeStretch(
@@ -111,18 +111,18 @@ class SegmentBPDataset(Dataset):
                 p=p_tstr,
             ), # Time Stretch: Stretch the audio in time without changing the pitch.
         ])
-        
+
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.bp_listdir)
-    
-    
+
+
     def augment_func(self, x, sample_rate):
         x = self.pre_augment(x, sample_rate=sample_rate)
         x = self.post_augment(x, sample_rate=sample_rate)
         return x
-    
-    
+
+
     def load_segment(self, song_name):
         # TODO: Random Choose Segment
         # if self.eval_mode:
@@ -134,8 +134,8 @@ class SegmentBPDataset(Dataset):
         path = os.path.join(self.data_dir, song_name, f"{self.stem}_seg_{seg_idx}.npy")
         x = np.load(path, mmap_mode='r').copy()
         return x
-    
-    
+
+
     def load_pairs(self, song_name):
         segment_count = self.seg_counter[song_name]
         seg_idx1, seg_idx2 = random.sample(range(segment_count), 2)
@@ -149,7 +149,7 @@ class SegmentBPDataset(Dataset):
     def __getitem__(self, idx):
         # Load audio data from .npy
         song_name = self.bp_listdir[idx]
-        
+
         if not self.eval_mode:
             if self.loading_mode == "simple":
                 x = self.load_segment(song_name)
@@ -157,17 +157,17 @@ class SegmentBPDataset(Dataset):
                 x_j = self.augment_func(x, sample_rate=self.sample_rate)
                 return torch.from_numpy(x_i), torch.from_numpy(x_j), \
                         self.label_dict[song_name], song_name
-            
+
             elif self.loading_mode == "pairs":
                 x_pair1, x_pair2 = self.load_pairs(song_name)
                 x_i = self.augment_func(x_pair1, sample_rate=self.sample_rate)
                 x_j = self.augment_func(x_pair1, sample_rate=self.sample_rate)
                 return torch.from_numpy(x_pair1), torch.from_numpy(x_pair2), \
                         torch.from_numpy(x_i), torch.from_numpy(x_j)
-                        
+
             else:
                 raise ValueError(f"Invalid loading mode: {self.loading_mode}")
-        
+
         else:
             # Load audio data from .npy from index 0
             x = self.load_segment(song_name)
@@ -176,19 +176,19 @@ class SegmentBPDataset(Dataset):
 
 
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MoCoV2_BP")
-    
+
     config = yaml_config_hook("config/moco_config.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
-    
+
     args = parser.parse_args()
     os.makedirs(args.lmdb_dir, exist_ok=True)
-    
+
     # if args.use_lmdb:
     #     create_lmdb(args.seg_dir, args.lmdb_dir)
-    
+
     train_dataset = SegmentBPDataset(
         data_dir=args.seg_dir,
         split="train",
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         tm_fade=args.tm_fade,
         amp_name=args.amp_name,
     )
-    
+
     print("train_dataset length:", len(train_dataset))
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         persistent_workers=args.persistent_workers,
         prefetch_factor=args.prefetch_factor,
     )
-    
+
     import time
     time_start = time.time()
     for i, (x_i, x_j, label, song_name) in enumerate(tqdm(train_loader)):
@@ -229,5 +229,5 @@ if __name__ == "__main__":
             break
     time_end = time.time()
     print("time cost:", time_end - time_start)
-    
+
     # print(train_loader.dataset[0])

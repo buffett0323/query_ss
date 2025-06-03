@@ -38,20 +38,20 @@ def process_file(js):
             # Save as .npy file
             segment_folder = os.path.join(output_path, f"{name}_{counter}")
             os.makedirs(segment_folder, exist_ok=True)
-            
+
             # Save the mix
             torchaudio.save(f"{segment_folder}/mix.wav", mix_seg, SR, format="wav")
-                
+
             # Mix bass and other stems together
             bass_seg = torchaudio.load(os.path.join(htdemucs_folder, name, "bass.wav"))[0][:, start_sample:end_sample]
             other_seg = torchaudio.load(os.path.join(htdemucs_folder, name, "other.wav"))[0][:, start_sample:end_sample]
             drums_seg = torchaudio.load(os.path.join(htdemucs_folder, name, "drums.wav"))[0][:, start_sample:end_sample]
-            
-            
+
+
             torchaudio.save(f"{segment_folder}/bass.wav", bass_seg, SR, format="wav")
             torchaudio.save(f"{segment_folder}/other.wav", other_seg, SR, format="wav")
             torchaudio.save(f"{segment_folder}/drums.wav", drums_seg, SR, format="wav")
-            
+
             bass_other_mix = bass_seg + other_seg
             torchaudio.save(f"{segment_folder}/bass_other.wav", bass_other_mix, SR, format="wav")
 
@@ -59,14 +59,14 @@ def process_file(js):
 if __name__ == '__main__':
     # Get list of all JSON files
     json_files = os.listdir(json_folder)[:10]
-    
+
     # Create a pool of workers
     num_processes = cpu_count() - 2  # Leave one CPU free
     pool = Pool(processes=num_processes)
-    
+
     # Process files in parallel with progress bar
     list(tqdm(pool.imap(process_file, json_files), total=len(json_files)))
-    
+
     # Close the pool
     pool.close()
     pool.join()

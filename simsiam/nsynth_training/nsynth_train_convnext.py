@@ -128,7 +128,7 @@ def main():
 
     # training loop
     os.makedirs(args.model_dict_save_path, exist_ok=True)
-    
+
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
         train_loss = train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm)
@@ -141,11 +141,11 @@ def main():
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-            }, 
-                filename=f'checkpoint_{epoch:04d}.pth.tar', 
+            },
+                filename=f'checkpoint_{epoch:04d}.pth.tar',
                 save_dir=args.model_dict_save_path
             )
-            
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -189,8 +189,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms,
             if args.log_wandb:
                 step = epoch * len(train_loader) + i
                 wandb.log({
-                    "train_loss_step": loss.item(), 
-                    "avg_std_train": avg_std, 
+                    "train_loss_step": loss.item(),
+                    "avg_std_train": avg_std,
                     "step": step
                 })
 

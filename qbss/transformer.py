@@ -76,8 +76,8 @@ class Transformer(nn.Module):
         )
         encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
         self.encoder = TransformerEncoder(
-            encoder_layer, 
-            num_encoder_layers, 
+            encoder_layer,
+            num_encoder_layers,
             encoder_norm
         )
 
@@ -101,8 +101,8 @@ class Transformer(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-                
-                
+
+
     def forward(self, src, mask, query_embed, pos_embed, classes, obj_feature):
         bs, c, h, w = src.shape
         src = src.flatten(2).permute(2, 0, 1)
@@ -111,11 +111,11 @@ class Transformer(nn.Module):
         if mask is not None:
             mask = mask.flatten(1)
         tgt = torch.zeros_like(query_embed) # torch.Size([Num_Query, BS, 512])
-        
+
         for i in range(bs): # In Batch Size
             cur_cls = classes[i] #.item()
             tgt[0, i, :] += obj_feature[i] # tgt[cur_cls, i, :] += obj_feature[i]
-            
+
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         hs = self.decoder(
             tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, query_pos=query_embed
@@ -421,25 +421,25 @@ def _get_activation_fn(activation):
 class TransformerPredictor(nn.Module):
     #this is the main model for mask generation
     def __init__(
-        self, 
-        in_channels, 
-        hidden_dim, 
-        num_queries, 
-        nheads, 
-        dropout, 
-        dim_feedforward, 
-        enc_layers, 
-        dec_layers, 
-        pre_norm, 
-        mask_dim, 
-        deep_supervision, 
+        self,
+        in_channels,
+        hidden_dim,
+        num_queries,
+        nheads,
+        dropout,
+        dim_feedforward,
+        enc_layers,
+        dec_layers,
+        pre_norm,
+        mask_dim,
+        deep_supervision,
         enforce_input_project,
     ):
         """
         Args:
             in_channels: channels of the input features
-            int hidden_dim: Transformer feature dimension 
-            
+            int hidden_dim: Transformer feature dimension
+
             int num_queries: number of queries
             int nheads: number of heads
             float dropout: dropout in Transformer
@@ -451,7 +451,7 @@ class TransformerPredictor(nn.Module):
             int mask_dim: mask feature dimension
             bool enforce_input_project: add input project 1x1 conv even if input
                 channels and hidden dim is identical
-            
+
         """
         super(TransformerPredictor, self).__init__()
 
@@ -487,7 +487,7 @@ class TransformerPredictor(nn.Module):
 
         # output FFNs
         self.mask_embed = MLP(hidden_dim, hidden_dim, mask_dim, 3)
-        
+
         self.obj_dim = 768
         self.upobj = torch.nn.Conv1d(self.obj_dim, in_channels, kernel_size=1)
 
@@ -500,7 +500,7 @@ class TransformerPredictor(nn.Module):
         obj_feature = self.upobj(obj_feature).permute(1,0)
         hs, memory = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos, classes, obj_feature)
         out = {}
-        
+
         mask_embed = self.mask_embed(hs)
 
         outputs_seg_masks = torch.einsum("lbqc,bchw->lbqhw", mask_embed, mask_features) # torch.Size([4, BS, 1, 64]) torch.Size([BS, 64, 1025, 576])

@@ -43,12 +43,12 @@ audio = audio.unsqueeze(0)
 
 
 f0 = torchcrepe.predict(
-    audio, 
-    target_sample_rate, 
+    audio,
+    target_sample_rate,
     hop_length,
-    fmin=fmin, 
-    fmax=fmax, 
-    model="full", 
+    fmin=fmin,
+    fmax=fmax,
+    model="full",
     batch_size=batch_size,
 ).squeeze(0).numpy()  # Convert to NumPy
 
@@ -67,4 +67,3 @@ plt.colorbar(label="dB")
 plt.title("Spectrogram with F0 Overlay")
 plt.legend()
 plt.savefig('results/crepe.png')
-

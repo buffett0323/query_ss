@@ -38,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('--config', dest='config_path',
                         default='dit/config.yaml', type=str)
     args = parser.parse_args()
-    
+
     with open(args.config_path, 'r') as file:
         try:
             config = yaml.safe_load(file)
@@ -57,8 +57,8 @@ if __name__ == "__main__":
     oned_embedder = OneDEmbedder(
         32, 32
     ).to(device)
-    
-    
+
+
     x = torch.randn(4, 1, 64, 80).to(device)
     t = torch.randint(0, 1000, (4,)).to(device)
     out = model(x, t, None)
@@ -66,20 +66,20 @@ if __name__ == "__main__":
     print(model)
     # # 0. Time Embedding
     # t = torch.randint(0, 1000, (4,)).to(device)
-    
+
     # # Conditions
     # spk = torch.randn(4, 2048).to(device)
     # # bp_notes = torch.randn(4, 88, 251).to(device)
-    
+
     # # 1. 8-layer WN Output
     # enc_output = torch.randn(4, 80, 200).to(device)
-    
+
     # # 2. Masked Input Spectrogram
     # masked_prompt = torch.randn(4, 80, 200).to(device)
-   
+
     # # 3. Noisy latent
     # z = torch.randn(4, 80, 200).to(device) # B, D, T
-    
+
     # stacked_input = torch.cat([enc_output, masked_prompt, z], dim=2)
 
     # # 4. OneDEmbedder

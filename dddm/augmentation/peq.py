@@ -58,11 +58,11 @@ class ParametricEqualizer(nn.Module):
         """
         bsize, = q.shape
         w0 = 2 * np.pi * cutoff / self.sr
-        
+
         alpha = np.sin(w0) / 2 / q
         cos_w0 = torch.tensor(
             [np.cos(w0)] * bsize, dtype=torch.float32, device=q.device)
-     
+
         return self.biquad(
             a=torch.stack([1 + alpha, -2 * cos_w0, 1 - alpha], dim=-1),
             b=torch.stack([(1 + cos_w0) / 2, -1 - cos_w0, (1 + cos_w0) / 2], dim=-1))

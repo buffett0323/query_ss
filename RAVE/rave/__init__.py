@@ -13,7 +13,7 @@ gin.add_config_file_search_path(BASE_PATH.joinpath('configs', 'augmentations'))
 
 
 def __safe_configurable(name):
-    try: 
+    try:
         setattr(cc, name, gin.get_configurable(f"cc.{name}"))
     except ValueError:
         setattr(cc, name, gin.external_configurable(getattr(cc, name), module="cc"))

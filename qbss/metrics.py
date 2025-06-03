@@ -11,7 +11,7 @@ from mir_eval.separation import bss_eval_sources
 from torchmetrics.functional.audio.snr import signal_noise_ratio
 
 def cal_metrics(gt_stft, S_k):
-    
+
     # Init meters
     # sdr_mix_meter = AverageMeter()
     sdr_meter = AverageMeter()
@@ -23,7 +23,7 @@ def cal_metrics(gt_stft, S_k):
     sdr_list = []
     sir_list = []
     sar_list = []
-    
+
     for i in range(gt_stft.shape[0]):
         gt_stft[i] = gt_stft[i] + 1e-10
         S_k[i] = S_k[i] + 1e-10
@@ -31,12 +31,12 @@ def cal_metrics(gt_stft, S_k):
         sdr_list.append(sdr)
         sir_list.append(sir)
         sar_list.append(sar)
-        
+
         # sdr_mix_meter.update(sdr_mix.mean())
         sdr_meter.update(sdr.mean())
         sir_meter.update(sir.mean())
         sar_meter.update(sar.mean())
-    
+
     return [#sdr_mix_meter.average(),
             sdr_meter.average(),
             sir_meter.average(),
@@ -50,19 +50,19 @@ def safe_signal_noise_ratio(
     return torch.nan_to_num(
         signal_noise_ratio(preds, target, zero_mean=zero_mean), nan=torch.nan, posinf=100.0, neginf=-100.0
     )
-    
-    
+
+
 class MetricHandler(nn.Module):
     def __init__(self, stems: List[str]):
         super(MetricHandler, self).__init__()
         self.stems = stems
         self.metrics = {stem: [] for stem in self.stems}
-    
+
     def calculate_snr(self, preds: torch.Tensor, target: torch.Tensor, stem_names: List[str], zero_mean: bool = False):
         for i, stem in enumerate(stem_names):
             snr_value = safe_signal_noise_ratio(preds[i], target[i], zero_mean=zero_mean)
             self.metrics[stem].append(snr_value)
-    
+
     def get_mean_median(self, get_mean: bool = False) -> Dict[str, Dict[str, torch.Tensor]]:
         mean_median_results = {}
         for stem, values in self.metrics.items():
@@ -87,8 +87,8 @@ class MetricHandler(nn.Module):
 
     def reset(self):
         self.metrics = {stem: [] for stem in self.stems}
-    
-    
+
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -130,15 +130,15 @@ class AverageMeter(object):
             return 0.
         else:
             return self.avg.tolist()
-        
-        
+
+
 
 if __name__ == "__main__":
     # Example usage:
     stems = ['vocals', 'drums', 'bass', 'other']
 
     # Assuming you have 32 (pred, target) pairs and a list of corresponding stem names
-    stem_names = ['vocals', 'drums', 'drums', 'vocals', 'bass', 'other', 'vocals', 'drums', 'bass', 'bass', 'vocals', 'drums', 
+    stem_names = ['vocals', 'drums', 'drums', 'vocals', 'bass', 'other', 'vocals', 'drums', 'bass', 'bass', 'vocals', 'drums',
                 'vocals', 'drums', 'drums', 'bass', 'vocals', 'other', 'bass', 'drums', 'vocals', 'bass', 'drums', 'vocals',
                 'drums', 'vocals', 'other', 'bass', 'vocals', 'drums', 'vocals', 'bass']
 

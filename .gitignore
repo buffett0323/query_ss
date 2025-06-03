@@ -21,8 +21,8 @@ __pycache__/
 *.pyc
 *.DS_Store
 
-pitch_store.pkl        
-stem_store.pkl       
+pitch_store.pkl
+stem_store.pkl
 timbre_store.pkl
 
 dddm/logs/

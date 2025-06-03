@@ -67,11 +67,11 @@ class BaseTransform(Serializable, metaclass=CombinedMeta):
         Unmark all parameters as frozen, i.e. let them be randomized for each call.
         """
         self.are_parameters_frozen = False
-        
+
     @classmethod
     def get_class_fullname(cls) -> str:
         return get_shortest_class_fullname(cls)
-        
+
     @classmethod
     def is_serializable(cls) -> bool:
         return True
@@ -141,10 +141,10 @@ class BaseWaveformTransform(BaseTransform):
 
     def randomize_parameters(self, samples: NDArray[np.float32], sample_rate: int):
         self.parameters["should_apply"] = random.random() < self.p
-        
+
     @classmethod
     def get_class_fullname(cls) -> str:
-        return get_shortest_class_fullname(cls)        
+        return get_shortest_class_fullname(cls)
 
     def to_dict_private(self) -> dict[str, Any]:
         state = {"__class_fullname__": self.get_class_fullname()}
@@ -193,10 +193,10 @@ class BaseSpectrogramTransform(BaseTransform):
 
     def randomize_parameters(self, magnitude_spectrogram):
         self.parameters["should_apply"] = random.random() < self.p
-        
+
     @classmethod
     def get_class_fullname(cls) -> str:
-        return get_shortest_class_fullname(cls)        
+        return get_shortest_class_fullname(cls)
 
     def to_dict_private(self) -> dict[str, Any]:
         state = {"__class_fullname__": self.get_class_fullname()}

@@ -14,7 +14,7 @@ def npy_to_mp3(npy_file, output_mp3, sample_rate=44100):
     """
     # Load the numpy array
     audio_data = np.load(npy_file)
-    
+
     # Ensure it's a float32 format (soundfile expects this format)
     if audio_data.dtype != np.float32:
         audio_data = audio_data.astype(np.float32)
@@ -34,6 +34,6 @@ if __name__ == "__main__":
     parser.add_argument("npy_file", type=str, help="Path to the .npy file")
     parser.add_argument("--output_mp3", type=str, help="Path to the output MP3 file")
     parser.add_argument("--sample_rate", type=int, default=16000, help="Sample rate (default: 44100 Hz)")
-    
+
     args = parser.parse_args()
     npy_to_mp3(args.npy_file, args.output_mp3, args.sample_rate)

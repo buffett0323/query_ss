@@ -6,7 +6,7 @@ from multiprocessing import Pool, cpu_count
 
 # Directory Paths
 seconds = 8
-input_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_npy"  
+input_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_npy"
 output_dir = f"/mnt/gestalt/home/ddmanddman/beatport_analyze/verse_audio_16000_npy"
 sources = ["vocals.npy"] #["bass.npy", "drums.npy", "mix.npy", "other.npy", "vocals.npy"]
 
@@ -35,13 +35,13 @@ def process_file(filename):
 
         if not os.path.exists(filepath):  # Skip if file doesn't exist
             continue
-        
+
         # Load .npy file
         audio_data = np.load(filepath)  # Shape: (samples, ) or (samples, channels)
-        
+
         # Resample
         resampled_audio = resample_audio(audio_data)
-        
+
         if resampled_audio.shape[0] < slice_duration:
             print(f"Skipping {filename} because of insufficient length {resampled_audio.shape[0]}")
             continue

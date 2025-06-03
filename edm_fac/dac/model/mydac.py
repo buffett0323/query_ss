@@ -43,8 +43,8 @@ class TransformerClassifier(nn.Module):
             x = torch.mean(x, dim=1)  # [B, 64]
         outs = [head(x) for head in self.heads]
         return outs
-    
-    
+
+
 class ResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1, causal: bool = False):
         super().__init__()
@@ -127,8 +127,8 @@ class SnakeBeta(nn.Module):
         x = x + (1.0 / (beta + self.no_div_by_zero)) * pow(sin(x * alpha), 2)
 
         return x
-    
-    
+
+
 class CNNLSTM(nn.Module):
     def __init__(self, indim, outdim, head, global_pred=False):
         super().__init__()
@@ -149,7 +149,7 @@ class CNNLSTM(nn.Module):
             x = torch.mean(x, dim=1, keepdim=False)
         outs = [head(x) for head in self.heads]
         return outs
-    
+
 
 class EncoderBlock(nn.Module):
     def __init__(self, dim: int = 16, stride: int = 1, causal: bool = False):
@@ -339,14 +339,14 @@ class MyDAC(BaseModel, CodecMixin):
         )
         self.sample_rate = sample_rate
         self.apply(init_weights)
-        
+
         # predictors
         # self.timbre_predictor = TransformerClassifier(latent_dim, timbre_classes, head=1, global_pred=True)
         # self.pitch_predictor = TransformerClassifier(latent_dim, pitch_nums, head=1, global_pred=False)
         self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
         self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
-        
-        
+
+
         # conditional LayerNorm
         self.style_linear = nn.Linear(latent_dim, latent_dim * 2)
         self.style_linear.bias.data[:latent_dim] = 1
@@ -365,7 +365,7 @@ class MyDAC(BaseModel, CodecMixin):
 
         return audio_data
 
-    
+
     def encode(
         self,
         audio_data: torch.Tensor,
@@ -390,49 +390,49 @@ class MyDAC(BaseModel, CodecMixin):
         sample_rate: int = None,
         n_quantizers: int = None,
     ):
-        
+
         length = audio_data.shape[-1]
         # audio_data = self.preprocess(audio_data, sample_rate)
         content_match = self.preprocess(content_match, sample_rate)
         timbre_match = self.preprocess(timbre_match, sample_rate)
-        
+
         # z, codes, latents, commitment_loss, codebook_loss = self.encode(
         #     audio_data, n_quantizers
         # )
-        
+
         # Perturbation's encoders
         content_match_z = self.encoder(content_match)
         timbre_match_z = self.encoder(timbre_match)
-        
+
 
         # Content match
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
             content_match_z, n_quantizers
         )
-        
+
         # Timbre match
         timbre_match_z = timbre_match_z.transpose(1, 2)
         timbre_match_z = self.transformer(timbre_match_z, None, None)
         timbre_match_z = timbre_match_z.transpose(1, 2)
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
-        
-        
+
+
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
-        
-        
+
+
         # Predictors
         pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_pitch = self.pitch_predictor(z)[0]
-        
+
 
         # Apply conditional normalization
         z = z.transpose(1, 2)
-        z = self.style_norm(z) 
+        z = self.style_norm(z)
         z = z.transpose(1, 2)
         z = z * gamma + beta
-        
+
 
         x = self.decode(z)
         return {

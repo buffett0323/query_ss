@@ -128,7 +128,7 @@ def main():
 
     # training loop
     os.makedirs(args.model_dict_save_path, exist_ok=True)
-    
+
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, init_lr, epoch, args)
         train_loss = train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm)
@@ -141,11 +141,11 @@ def main():
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-            }, 
-                filename=f'checkpoint_{epoch:04d}.pth.tar', 
+            },
+                filename=f'checkpoint_{epoch:04d}.pth.tar',
                 save_dir=args.model_dict_save_path
             )
-            
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms, pre_norm):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -161,7 +161,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, tfms,
 
         x_i = x_i.cuda(non_blocking=True)
         x_j = x_j.cuda(non_blocking=True)
-        
+
         # Mel-spec transform and normalize
         x_i = (to_spec(x_i) + torch.finfo().eps).log()
         x_j = (to_spec(x_j) + torch.finfo().eps).log()

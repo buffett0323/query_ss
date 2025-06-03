@@ -34,7 +34,7 @@ class MoCo(nn.Module):
         self.m = m
         self.T = T
         print(f"Model dim: {dim}")
-        
+
         # create the encoders
         # num_classes is the output fc dimension
         if args.arch == "ConvNeXt":
@@ -52,7 +52,7 @@ class MoCo(nn.Module):
                 dims = [192, 384, 768, 1536]
             else:
                 raise ValueError(f"Invalid model: {args.convnext_model}")
-            
+
             self.encoder_q = ConvNeXt(
                 in_chans=args.channels,
                 num_classes=dim,
@@ -67,21 +67,21 @@ class MoCo(nn.Module):
             )
         else:
             raise ValueError(f"Invalid model: {args.arch}")
-        
-        
+
+
         if mlp:  # hack: brute-force replacement
             dim_mlp = self.encoder_q.head.weight.shape[1] # 1024
             self.encoder_q.head = nn.Sequential(
-                nn.Linear(dim_mlp, dim_mlp), 
-                nn.ReLU(), 
+                nn.Linear(dim_mlp, dim_mlp),
+                nn.ReLU(),
                 self.encoder_q.head
             )
             self.encoder_k.head = nn.Sequential(
-                nn.Linear(dim_mlp, dim_mlp), 
-                nn.ReLU(), 
+                nn.Linear(dim_mlp, dim_mlp),
+                nn.ReLU(),
                 self.encoder_k.head
             )
-        
+
         for param_q, param_k in zip(
             self.encoder_q.parameters(), self.encoder_k.parameters()
         ):
@@ -234,20 +234,20 @@ def concat_all_gather(tensor):
 if __name__ == "__main__":
     from utils import yaml_config_hook
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="MoCoV2_BP")
-    
+
     config = yaml_config_hook("config/moco_config.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
-    
+
     args = parser.parse_args()
-    
+
     model = MoCo(
-        args, 
-        dim=args.moco_dim, 
-        K=args.moco_K, 
-        m=args.moco_m, 
-        T=args.moco_T, 
+        args,
+        dim=args.moco_dim,
+        K=args.moco_K,
+        m=args.moco_m,
+        T=args.moco_T,
         mlp=args.moco_mlp
     )

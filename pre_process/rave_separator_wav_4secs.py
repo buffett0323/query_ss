@@ -11,21 +11,21 @@ from multiprocessing import Pool, cpu_count
 def parse_4_secs(args):
     wav_file, output_path, track_name = args
     data, sr = sf.read(wav_file)
-    
+
     # Parse 4 seconds
     if data.shape[0] > 44100 * 4:
         data = data[:44100 * 4]
     else:
         print("data.shape:", data.shape, "sr:", sr)
-    
+
     # Convert to mono
     data = data.mean(axis=1)
-    
+
     # Output path
     write_path = os.path.join(output_path, f"{track_name}.wav")
     sf.write(write_path, data, sr)
-    
-    
+
+
 
 # def npy_to_wav(args):
 #     npy_file, output_path, file_name = args
@@ -49,11 +49,11 @@ if __name__ == "__main__":
     # Load json file
     with open("../moco/info/train_seg_counter_amp_05.json", "r") as f:
         data = json.load(f)
-    
+
     # Get the keys of the dictionary
     keys = list(data.keys())
     print("len(keys):", len(keys))
-    
+
 
     # Output paths
     path = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_wav"
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     all_files = [os.path.join(path, f, f"{track}.wav") for f in tqdm(keys)]
     print("all wav files length:", len(all_files))
 
-    
+
     # Shuffle and split into train/test (90/10 split)
     random.shuffle(all_files)
     split_idx = int(len(all_files) * 0.9)
@@ -87,8 +87,8 @@ if __name__ == "__main__":
     print("Processing test data...")
     test_args = [(f, test_path, f.split("/")[-2]) for f in test_files]
     list(tqdm(pool.imap(parse_4_secs, test_args), total=len(test_args)))
-    
-    
+
+
     # Copy files to train folder using multiprocessing
     print("Processing training data...")
     train_args = [(f, train_path, f.split("/")[-2]) for f in train_files]

@@ -12,7 +12,7 @@ from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm
 
 import commons
-from commons import init_weights, get_padding 
+from commons import init_weights, get_padding
 from torch.cuda.amp import autocast
 
 LRELU_SLOPE = 0.1
@@ -21,12 +21,12 @@ DEFAULT_MIN_BIN_WIDTH = 1e-3
 DEFAULT_MIN_BIN_HEIGHT = 1e-3
 DEFAULT_MIN_DERIVATIVE = 1e-3
 
-def piecewise_rational_quadratic_transform(inputs, 
+def piecewise_rational_quadratic_transform(inputs,
                                            unnormalized_widths,
                                            unnormalized_heights,
                                            unnormalized_derivatives,
                                            inverse=False,
-                                           tails=None, 
+                                           tails=None,
                                            tail_bound=1.,
                                            min_bin_width=DEFAULT_MIN_BIN_WIDTH,
                                            min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
@@ -203,7 +203,7 @@ def rational_quadratic_spline(inputs,
         logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
 
         return outputs, logabsdet
-    
+
 class LayerNorm(nn.Module):
     def __init__(self, channels, eps=1e-5):
         super().__init__()

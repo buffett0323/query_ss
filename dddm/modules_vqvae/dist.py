@@ -105,4 +105,3 @@ def _broadcast(tensor, src):
 
 def _init_process_group(backend, init_method):
     return dist.init_process_group(backend, init_method)
-

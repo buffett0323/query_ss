@@ -20,12 +20,12 @@ def process_file(file_name):
         sample_rate=SAMPLE_RATE,
         amp_thres=AMP_THRES
     )
-    
-    
+
+
     if not result:
         return file_name, {}
-    
-    
+
+
     result_dict = {}
     result_dict["peak_num"] = len(result)
     for i, (peak_idx, amp, time_sec) in enumerate(result):
@@ -35,14 +35,14 @@ def process_file(file_name):
             "start_sec": float(time_sec)
         }
         # [int(peak_idx), float(amp), float(time_sec)]
-    
+
     return file_name, result_dict
-    
-    
+
+
 
 if __name__ == "__main__":
     data_dir = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_bass_other_16000_npy"
-    
+
     with open("../info/chorus_audio_16000_npy_track_list.txt", "r") as f:
         track_list = [line.strip() for line in f.readlines()]
 
@@ -54,13 +54,13 @@ if __name__ == "__main__":
             total=len(track_list),
             desc="Processing files"
         ))
-    
+
     # Combine all peak info dictionaries
     peak_info_dict = {}
     for (file_name, peak_dict) in tqdm(results, desc="Write peak info into dict"):
         if peak_dict:
             peak_info_dict[file_name] = peak_dict
-    
+
     print(f"Having {len(peak_info_dict.keys())} peaks found under {AMP_THRES} amplitude threshold")
 
     # Save the peak info dictionary

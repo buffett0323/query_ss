@@ -156,7 +156,7 @@ class MultiScaleSpectralDiscriminator(nn.Module):
 class MultiScaleSpectralDiscriminator1d(nn.Module):
 
     def __init__(self, scales: Sequence[int],
-                 convnet: Callable[[int], nn.Module], 
+                 convnet: Callable[[int], nn.Module],
                  n_channels: int = 1) -> None:
         super().__init__()
         self.specs = nn.ModuleList([spectrogram(n) for n in scales])

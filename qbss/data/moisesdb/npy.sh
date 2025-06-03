@@ -1,7 +1,7 @@
 # python npyify.py convert_to_npy --data_root /mnt/gestalt/home/ddmanddman/moisesdb/moisesdb_v0.1 \
 #         --output_root /mnt/gestalt/home/ddmanddman/moisesdb/npy2
 # python npyify.py make_others --data_root /mnt/gestalt/home/ddmanddman/moisesdb/npy2
-# python npyify.py consolidate_metadata --data_root /mnt/gestalt/home/ddmanddman/moisesdb/moisesdb_v0.1 
+# python npyify.py consolidate_metadata --data_root /mnt/gestalt/home/ddmanddman/moisesdb/moisesdb_v0.1
 # python npyify.py make_split --metadata_path /mnt/gestalt/home/ddmanddman/moisesdb/metadata.csv
 # python npyify.py consolidate_stems --data_root /mnt/gestalt/home/ddmanddman/moisesdb/npy2
 # python npyify.py get_dbfs_by_chunk --data_root /mnt/gestalt/home/ddmanddman/moisesdb/npy2 \

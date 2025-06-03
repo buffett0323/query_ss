@@ -23,7 +23,7 @@ from .network import HarmoF0
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 class PitchTracker():
-    def __init__(self, 
+    def __init__(self,
         checkpoint_path = None,
         fmin = 27.5,
         sample_rate = 16000,
@@ -31,9 +31,9 @@ class PitchTracker():
         frame_len = 1024,
         frames_per_step = 1000,
         post_processing = False,
-        high_threshold=0.8, 
-        low_threshold=0.1, 
-        n_beam = 5, 
+        high_threshold=0.8,
+        low_threshold=0.1,
+        n_beam = 5,
         min_pitch_dur = 0.1,
         freq_bins_in = 88*4,
         freq_bins_out = 88*4,
@@ -78,12 +78,12 @@ class PitchTracker():
     def visit(self, activation_map, low_map, out_map, t, pitch, visited_set, sub_set, n_beam):
         if(t, pitch) in visited_set or low_map[t, pitch] < 1:
             return
-        out_map[t, pitch] = activation_map[t, pitch] 
+        out_map[t, pitch] = activation_map[t, pitch]
         visited_set.add((t, pitch))
         sub_set.add((t, pitch))
 
         low = max(0, pitch - n_beam)
-        high = min(low_map.shape[1], pitch + n_beam) 
+        high = min(low_map.shape[1], pitch + n_beam)
         # visit left
         if t > 0:
             for p in range(low, high):
@@ -120,10 +120,10 @@ class PitchTracker():
                         out_map[t, pitch] = 0
         return out_map
 
-        
+
 
     def pred(self, waveform, sr):
-        # inputs: 
+        # inputs:
         #     waveform:
         #     sr: 16000
         # returns:
@@ -134,7 +134,7 @@ class PitchTracker():
             waveform = torch.tensor(waveform)
         if(len(waveform.size()) == 1):
             waveform = waveform[None, :]
-        
+
         if(sr != self.sample_rate):
             print("convert sr from %d to %d"%(sr, self.sample_rate))
             resampler = torchaudio.transforms.Resample(sr, self.sample_rate).to(self.device)
@@ -201,7 +201,7 @@ class PitchTracker():
             wav_path_list.append(audio_path)
 
         for i, wav_path in enumerate(wav_path_list):
-            
+
             result_dir, basename = os.path.split(wav_path)
             if(output_dir != None):
                 result_dir = str(output_dir)
@@ -257,6 +257,5 @@ class PitchTracker():
 
         hz = fmin * (2**(indexs/bins_per_octave))
         hz = hz * mask # set freq to 0 if activate val below threshold
-        
-        return hz, max_onehot[0]
 
+        return hz, max_onehot[0]

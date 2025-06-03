@@ -1,4 +1,4 @@
-import os 
+import os
 import argparse
 import torch
 import warnings
@@ -35,22 +35,22 @@ if __name__ == "__main__":
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
     print("-" * 100)
-    
+
     # Get dataset and data module
     dm = NSynthDataModule(args=args)
     dm.setup(stage="test") #dm.setup()
 
     # Load best model
     model = SimCLR_pl.load_from_checkpoint(
-        "model_dict/best_model-v6.ckpt", 
+        "model_dict/best_model-v6.ckpt",
         args=args, device=device,
     )
     model.eval()
     model.to(device)
-    
-    
-    
-        
+
+
+
+
     # Test whether the model can read the data and inference
     all_outputs = []
     with torch.no_grad():
@@ -59,8 +59,7 @@ if __name__ == "__main__":
                 inputs = batch[0]
             else:
                 inputs = batch
-                
+
             inputs = inputs.to(device)
             outputs = model(inputs, return_embedding=True)
             all_outputs.append(outputs)
-    

@@ -35,7 +35,7 @@ if hasattr(torch, "bfloat16"):
 else:
     HALF_PRECISION_DTYPES = (torch.float16,)
 
-    
+
 
 
 class Query_HTDemucs(nn.Module):
@@ -137,13 +137,13 @@ class Query_HTDemucs(nn.Module):
         self.end_iters = end_iters
         self.freq_emb = None
         assert wiener_iters == end_iters
-        
+
         self.encoder = nn.ModuleList()
         self.decoder = nn.ModuleList()
 
         self.tencoder = nn.ModuleList()
         self.tdecoder = nn.ModuleList()
-        
+
         chin = audio_channels
         chin_z = chin  # number of channels for the freq branch
         if self.cac:
@@ -313,24 +313,24 @@ class Query_HTDemucs(nn.Module):
             )
         else:
             self.crosstransformer = None
-            
-         
+
+
         # Added
         self.passt = Passt(
             original_fs=samplerate, # 44100
             passt_fs=44100, #44100,
         )
-        
+
         self.x_condition = FiLM(
             cond_embedding_dim=768, #768,
-            channels=384, #512, 
-            additive=True, 
+            channels=384, #512,
+            additive=True,
             multiplicative=True
         )
         self.xt_condition = FiLM_3D(
             cond_embedding_dim=768, #768,
-            input_channels=384, #512, 
-            additive=True, 
+            input_channels=384, #512,
+            additive=True,
             multiplicative=True
         )
 
@@ -341,10 +341,10 @@ class Query_HTDemucs(nn.Module):
         x = self.x_condition(x, query)
         xt = self.xt_condition(xt, query)
         return x, xt
-        
-    
-        
-    
+
+
+
+
     def _spec(self, x):
         hl = self.hop_length
         nfft = self.nfft
@@ -359,8 +359,8 @@ class Query_HTDemucs(nn.Module):
         assert z.shape[-1] == le + 4, (z.shape, x.shape, le)
         z = z[..., 2: 2 + le]
         return z
-    
-    
+
+
     def _ispec(self, z, length=None, scale=0):
         hl = self.hop_length // (4**scale)
         z = F.pad(z, (0, 0, 0, 1))
@@ -382,7 +382,7 @@ class Query_HTDemucs(nn.Module):
         else:
             m = z.abs()
         return m
-    
+
     def _mask(self, z, m):
         # Apply masking given the mixture spectrogram `z` and the estimated mask `m`.
         # If `cac` is True, `m` is actually a full spectrogram and `z` is ignored.
@@ -430,7 +430,7 @@ class Query_HTDemucs(nn.Module):
             out = out[:, :-1]
         assert list(out.shape) == [B, S, C, Fq, T]
         return out.to(init)
-    
+
 
     def valid_length(self, length: int):
         """
@@ -465,19 +465,19 @@ class Query_HTDemucs(nn.Module):
                     batch.sources.target.audio = F.pad(
                         batch.sources.target.audio, (0, training_length - length_pre_pad)
                     )
-                    
+
         z = self._spec(mix)
         mag = self._magnitude(z).to(mix.device)
         x = mag
-        
+
         B, C, Fq, T = x.shape
-        
+
         # Define Ground Truth Mask
         batch.masks = SimpleishNamespace(
-            pred=None, 
+            pred=None,
             ground_truth=z / (self._spec(batch.sources.target.audio) + 1e-9),
         )
-        
+
         # unlike previous Demucs, we always normalize because it is easier.
         mean = x.mean(dim=(1, 2, 3), keepdim=True)
         std = x.std(dim=(1, 2, 3), keepdim=True)
@@ -518,11 +518,11 @@ class Query_HTDemucs(nn.Module):
                 x = x + self.freq_emb_scale * emb
 
             saved.append(x)
-            
-            
+
+
         # Condition before Cross Transformer
         x, xt = self.conditioning(x, xt, query)
-        
+
         # 2. Cross Transformer
         if self.crosstransformer:
             if self.bottom_channels:
@@ -533,7 +533,7 @@ class Query_HTDemucs(nn.Module):
                 xt = self.channel_upsampler_t(xt)
 
             x, xt = self.crosstransformer(x, xt) # B, C, F, T: torch.Size([2, 384, 8, 336]) torch.Size([2, 384, 1344])
-            
+
             if self.bottom_channels:
                 x = rearrange(x, "b c f t-> b c (f t)")
                 x = self.channel_downsampler(x)
@@ -599,11 +599,10 @@ class Query_HTDemucs(nn.Module):
         if length_pre_pad:
             x = x[..., :length_pre_pad]
             batch.sources.target.audio = batch.sources.target.audio[..., :length_pre_pad]
-        
+
         # Store result: estimate audio & predict mask
         batch.estimates.target.audio = x.squeeze(1)
         batch.masks.pred = zout.squeeze(1)
         assert batch.estimates.target.audio.shape == batch.sources.target.audio.shape
         assert batch.masks.pred.shape == batch.masks.ground_truth.shape
         return batch
-

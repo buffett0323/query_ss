@@ -15,10 +15,10 @@ class MRDConv(nn.Module):
         for i in range(len(dilation_list)):
             self.conv_list += [nn.Conv2d(in_channels, out_channels, kernel_size = [1, 1])]
         self.conv_list = nn.ModuleList(self.conv_list)
-        
+
     def forward(self, specgram):
         # input [b x C x T x n_freq]
-        # output: [b x C x T x n_freq] 
+        # output: [b x C x T x n_freq]
         specgram
         dilation = self.dilation_list[0]
         y = self.conv_list[0](specgram)
@@ -86,7 +86,7 @@ class WaveformToLogSpecgram(nn.Module):
 
         assert(bins_per_octave % 12 == 0)
         bins_per_semitone = bins_per_octave // 12
-        
+
         self.amplitude_to_db = torchaudio.transforms.AmplitudeToDB(top_db=80)
 
     def forward(self, waveforms):
@@ -108,6 +108,3 @@ class WaveformToLogSpecgram(nn.Module):
         # specgram_db = specgram_db[:, :, :-1] # remove the last frame.
         # specgram_db = specgram_db.permute([0, 2, 1])
         return specgram_db
-
-
-

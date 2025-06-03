@@ -49,7 +49,7 @@ def main():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-        
+
     # Initial settings
     if args.seed is not None:
         random.seed(args.seed)
@@ -72,7 +72,7 @@ def main():
 
     ngpus_per_node = torch.cuda.device_count() #len(args.gpu.split(',')) #
     print("ngpus:", ngpus_per_node)
-    
+
     # Multiprocess
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
@@ -87,11 +87,11 @@ def main():
         # Simply call main_worker function
         print("No Multiprocessing")
         main_worker(args.gpu, ngpus_per_node, args)
-    
-    
+
+
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
-    
+
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
         def print_pass(*args, **kwargs):  # Allow any extra keyword arguments
@@ -109,10 +109,10 @@ def main_worker(gpu, ngpus_per_node, args):
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank) 
+                                world_size=args.world_size, rank=args.rank)
                                 # group_name="my_ddp_group") # Added group name
         torch.distributed.barrier()
-    
+
 
 
     # Only initialize WandB on the master process (rank 0)
@@ -123,7 +123,7 @@ def main_worker(gpu, ngpus_per_node, args):
             notes=args.wandb_notes,
             config=vars(args),  # Store args
         )
-        
+
     # create model
     print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
     model = SimSiam(
@@ -149,7 +149,7 @@ def main_worker(gpu, ngpus_per_node, args):
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, 
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu,
                                                               find_unused_parameters=args.find_unused_parameters)
 
         else:
@@ -157,7 +157,7 @@ def main_worker(gpu, ngpus_per_node, args):
             # DistributedDataParallel will divide and allocate batch_size to all
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
-            
+
     elif args.gpu is not None:
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
@@ -165,7 +165,7 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         raise NotImplementedError("Only DistributedDataParallel is supported.")
 
-    
+
     # Loss function (criterion) and optimizer
     criterion = nn.CosineSimilarity(dim=1).cuda(args.gpu)
 
@@ -199,11 +199,11 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
-    
+
     # Loading dataset
     train_dataset = MixedBPDataset(
-        sample_rate=args.sample_rate, 
-        segment_second=args.segment_second, 
+        sample_rate=args.sample_rate,
+        segment_second=args.segment_second,
         piece_second=args.piece_second,
         data_dir=args.data_dir,
         augment_func=CLARTransform(
@@ -223,22 +223,22 @@ def main_worker(gpu, ngpus_per_node, args):
         img_mean=args.img_mean,
         img_std=args.img_std,
     )
-    
+
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
         train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, 
+        train_dataset, batch_size=args.batch_size,
         shuffle=(train_sampler is None), sampler=train_sampler,
-        num_workers=args.workers, pin_memory=args.pin_memory, 
+        num_workers=args.workers, pin_memory=args.pin_memory,
         drop_last=args.drop_last,
         persistent_workers=args.persistent_workers,  # Keep workers alive to reduce loading overhead
         prefetch_factor=4)
 
 
-    
+
     # Training loops
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -260,15 +260,15 @@ def main_worker(gpu, ngpus_per_node, args):
                         'epoch': epoch + 1,
                         'state_dict': model.state_dict(),
                         'optimizer' : optimizer.state_dict(),
-                    }, 
-                    is_best=False, 
+                    },
+                    is_best=False,
                     filename='checkpoint_{:04d}.pth.tar'.format(epoch),
                     save_dir=args.model_dict_save_dir
                 )
-        
+
     if args.distributed:
         dist.destroy_process_group()
-    
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -294,7 +294,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output and loss
         p1, p2, z1, z2 = model(x1=x_i, x2=x_j)
         loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
-        
+
         # Compute per-channel std of L2-normalized output
         z1_normalized = F.normalize(z1, dim=1)
         z2_normalized = F.normalize(z2, dim=1)
@@ -312,10 +312,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
+
         if i % args.print_freq == 0:
             progress.display(i)
-            
+
             # Log training loss per step only from GPU 0
             if args.gpu == 0 and args.log_wandb:
                 wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
@@ -340,7 +340,7 @@ def save_checkpoint(state, is_best, filename, save_dir):
     torch.save(state, os.path.join(save_dir, filename))
     if is_best:
         shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))
-    
-    
+
+
 if __name__ == "__main__":
     main()

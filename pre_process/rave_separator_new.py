@@ -30,11 +30,11 @@ if __name__ == "__main__":
     # Load json file
     with open("../simsiam/info/chorus_audio_16000_095sec_npy_bass_other_seg_counter.json", "r") as f:
         data = json.load(f)
-    
+
     # Get the keys of the dictionary
     keys = list(data.keys())
     print(len(keys))
-    
+
 
     # Output paths
     path = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other_new/amp_08"
@@ -67,8 +67,8 @@ if __name__ == "__main__":
     print("Processing test data...")
     test_args = [(f, test_path, f.split("/")[-2]) for f in test_files]
     list(tqdm(pool.imap(npy_to_wav, test_args), total=len(test_args)))
-    
-    
+
+
     # Copy files to train folder using multiprocessing
     print("Processing training data...")
     train_args = [(f, train_path, f.split("/")[-2]) for f in train_files]

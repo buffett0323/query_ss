@@ -50,23 +50,23 @@ warnings.filterwarnings(
 def knn_predict(feature, feature_bank, knn_k=3, knn_t=1.0):
     """
     Perform KNN search to find the top 3 nearest neighbors.
-    
+
     Args:
         feature (torch.Tensor): Query feature tensor of shape [B, D].
         feature_bank (torch.Tensor): Feature bank tensor of shape [D, N].
         knn_k (int): Number of nearest neighbors to retrieve (default: 3).
         knn_t (float): Temperature parameter for scaling similarity (default: 1.0).
-    
+
     Returns:
         top_k_indices (torch.Tensor): Indices of the top-K nearest neighbors [B, knn_k].
         top_k_similarities (torch.Tensor): Cosine similarity scores of top-K neighbors [B, knn_k].
     """
     # Compute cosine similarity between feature and feature bank -> [B, N]
     sim_matrix = torch.mm(feature, feature_bank)  # [B, N]
-    
+
     # Retrieve top-K nearest neighbors
     top_k_similarities, top_k_indices = sim_matrix.topk(k=knn_k, dim=-1)
-    
+
     # Apply temperature scaling
     top_k_similarities = (top_k_similarities / knn_t).exp()
 
@@ -172,14 +172,14 @@ def validate(memory_loader, test_loader, model, args):
             if args.gpu is not None:
                 x_i = x_i.cuda(args.gpu, non_blocking=True)
                 x_j = x_j.cuda(args.gpu, non_blocking=True)
-            
+
             _, _, feature, _ = model(x1=x_i, x2=x_j)
             feature = F.normalize(feature, dim=1)
             feature_bank.append(feature)
             feature_paths.extend(path)
 
         feature_bank = torch.cat(feature_bank, dim=0)  # [N, D]
-        
+
         # Gather feature_bank across all distributed processes if using DDP
         feature_bank_list = [torch.zeros_like(feature_bank) for _ in range(args.world_size)]
         # torch.distributed.all_gather(feature_bank_list, feature_bank)
@@ -188,7 +188,7 @@ def validate(memory_loader, test_loader, model, args):
         # Transpose to make feature_bank [D, N]
         feature_bank = feature_bank.t().contiguous()  # [D, N]
         print(f"Feature bank shape: {feature_bank.shape}")
-        
+
         # Ensure feature paths match feature_bank after DDP
         if args.world_size > 1:
             feature_paths_list = [None] * args.world_size
@@ -198,15 +198,15 @@ def validate(memory_loader, test_loader, model, args):
 
         # Loop through test data to find top-3 nearest neighbors
         test_bar = tqdm(test_loader, desc='KNN Evaluation')
-        with open('info/test_matches_swint_vox_others.txt', 'w') as f: 
+        with open('info/test_matches_swint_vox_others.txt', 'w') as f:
             for x_i, x_j, test_path in test_bar:
                 if args.gpu is not None:
                     x_i = x_i.cuda(args.gpu, non_blocking=True)
                     x_j = x_j.cuda(args.gpu, non_blocking=True)
-                
+
                 _, _, feature, _ = model(x1=x_i, x2=x_j)
                 feature = F.normalize(feature, dim=1)
-                    
+
                 # Get top-3 nearest neighbors
                 top_k_indices, _ = knn_predict(
                     feature, feature_bank, knn_k=args.knn_k, knn_t=args.knn_t
@@ -216,7 +216,7 @@ def validate(memory_loader, test_loader, model, args):
                 for i in range(len(test_path)):  # Iterate over batch
                     test_sample_path = test_path[i]
                     nearest_paths = [feature_paths[idx] for idx in top_k_indices[i].tolist()]
-                    
+
                     # Write to file
                     f.write("python npy2mp3.py --output_mp3 target.mp3 \\")
                     f.write(f"    {test_sample_path}\n")
@@ -227,7 +227,7 @@ def validate(memory_loader, test_loader, model, args):
 
                 print(f"Test sample: {test_sample_path}")
                 print(f"Top-3 Nearest Paths: {nearest_paths}")
-                
+
 
 
 if __name__ == "__main__":

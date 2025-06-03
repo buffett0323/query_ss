@@ -15,10 +15,10 @@ from dataset import SegmentBPDataset
 
 def compute_mean_std(dataset, device, to_spec):
     loader = DataLoader(
-        dataset, 
-        batch_size=128, 
-        shuffle=False, 
-        num_workers=24, 
+        dataset,
+        batch_size=128,
+        shuffle=False,
+        num_workers=24,
         drop_last=True,
         persistent_workers=True,
         prefetch_factor=4,
@@ -74,8 +74,8 @@ if __name__ == "__main__":
         use_lmdb=False,
         lmdb_path=args.lmdb_dir,
     )
-    
-    
+
+
     to_spec = nnAudio.features.MelSpectrogram(
         sr=args.sample_rate,
         n_fft=args.n_fft,
@@ -89,7 +89,7 @@ if __name__ == "__main__":
         verbose=False,
     ).to(device)
 
-    
+
     mean, std = compute_mean_std(dataset, device, to_spec)
-    
+
     print(f"Mean: {mean}, Std: {std}")

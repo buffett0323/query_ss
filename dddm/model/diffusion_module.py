@@ -41,7 +41,7 @@ class Rezero(BaseModule):
 class Block(BaseModule):
     def __init__(self, dim, dim_out, groups=8):
         super(Block, self).__init__()
-        self.block = torch.nn.Sequential(torch.nn.Conv2d(dim, dim_out, 3, 
+        self.block = torch.nn.Sequential(torch.nn.Conv2d(dim, dim_out, 3,
                                          padding=1), torch.nn.GroupNorm(
                                          groups, dim_out), Mish())
 
@@ -53,7 +53,7 @@ class Block(BaseModule):
 class ResnetBlock(BaseModule):
     def __init__(self, dim, dim_out, time_emb_dim, groups=8):
         super(ResnetBlock, self).__init__()
-        self.mlp = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim, 
+        self.mlp = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim,
                                                                dim_out))
 
         self.block1 = Block(dim, dim_out, groups=groups)
@@ -77,17 +77,17 @@ class LinearAttention(BaseModule):
         self.heads = heads
         hidden_dim = dim_head * heads
         self.to_qkv = torch.nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
-        self.to_out = torch.nn.Conv2d(hidden_dim, dim, 1)            
+        self.to_out = torch.nn.Conv2d(hidden_dim, dim, 1)
 
     def forward(self, x):
         b, c, h, w = x.shape
         qkv = self.to_qkv(x)
-        q, k, v = rearrange(qkv, 'b (qkv heads c) h w -> qkv b heads c (h w)', 
-                            heads = self.heads, qkv=3)            
+        q, k, v = rearrange(qkv, 'b (qkv heads c) h w -> qkv b heads c (h w)',
+                            heads = self.heads, qkv=3)
         k = k.softmax(dim=-1)
         context = torch.einsum('bhdn,bhen->bhde', k, v)
         out = torch.einsum('bhde,bhdn->bhen', context, q)
-        out = rearrange(out, 'b heads c (h w) -> b (heads c) h w', 
+        out = rearrange(out, 'b heads c (h w) -> b (heads c) h w',
                         heads=self.heads, h=h, w=w)
         return self.to_out(out)
 
@@ -121,14 +121,14 @@ class RefBlock(BaseModule):
     def __init__(self, out_dim, time_emb_dim):
         super(RefBlock, self).__init__()
         base_dim = out_dim // 4
-        self.mlp1 = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim, 
+        self.mlp1 = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim,
                                                                 base_dim))
-        self.mlp2 = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim, 
+        self.mlp2 = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim,
                                                                 2 * base_dim))
-        self.block11 = torch.nn.Sequential(torch.nn.Conv2d(1, 2 * base_dim, 
+        self.block11 = torch.nn.Sequential(torch.nn.Conv2d(1, 2 * base_dim,
                       3, 1, 1), torch.nn.InstanceNorm2d(2 * base_dim, affine=True),
                       torch.nn.GLU(dim=1))
-        self.block12 = torch.nn.Sequential(torch.nn.Conv2d(base_dim, 2 * base_dim, 
+        self.block12 = torch.nn.Sequential(torch.nn.Conv2d(base_dim, 2 * base_dim,
                       3, 1, 1), torch.nn.InstanceNorm2d(2 * base_dim, affine=True),
                       torch.nn.GLU(dim=1))
         self.block21 = torch.nn.Sequential(torch.nn.Conv2d(base_dim, 4 * base_dim,

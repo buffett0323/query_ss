@@ -17,4 +17,3 @@ CUDA_VISIBLE_DEVICES=2,3,4 torchrun --nproc_per_node=3 train.py \
     # --augment /home/buffett/research/query_ss/RAVE/rave/configs/augmentations/mute.gin \
     # --augment /home/buffett/research/query_ss/RAVE/rave/configs/augmentations/compress.gin \
     # --augment /home/buffett/research/query_ss/RAVE/rave/configs/augmentations/gain.gin \
-    

@@ -107,7 +107,7 @@ datamodule = MoisesDataModule(
 
 # Instantiate the enrollment model
 model = MyModel(
-    embedding_size=emb_dim, 
+    embedding_size=emb_dim,
     query_size=query_size,
     n_masks=n_srcs,
     mix_query_mode=mix_query_mode,
@@ -126,27 +126,27 @@ min_val_loss = 1e10
 
 # Training loop
 for epoch in tqdm(range(num_epochs)):
-    
+
     model.train()
     train_loss = 0.0
     for batch in tqdm(datamodule.train_dataloader()):
         batch = InputType.from_dict(batch)
         batch = to_device(batch)
-        
+
         optimizer.zero_grad()
-        
-        # Forward pass        
+
+        # Forward pass
         batch = model(batch)
 
         # Compute the loss
         loss = criterion(batch)
         # loss = criterion(batch.estimates["target"].audio, batch.sources["target"].audio) # Y_Pred, Y_True
         train_loss += loss.item()
-        
+
         # Backward pass and optimization
         loss.backward()
         optimizer.step()
-    
+
     scheduler.step()
 
 
@@ -159,7 +159,7 @@ for epoch in tqdm(range(num_epochs)):
             for batch in tqdm(datamodule.val_dataloader()):
                 batch = InputType.from_dict(batch)
                 batch = to_device(batch)
-                
+
                 # Forward pass
                 batch = model(batch)
 
@@ -174,14 +174,14 @@ for epoch in tqdm(range(num_epochs)):
             # Record the validation SNR
             val_snr = val_metric_handler.get_mean_median()
 
-        
-        
+
+
         print(f"Epoch {epoch}/{num_epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}, Val SNR: {val_snr}")
         if wandb_use:
             wandb.log({"val_loss": val_loss})
             wandb.log(val_snr)
             # wandb.log({"val_sdr": sdr, "val_sir": sir, "val_sar": sar})
-            
+
         # Early stop
         if val_loss < min_val_loss:
             min_val_loss = val_loss
@@ -190,13 +190,13 @@ for epoch in tqdm(range(num_epochs)):
             early_stop_counter += 1
             if early_stop_counter >= early_stop_thres:
                 break
-            
+
     else:
         if wandb_use:
             wandb.log({"train_loss": train_loss})
 
-    
-    
+
+
 # Test step after all epochs
 model.eval()
 test_loss = 0.0
@@ -207,7 +207,7 @@ with torch.no_grad():
     for batch in tqdm(datamodule.test_dataloader()):
         batch = InputType.from_dict(batch)
         batch = to_device(batch)
-    
+
         # Forward pass
         batch = model(batch)
 
@@ -222,12 +222,12 @@ with torch.no_grad():
     # Get the final result of test SNR
     test_snr = test_metric_handler.get_mean_median()
     print("Test snr:", test_snr)
-        
-        
+
+
 print(f"Final Test Loss: {test_loss}")
 if wandb_use:
     wandb.log({"test_loss": test_loss})
     wandb.log(test_snr)
-    
+
 
 if wandb_use: wandb.finish()

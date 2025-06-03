@@ -59,7 +59,7 @@ def kaiser_filter(wc, atten, N=None):
     ----------
     wc: float
         Angular frequency
-    
+
     atten: float
         Attenuation (dB, positive)
     """
@@ -96,7 +96,7 @@ def polyphase_forward(x, hk, rearrange_filter=True):
     ----------
     x: torch.Tensor
         signal to analyse ( B x 1 x T )
-    
+
     hk: torch.Tensor
         filter bank ( M x T )
     """
@@ -114,7 +114,7 @@ def polyphase_inverse(x, hk, rearrange_filter=True):
     ----------
     x: torch.Tensor
         signal to synthesize from ( B x 1 x T )
-    
+
     hk: torch.Tensor
         filter bank ( M x T )
     """
@@ -141,7 +141,7 @@ def classic_forward(x, hk):
     ----------
     x: torch.Tensor
         signal to analyse ( B x 1 x T )
-    
+
     hk: torch.Tensor
         filter bank ( M x T )
     """
@@ -161,7 +161,7 @@ def classic_inverse(x, hk):
     ----------
     x: torch.Tensor
         signal to synthesize from ( B x 1 x T )
-    
+
     hk: torch.Tensor
         filter bank ( M x T )
     """

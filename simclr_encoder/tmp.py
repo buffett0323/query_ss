@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchlibrosa.stft import Spectrogram, LogmelFilterBank
 from torchlibrosa.augmentation import SpecAugmentation
-from utils import * 
+from utils import *
 from torch_models import ConvBlock
 import argparse
 import torchlibrosa as tl
@@ -35,7 +35,7 @@ feature_extractor = torch.nn.Sequential(
     tl.Spectrogram(
         hop_length=hop_length,
         win_length=win_length,
-    ), 
+    ),
     tl.LogmelFilterBank(
         sr=sample_rate,
         n_mels=n_mels,
@@ -46,24 +46,24 @@ print(batch_feature.shape)
 
 
 spectrogram_extractor = Spectrogram(
-    n_fft=args.n_fft, 
-    hop_length=args.hop_length, 
-    win_length=args.window_size, 
-    window='hann', #args.window, 
-    center=True, #args.center, 
-    pad_mode='reflect', #args.pad_mode, 
+    n_fft=args.n_fft,
+    hop_length=args.hop_length,
+    win_length=args.window_size,
+    window='hann', #args.window,
+    center=True, #args.center,
+    pad_mode='reflect', #args.pad_mode,
     freeze_parameters=True
 )
 
 logmel_extractor = LogmelFilterBank(
-    sr=args.sample_rate, n_fft=args.n_fft, 
+    sr=args.sample_rate, n_fft=args.n_fft,
     n_mels=args.n_mels, fmin=args.fmin, fmax=args.fmax,
-    ref=1.0, amin=1e-10, top_db=None, 
+    ref=1.0, amin=1e-10, top_db=None,
     freeze_parameters=True
 )
 
 bn0 = nn.BatchNorm2d(128)
-spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2, 
+spec_augmenter = SpecAugmentation(time_drop_width=64, time_stripes_num=2,
             freq_drop_width=16, freq_stripes_num=2)
 
 conv_block1 = ConvBlock(in_channels=1, out_channels=64)

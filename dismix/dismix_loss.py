@@ -8,13 +8,13 @@ class ELBOLoss_VAE(nn.Module):
     def __init__(self):
         super(ELBOLoss_VAE, self).__init__()
         self.log_scale = nn.Parameter(torch.Tensor([0.0]))
-        
+
     def gaussian_likelihood(self, mean, logscale, sample):
         scale = torch.exp(logscale)
         dist = torch.distributions.Normal(mean, scale)
         log_pxz = dist.log_prob(sample)
         return log_pxz.sum(dim=(1, 2))#, 3)) # shape: torch.Size([32, 128, 10])
-    
+
     def kl_divergence(self, z, mu, std): # Monte carlo KL divergence
         # 1. define the first two probabilities (in this case Normal for both)
         p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
@@ -28,16 +28,16 @@ class ELBOLoss_VAE(nn.Module):
         kl = (log_qzx - log_pz)
         kl = kl.sum(-1)
         return kl
-    
+
 
     def forward(
-        self, 
-        x_m, x_m_recon, 
-        x_s, x_s_recon, 
+        self,
+        x_m, x_m_recon,
+        x_s, x_s_recon,
         timbre_latent, tau_mu, tau_std,
         pitch_latent=None, pitch_priors=None,
     ):
-        
+
         # 1. Reconstruction loss (MSE)
         # recon_loss_m = F.mse_loss(x_m_recon, x_m, reduction='sum')
         # recon_loss_x = F.mse_loss(x_s_recon, x_s, reduction='mean')
@@ -53,22 +53,22 @@ class ELBOLoss_VAE(nn.Module):
         # Total ELBO loss
         elbo = (kl_loss - recon_loss_x).mean()
         loss = elbo # + pitch_loss #recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
-        
+
         return {
-            'loss': loss, 
-            'recon_x': recon_loss_x.mean(), 
+            'loss': loss,
+            'recon_x': recon_loss_x.mean(),
             'kld': kl_loss.mean(), #-kl_loss.detach(),
             # 'pitch_loss': pitch_loss.detach(),
             # 'recon_m': recon_loss_m.detach(),
         }
-    
+
 
 class BarlowTwinsLoss_VAE(nn.Module):
     def __init__(
-        self, 
+        self,
         batch_size=32,
-        lambda_weight=0.005, 
-        embedding_dim=64, 
+        lambda_weight=0.005,
+        embedding_dim=64,
         epsilon=1e-6,
     ):
         """
@@ -96,18 +96,18 @@ class BarlowTwinsLoss_VAE(nn.Module):
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum() #torch.diagonal(c_diff).sum()
         # off_diag = self._off_diagonal(c).pow_(2).sum() #self._off_diagonal(c_diff).sum() * self.lambda_weight
         loss = on_diag # + off_diag * self.lambda_weight
-        
-        
+
+
         return {
-            'loss': loss, 
-            # 'on_diag': on_diag.detach(), 
+            'loss': loss,
+            # 'on_diag': on_diag.detach(),
             # 'off_diag': off_diag.detach()* self.lambda_weight,
         }
 
     def _off_diagonal(self, matrix):
         n, m = matrix.shape
         assert n == m
-        return matrix.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten() 
+        return matrix.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
             # matrix.flatten()[1:].view(n - 1, n + 1)[:, :-1].flatten()
 
 
@@ -116,13 +116,13 @@ class ELBOLoss(nn.Module):
     def __init__(self):
         super(ELBOLoss, self).__init__()
         self.log_scale = nn.Parameter(torch.Tensor([0.0]))
-        
+
     def gaussian_likelihood(self, mean, logscale, sample):
         scale = torch.exp(logscale)
         dist = torch.distributions.Normal(mean, scale)
         log_pxz = dist.log_prob(sample)
         return log_pxz.sum(dim=(1, 2, 3)) # shape: torch.Size([32, 128, 10])
-    
+
     def kl_divergence(self, z, mu, std): # Monte carlo KL divergence
         # 1. define the first two probabilities (in this case Normal for both)
         p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
@@ -138,9 +138,9 @@ class ELBOLoss(nn.Module):
         return kl
 
     def forward(
-        self, 
-        x_m, x_m_recon, 
-        x_s, x_s_recon, 
+        self,
+        x_m, x_m_recon,
+        x_s, x_s_recon,
         timbre_latent, tau_mu, tau_std,
     ):
 
@@ -156,22 +156,22 @@ class ELBOLoss(nn.Module):
         # Total ELBO loss
         elbo = (kl_loss - recon_loss_x).mean()
         loss = elbo #recon_loss_x + kl_loss #recon_loss_m + recon_loss_x + kl_loss + pitch_loss
-        
+
         return {
-            'loss': loss, 
-            'recon_x': recon_loss_x.mean(), 
+            'loss': loss,
+            'recon_x': recon_loss_x.mean(),
             'kld': kl_loss.mean(), #-kl_loss.detach(),
             # 'pitch_loss': pitch_loss.detach(),
             # 'recon_m': recon_loss_m.detach(),
         }
-    
-    
+
+
 
 class BarlowTwinsLoss(nn.Module):
     def __init__(
-        self, 
-        lambda_weight=0.005, 
-        embedding_dim=64, 
+        self,
+        lambda_weight=0.005,
+        embedding_dim=64,
         epsilon=1e-6,
     ):
         super(BarlowTwinsLoss, self).__init__()
@@ -186,7 +186,7 @@ class BarlowTwinsLoss(nn.Module):
         BS, channels, F = e_q.shape
         e_q = e_q.reshape(BS*channels, F)
         tau = tau.reshape(BS*channels, F)
-        
+
         # Normalize embeddings along the batch dimension
         e_q_norm = (e_q - e_q.mean(dim=0)) / (e_q.std(dim=0) + self.epsilon) # N x D
         tau_norm = (tau - tau.mean(dim=0)) / (tau.std(dim=0) + self.epsilon) # N x D
@@ -195,11 +195,11 @@ class BarlowTwinsLoss(nn.Module):
         c = torch.mm(e_q_norm.T, tau_norm) / BS*channels # D x D
 
         # Loss computation
-        loss = torch.diagonal(c).add_(-1).pow_(2).sum() 
-        
+        loss = torch.diagonal(c).add_(-1).pow_(2).sum()
+
         return loss
 
-    
+
 
 
 
@@ -218,4 +218,3 @@ if __name__ == '__main__':
     # Compute the Barlow Twins loss
     loss = loss_fn(pitch_latent, timbre_latent)
     print(f"Barlow Twins Loss: {loss.item()}")
-

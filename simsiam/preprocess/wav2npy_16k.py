@@ -17,7 +17,7 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 def process_file(file_name):
     file_path = os.path.join(data_dir, file_name, f"{FILE_NAME}.wav")
     waveform, sr = torchaudio.load(file_path)
-    
+
     # Resample if needed
     if sr != SAMPLE_RATE:
         waveform = torchaudio.functional.resample(
@@ -28,7 +28,7 @@ def process_file(file_name):
     waveform = waveform.numpy()
     if waveform.ndim == 2 and waveform.shape[0] > 1:
         waveform = waveform.mean(axis=0)
-    
+
     # Save as npy file
     save_path = os.path.join(SAVE_DIR, file_name)
     os.makedirs(save_path, exist_ok=True)
@@ -37,7 +37,7 @@ def process_file(file_name):
 
 if __name__ == "__main__":
     data_dir = "/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_wav"
-    
+
     with open("../info/chorus_audio_16000_npy_track_list.txt", "r") as f:
         track_list = [line.strip() for line in f.readlines()]#[:5]
 

@@ -158,7 +158,7 @@ def solve_interpolation(train_points, train_values, order, regularization_weight
 
     # Append ones to the feature values for the bias term in the linear model.
     ones = torch.ones(1, dtype=train_points.dtype, device=c.device).view([-1, 1, 1])
-    
+
     matrix_b = torch.cat((c, ones), 2).float()  # [b, n, d + 1]
 
     # [b, n + d + 1, n]

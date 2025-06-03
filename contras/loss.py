@@ -19,7 +19,7 @@ class GatherLayer(torch.autograd.Function):
         grad_out = torch.zeros_like(input)
         grad_out[:] = grads[dist.get_rank()]
         return grad_out
-    
+
 
 class NT_Xent(nn.Module):
     def __init__(self, batch_size, temperature, world_size):

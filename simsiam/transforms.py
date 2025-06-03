@@ -42,11 +42,11 @@ class RandomFrequencyMasking:
         num_masks = random.randint(*self.n_range)  # Sample N ∈ [1, 5]
         total_mask_len = 0
         max_freq = spectrogram.shape[-2]  # Frequency dimension
-        
+
         for _ in range(num_masks):
             mask_len = min(random.randint(*self.f_range), max_freq - total_mask_len)
             mask_start = random.randint(0, max_freq - mask_len)  # Random starting index
-            
+
             # Apply Frequency Masking
             mask_transform = T.FrequencyMasking(freq_mask_param=mask_len)
             spectrogram = mask_transform(spectrogram)
@@ -54,7 +54,7 @@ class RandomFrequencyMasking:
             total_mask_len += mask_len
             if total_mask_len >= max_freq:  # Ensure total mask length constraint
                 break
-        
+
         return spectrogram
 
 
@@ -62,7 +62,7 @@ class RandomFrequencyMasking:
 
 class CLARTransform(nn.Module):
     def __init__(
-        self, 
+        self,
         sample_rate,
         duration,
     ):
@@ -73,12 +73,12 @@ class CLARTransform(nn.Module):
             AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015),
         ]
         self.aug_transforms = transforms.Compose(self.transforms)
-        
-        
+
+
     def pitch_shift_transform(self, x, n_steps=15):
         return effects.pitch_shift(x, sr=self.sample_rate, n_steps=torch.randint(low=-n_steps, high=n_steps, size=[1]).item())
-    
-    
+
+
     def time_stretch_augmentation(self, x, length=1):
         x = effects.time_stretch(x, np.random.uniform(.5, 1.5, [1])[0])
         x = librosa.resample(x, x.shape[0] / length, self.sample_rate)
@@ -86,11 +86,11 @@ class CLARTransform(nn.Module):
             return x[:(self.sample_rate * length)]
         return np.pad(x, [0, (self.sample_rate * length) - x.shape[0]])
 
-    
+
     def time_stretch_audio_fx(self, x):
         """
         Apply Time Stretching (TS) Augmentation following the TSPS methodology.
-        
+
         Steps:
         1. Load an audio file and ensure it is at least `context_length` seconds long.
         2. Randomly crop a 4.5s segment (if necessary).
@@ -99,7 +99,7 @@ class CLARTransform(nn.Module):
         5. Truncate the resulting signal to `target_length` seconds.
         """
         target_length = 3.0
-        
+
         # Sample τ from the given probability distribution and apply Time Stretching (TS)
         x = librosa.effects.time_stretch(x, rate=sample_tau())
 
@@ -111,8 +111,8 @@ class CLARTransform(nn.Module):
             x = np.pad(x, (0, target_samples - len(x)), mode='constant')
 
         return x #torch.tensor(x).float().unsqueeze(0)  # Add batch dimension
-    
-        
+
+
     def add_fade_transform(self, x, max_fade_size=.5):
         def _fade_in(fade_shape, waveform_length, fade_in_len):
             fade = np.linspace(0, 1, fade_in_len)
@@ -149,8 +149,8 @@ class CLARTransform(nn.Module):
         fade_out_len = np.random.randint(int(x.shape[0] * max_fade_size))
         fade_in_len = np.random.randint(int(x.shape[0] * max_fade_size))
         return np.float32(
-            _fade_in(fade_shape, waveform_length, fade_in_len) * 
-            _fade_out(fade_shape, waveform_length, fade_out_len) * 
+            _fade_in(fade_shape, waveform_length, fade_in_len) *
+            _fade_out(fade_shape, waveform_length, fade_out_len) *
             x
         )
 
@@ -158,7 +158,7 @@ class CLARTransform(nn.Module):
     def add_noise_transform(self, x):
         noise_type = random.choice(['white', 'brown', 'pink'])
         snr = random.uniform(0.5, 1.5)  # Signal-to-noise ratio
-        
+
         if noise_type == 'white':
             noise = np.random.normal(0, 1, len(x))
         elif noise_type == 'brown':
@@ -167,7 +167,7 @@ class CLARTransform(nn.Module):
         else:  # pink noise
             freqs = np.fft.rfftfreq(len(x))
             noise = np.fft.irfft(np.random.randn(len(freqs)) / (freqs + 1e-6))
-        
+
         noise = noise / np.max(np.abs(noise))
         x = x + noise / snr
         return np.clip(x, -1, 1)
@@ -203,7 +203,7 @@ def sample_tau():
     """
     def pdf(tau):
         return 1 / (tau * np.log(1.5 / 0.75))
-    
+
     tau_range = np.linspace(0.75, 1.5, 1000)
     probs = pdf(tau_range)
     probs /= probs.sum()  # Normalize to create a proper probability distribution
@@ -217,7 +217,7 @@ def sample_mu():
     """
     def pdf(mu):
         return 1 / (mu * np.log(1.335 / 0.749))
-    
+
     mu_range = np.linspace(0.749, 1.335, 1000)
     probs = pdf(mu_range)
     probs /= probs.sum()  # Normalize to create a proper probability distribution
@@ -227,7 +227,7 @@ def sample_mu():
 
 class AudioFXAugmentation(nn.Module):
     def __init__(
-        self, 
+        self,
         sample_rate,
         duration,
         n_mels=128,
@@ -236,12 +236,12 @@ class AudioFXAugmentation(nn.Module):
         self.sample_rate = sample_rate
         self.duration = duration
         self.n_mels = n_mels
-    
+
 
     def time_stretch_augmentation(self, x):
         """
         Apply Time Stretching (TS) Augmentation following the TSPS methodology.
-        
+
         Steps:
         1. Load an audio file and ensure it is at least `context_length` seconds long.
         2. Randomly crop a 4.5s segment (if necessary).
@@ -250,7 +250,7 @@ class AudioFXAugmentation(nn.Module):
         5. Truncate the resulting signal to `target_length` seconds.
         """
         target_length = 3.0
-        
+
         # Sample τ from the given probability distribution and apply Time Stretching (TS)
         x = librosa.effects.time_stretch(x, rate=sample_tau())
 
@@ -277,8 +277,8 @@ class AudioFXAugmentation(nn.Module):
 
         # Compute Mel spectrogram
         mel_spectrogram = librosa.feature.melspectrogram(
-            y=x, 
-            sr=self.sample_rate, 
+            y=x,
+            sr=self.sample_rate,
             n_mels=self.n_mels,
             fmax=8000,
         )
@@ -301,10 +301,10 @@ class AudioFXAugmentation(nn.Module):
         if mu < 1.0:
             cutoff_bin = int(mu * U)
             shifted_spectrogram[cutoff_bin:] = -80.0  # Set to silence (approximate dB floor)
-        
+
         return shifted_spectrogram
-    
-    
+
+
     def butterworth_filter(self, filter_type="low", cutoff_freq=None):
         """
         Apply a third-order Butterworth filter (lowpass/highpass).
@@ -365,12 +365,12 @@ class AudioFXAugmentation(nn.Module):
 
 
 
-    def __call__(self, x1, x2):        
+    def __call__(self, x1, x2):
         # Apply augmentations
         x1 = self.time_stretch_augmentation(x1)
         x1 = self.pitch_shift_augmentation(x1)
         # x1 = self.apply_equalization_filter(x1)
-        
+
         x2 = self.time_stretch_augmentation(x2)
         x2 = self.pitch_shift_augmentation(x2)
         # x2 = self.apply_equalization_filter(x2)
@@ -381,19 +381,19 @@ class AudioFXAugmentation(nn.Module):
 class S3TAugmentation(nn.Module):
     def __init__(self):
         super(S3TAugmentation, self).__init__()
-        
-        
+
+
     def random_multi_crop(self, spectrogram, min_ratio=0.1, max_ratio=0.9):
         T_full = spectrogram.shape[1]  # Time dimension
         r1, r2 = random.uniform(min_ratio, max_ratio), random.uniform(min_ratio, max_ratio)
         T_r1, T_r2 = int(T_full * r1), int(T_full * r2)
-        
+
         start1 = random.randint(0, T_full - T_r1)
         start2 = random.randint(0, T_full - T_r2)
-        
+
         crop1 = spectrogram[:, start1:start1 + T_r1]
         crop2 = spectrogram[:, start2:start2 + T_r2]
-        
+
         return crop1, crop2
 
     def random_frequency_masking(self, spectrogram, p=0.5, N_range=(1, 5), F_range=(5, 30)):
@@ -448,19 +448,19 @@ class S3TAugmentation(nn.Module):
 
     def apply_augmentations(self, spectrogram):
         crop1, crop2 = self.random_multi_crop(spectrogram)
-        
+
         crop1 = self.random_frequency_masking(crop1)
         crop1 = self.random_time_masking(crop1)
         crop1 = self.time_warping(crop1)
         crop1 = self.random_shifting(crop1)
-        
+
         crop2 = self.random_frequency_masking(crop2)
         crop2 = self.random_time_masking(crop2)
         crop2 = self.time_warping(crop2)
         crop2 = self.random_shifting(crop2)
-        
+
         return crop1, crop2
-    
+
 
 
 
@@ -511,16 +511,16 @@ if __name__ == "__main__":
     mel_spec1 = db_transform(mel_spec1).numpy()
     mel_spec2 = mel_transform(x2).float()
     mel_spec2 = db_transform(mel_spec2).numpy()
-    
+
     afx = AudioFXAugmentation(sample_rate=16000, duration=3.0, n_mels=128)
     print(mel_spec1.shape, mel_spec2.shape)
     mel_spec1, mel_spec2 = afx(mel_spec1, mel_spec2)
-    
+
     wav1 = mel_to_audio(mel_spec1)
     wav2 = mel_to_audio(mel_spec2)
     torchaudio.save("sample_audio/wav_mel1.wav", wav1, 16000)
     torchaudio.save("sample_audio/wav_mel2.wav", wav2, 16000)
 
-    # y1 = augment(samples=y, sample_rate=16000)        
+    # y1 = augment(samples=y, sample_rate=16000)
     # temp_wav = "sample_audio/temp_audio_tsps.wav"
     # sf.write(temp_wav, y1, samplerate=16000)

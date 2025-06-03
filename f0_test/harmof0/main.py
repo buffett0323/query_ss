@@ -33,9 +33,9 @@ def main():
         args = parser.parse_args()
 
         pitch_tracker = PitchTracker(
-            args.checkpoint_path, 
+            args.checkpoint_path,
             hop_length=args.hop_length,
-            device=args.device, 
+            device=args.device,
             frames_per_step=args.frames_per_step,
             post_processing=args.post_processing,
             high_threshold=args.high_threshold,

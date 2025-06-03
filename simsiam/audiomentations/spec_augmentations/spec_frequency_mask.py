@@ -70,4 +70,3 @@ class SpecFrequencyMask(BaseSpectrogramTransform):
         ]
         ] = fill_value
         return magnitude_spectrogram
-

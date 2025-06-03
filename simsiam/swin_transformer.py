@@ -601,20 +601,20 @@ if __name__ == "__main__":
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     # model = SwinTransformer(img_size=224, window_size=7, in_chans=1).to(device)
     model = SwinTransformer(img_size=256, window_size=8, in_chans=1).to(device)
-    
-    
+
+
     sr = 16000
     length = int(sr*3)
     x = torch.randn(4, length).numpy()#.to(device)
     print(x.shape)
 
     S = librosa.feature.melspectrogram(
-        y=x, sr=sr, n_mels=256, 
+        y=x, sr=sr, n_mels=256,
         n_fft=1024, hop_length=256, fmax=8000,
     )
-    S = torch.Tensor(S) 
+    S = torch.Tensor(S)
     print(S.shape)
-    
+
     resize_transform = transforms.Resize((256, 256))
     SS = resize_transform(S.unsqueeze(1))#.squeeze(1)  # (4, 256, 256)
 

@@ -136,12 +136,12 @@ class FiLMHyperNetwork(nn.Module):
         super(FiLMHyperNetwork, self).__init__()
         self.depth = depth
         self.activation = getattr(nn, activation)
-        
+
         # Defining a multi-layer perceptron to generate gamma and beta
         layers = [nn.Linear(query_dim, channels)]
         for _ in range(depth - 1):
             layers += [self.activation(), nn.Linear(channels, channels)]
-        
+
         self.fc_gamma = nn.Sequential(*layers)
         self.fc_beta = nn.Sequential(*layers)
 
@@ -164,7 +164,7 @@ class Hyper_FiLM(nn.Module):
         multiplicative: bool = False,
     ):
         super().__init__()
-        
+
         self.additive = additive
         self.multiplicative = multiplicative
         self.hypernetwork = hypernetwork
@@ -172,7 +172,7 @@ class Hyper_FiLM(nn.Module):
     def forward(self, x, query):
         # Get dynamic gamma and beta from hypernetwork
         gamma, beta = self.hypernetwork(query)
-        
+
         # Apply gamma (multiplicative) modulation
         if self.multiplicative:
             gamma = gamma[:, :, None, None]  # Reshape for broadcasting
@@ -208,4 +208,3 @@ if __name__ == "__main__":
     output = film_layer(mixture_input, query_input)
 
     print("Output shape:", output.shape)  # Expected shape: (8, 512, 64, 36)
-    

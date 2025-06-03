@@ -29,18 +29,18 @@ def process_file(file_info):
             if value["amp"] >= AMP_THRES:
                 start_idx = value["start_idx"]
                 end_idx = start_idx + SEGMENT_LENGTH
-                
+
                 waveform = np.load(os.path.join(DATA_DIR, file_name, FILE_NAME))
                 segment = waveform[start_idx:end_idx]
                 segments.append(segment)
-                
-    
+
+
     if len(segments) >= 2:
         os.makedirs(os.path.join(STORE_DIR, file_name), exist_ok=True)
         for i, segment in enumerate(segments):
             store_path = os.path.join(STORE_DIR, file_name, f"bass_other_seg_{i}.npy")
             np.save(store_path, segment)
-    
+
     return file_name, len(segments)
 
 
@@ -56,12 +56,12 @@ if __name__ == "__main__":
             total=len(peak_info_dict),
             desc="Processing files"
         ))
-    
+
     # Combine results into seg_counter dictionary
     seg_counter = dict()
     for file_name, num_segments in results:
         if num_segments >= 2:
             seg_counter[file_name] = num_segments
-    
+
     with open(f"../../moco/info/train_seg_counter_{SLICE_NAME}.json", "w") as f:
         json.dump(seg_counter, f, indent=4)

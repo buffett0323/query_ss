@@ -12,7 +12,7 @@ hps = utils.get_hparams(
 device = torch.device(f"cuda:{hps.train.device}")
 model = DDDM(
     hps.data.n_mel_channels, hps.diffusion.spk_dim,
-    hps.diffusion.dec_dim, hps.diffusion.beta_min, 
+    hps.diffusion.dec_dim, hps.diffusion.beta_min,
     hps.diffusion.beta_max, hps
 ).to(device)
 
@@ -29,7 +29,7 @@ mel_fn = MelSpectrogramFixed(
 ).to(device)
 
 
- 
+
 x = torch.randn(4, 16000*4).to(device)
 mel_x = torch.randn(4, 1, 256, 256).to(device)
 mel_fn_x = mel_fn(x).to(device)

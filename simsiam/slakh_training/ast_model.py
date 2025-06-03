@@ -72,7 +72,7 @@ class ASTModel(nn.Module):
             self.original_num_patches = self.v.patch_embed.num_patches
             self.oringal_hw = int(self.original_num_patches ** 0.5)
             self.original_embedding_dim = self.v.pos_embed.shape[2]
-            
+
             # self.mlp_head = nn.Sequential(nn.LayerNorm(self.original_embedding_dim), nn.Linear(self.original_embedding_dim, label_dim))
             self.mlp_head = nn.LayerNorm(self.original_embedding_dim)
 
@@ -189,13 +189,13 @@ class ASTModel(nn.Module):
         x = (x[:, 0] + x[:, 1]) / 2
         x = self.mlp_head(x)
         return x
-    
-    
+
+
 
 if __name__ == '__main__':
     input_tdim = 100
     ast_mdl = ASTModel(input_tdim=input_tdim)
-    
+
     # input a batch of 10 spectrogram, each with 100 time frames and 128 frequency bins
     test_input = torch.rand([10, input_tdim, 128])
     test_output = ast_mdl(test_input)

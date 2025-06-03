@@ -129,7 +129,7 @@ def main():
         verbose=False,
     ).cuda()
 
-    
+
     # Normalization: PrecomputedNorm
     pre_norm = PrecomputedNorm(np.array(args.norm_stats)).cuda()
     post_norm = NormalizeBatch().cuda()
@@ -138,22 +138,22 @@ def main():
     # training loop
     os.makedirs(args.model_dict_save_path, exist_ok=True)
     print(f"Training for {args.epochs} epochs in '{args.train_mode}' mode")
-    
+
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
         adjust_learning_rate(optimizer, init_lr, epoch, args)
-        
+
         # Training
-        train_loss = train(train_loader, model, criterion, optimizer, epoch, 
+        train_loss = train(train_loader, model, criterion, optimizer, epoch,
                            args, to_spec, pre_norm, post_norm)
 
-            
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_norm, post_norm):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    
-    
+
+
 
     losses = AverageMeter('Loss', ':.4f')
     progress = ProgressMeter(len(train_loader), [batch_time, data_time, losses], prefix=f"Epoch: [{epoch}]")
@@ -178,14 +178,14 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
         bs = x_i.shape[0]
         paired_inputs = torch.cat([x_i, x_j], dim=0)
         paired_inputs = post_norm(paired_inputs)
-        
+
         # Forward pass
         p1, p2, z1, z2 = model(x1=paired_inputs[:bs], x2=paired_inputs[bs:])
-        
+
         # Check for NaN values in z1 and z2
         if i % 100 == 0:
             print(z1, z2)
-        
+
         if torch.isnan(z1).any() or torch.isnan(z2).any():
             print(f"NaN detected in batch {i}")
             print("z1 contains NaN:", torch.isnan(z1).any().item())
@@ -219,7 +219,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, to_spec, pre_n
     return losses.avg
 
 
-    
+
 
 
 def adjust_learning_rate(optimizer, init_lr, epoch, args):
@@ -230,14 +230,14 @@ def adjust_learning_rate(optimizer, init_lr, epoch, args):
     else:
         # After warm-up, use cosine decay
         lr = init_lr * 0.5 * (1. + math.cos(math.pi * (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)))
-    
+
     # Update learning rate for optimizer
     for param_group in optimizer.param_groups:
         if param_group.get('fix_lr', False):
             param_group['lr'] = init_lr
         else:
             param_group['lr'] = lr
-    
+
     # Log learning rate to WandB
     if args.log_wandb:
         wandb.log({"learning_rate": lr, "epoch": epoch})

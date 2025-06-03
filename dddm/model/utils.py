@@ -63,8 +63,8 @@ class InitialReconstruction(BaseModule):
         real_part = torch.ones_like(stftm, device=stftm.device)
         imag_part = torch.zeros_like(stftm, device=stftm.device)
         stft = torch.stack([real_part, imag_part], -1)*stftm.unsqueeze(-1)
-        istft = torchaudio.functional.istft(stft, n_fft=self.n_fft, 
-                           hop_length=self.hop_size, win_length=self.n_fft, 
+        istft = torchaudio.functional.istft(stft, n_fft=self.n_fft,
+                           hop_length=self.hop_size, win_length=self.n_fft,
                            window=self.window, center=True)
         return istft.unsqueeze(1)
 

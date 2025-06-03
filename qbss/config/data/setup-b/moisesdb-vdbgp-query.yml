@@ -20,7 +20,7 @@ train_kwargs:
       "distorted_electric_guitar",
       "clean_electric_guitar",
       "acoustic_guitar",
-      'grand_piano', 
+      'grand_piano',
       'electric_piano',
     ]
   query_file: "query-10s"
@@ -32,7 +32,7 @@ val_kwargs:
   npy_memmap: true
   mixture_stem: mixture
   use_own_query: true
-  allowed_stems: 
+  allowed_stems:
     [
       "bass",
       "drums",
@@ -41,7 +41,7 @@ val_kwargs:
       "distorted_electric_guitar",
       "clean_electric_guitar",
       "acoustic_guitar",
-      'grand_piano', 
+      'grand_piano',
       'electric_piano',
     ]
   query_file: "query-10s"
@@ -52,7 +52,7 @@ test_kwargs:
   npy_memmap: true
   mixture_stem: mixture
   use_own_query: false
-  allowed_stems: 
+  allowed_stems:
     [
       "bass",
       "drums",
@@ -61,7 +61,7 @@ test_kwargs:
       "distorted_electric_guitar",
       "clean_electric_guitar",
       "acoustic_guitar",
-      'grand_piano', 
+      'grand_piano',
       'electric_piano',
     ]
   query_file: "query-10s" # Added

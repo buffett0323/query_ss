@@ -100,7 +100,7 @@ class BetaWarmupCallback(pl.Callback):
 
         warmup_ratio = self.state["training_steps"] / self.warmup_len
 
-        if self.log_warmup: 
+        if self.log_warmup:
             beta = math.log(self.initial_value) * (1 - warmup_ratio) + math.log(
                 self.target_value) * warmup_ratio
             pl_module.beta_factor = math.exp(beta)
@@ -227,7 +227,7 @@ class RAVE(pl.LightningModule):
         self.register_buffer("receptive_field", torch.tensor([0, 0]).long())
         self.audio_monitor_epochs = audio_monitor_epochs
         os.makedirs(self.save_audio_dir, exist_ok=True)
-        
+
 
     def configure_optimizers(self):
         gen_p = list(self.encoder.parameters())
@@ -246,11 +246,11 @@ class RAVE(pl.LightningModule):
         x = self.spectrogram(x)[..., :-1]
         x = torch.log1p(x).reshape(*batch_size, -1, x.shape[-1])
         return x
-        
+
     def encode(
-        self, 
-        x, 
-        cond: Optional[torch.Tensor] = None, 
+        self,
+        x,
+        cond: Optional[torch.Tensor] = None,
         return_mb: bool = False
     ):
         x_enc = x
@@ -258,9 +258,9 @@ class RAVE(pl.LightningModule):
             x_enc = _pqmf_encode(self.pqmf, x_enc) # after _pqmf_encode, x_enc.shape: torch.Size([8, 16, 8192])
         elif self.input_mode == "mel":
             x_enc = self._mel_encode(x)
-            
+
         z = self.encoder(x_enc, cond=cond)  # z.shape: torch.Size([8, 16, 8192]) -> torch.Size([8, 256, 64])
-        
+
         if return_mb:
             if self.input_mode == "pqmf":
                 return z, x_enc
@@ -270,8 +270,8 @@ class RAVE(pl.LightningModule):
         return z
 
     def decode(
-        self, 
-        z, 
+        self,
+        z,
         cond: Optional[torch.Tensor] = None
     ):
         batch_size = z.shape[:-2]
@@ -281,8 +281,8 @@ class RAVE(pl.LightningModule):
         return y
 
     def forward(
-        self, 
-        x, 
+        self,
+        x,
         cond: Optional[torch.Tensor] = None
     ):
         z = self.encode(x, cond=cond, return_mb=False)
@@ -317,7 +317,7 @@ class RAVE(pl.LightningModule):
 
         # TODO: Get Timbre Encoder
         x_cond = torch.randn(x_raw.shape[0], 1024).to(x_raw.device)
-        
+
         # ENCODE INPUT
         # get multiband in case
         z, x_multiband = self.encode(x_raw, cond=x_cond, return_mb=True)
@@ -331,10 +331,10 @@ class RAVE(pl.LightningModule):
             y_multiband = y
             y_raw = _pqmf_decode(self.pqmf, y, batch_size=batch_size, n_channels=self.n_channels)
         else:
-            y_raw = y 
+            y_raw = y
             y_multiband = _pqmf_encode(self.pqmf, y)
 
-        # TODO this has been added for training with num_samples = 65536 samples, output padding seems to mess with output dimensions. 
+        # TODO this has been added for training with num_samples = 65536 samples, output padding seems to mess with output dimensions.
         # this may probably conflict with cached_conv
         y_raw = y_raw[..., :x_raw.shape[-1]]
         y_multiband = y_multiband[..., :x_multiband.shape[-1]]
@@ -444,20 +444,20 @@ class RAVE(pl.LightningModule):
             self.log("pred_fake", pred_fake.mean(), on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
 
         self.log_dict(
-            loss_gen, 
-            on_step=False, 
-            on_epoch=True, 
-            prog_bar=True, 
+            loss_gen,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
             sync_dist=True
         )
         p.tick('logging')
-    
-    
+
+
     def validation_step(self, x, batch_idx):
         # print(f"x.shape: {x.shape}") # x.shape: torch.Size([16, 1, 131072])
         batch_size = x.shape[0]
         x_cond = torch.randn(batch_size, 1024).to(x.device)
-        
+
         z = self.encode(x, cond=x_cond)
         if isinstance(self.encoder, blocks.VariationalEncoder):
             mean = torch.split(z, z.shape[1] // 2, 1)[0]
@@ -472,20 +472,20 @@ class RAVE(pl.LightningModule):
 
         if self.trainer is not None:
             self.log(
-                'validation', 
-                full_distance, 
-                on_step=False, 
-                on_epoch=True, 
-                prog_bar=True, 
+                'validation',
+                full_distance,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
                 sync_dist=True
             )
-        
+
         self.log(
-            'val_full_distance', 
-            full_distance, 
-            on_step=False, 
-            on_epoch=True, 
-            prog_bar=True, 
+            'val_full_distance',
+            full_distance,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
             sync_dist=True
         )
         return torch.cat([x, y], -1), mean
@@ -534,7 +534,7 @@ class RAVE(pl.LightningModule):
                     np.argmax(var > p).astype(np.float32),
                     sync_dist=True
                 )
-                
+
         # Save audio locally
         # print("In validation_epoch_end")
         # print(f"audio: {audio[0].shape}")
@@ -545,46 +545,46 @@ class RAVE(pl.LightningModule):
         # self.logger.experiment.add_audio("audio_val", y, self.eval_number,
         #                                 self.sr)
         # self.eval_number += 1
-        
-        
+
+
         # Save audio locally
         os.makedirs(os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}"), exist_ok=True)
-        
-        
+
+
         pair = audio[0]
         pair = pair.squeeze(0).cpu().numpy()  # from [1, 2*T] → [2*T]
         pair = pair.squeeze(1) # pair.shape: (16, 1, 262144) -> pair.shape: (16, 262144)
-        
-        if pair.ndim != 2: 
+
+        if pair.ndim != 2:
             print(f"[WARNING] Pair.shape: {pair.shape}")
-        
+
         BS, total_len = pair.shape
         if total_len % 2 != 0:
             print(f"[WARNING] Odd length audio skipped: {pair.shape}")
 
         half = total_len // 2
         x_np_pair, y_np_pair = pair[:, :half], pair[:, half:]
-        
+
         for b in range(BS):
             x_np, y_np = x_np_pair[b], y_np_pair[b]
-            
+
             # Convert to torch tensors (shape must be [channels, time])
             x_tensor = torch.from_numpy(x_np).unsqueeze(0)  # mono
             y_tensor = torch.from_numpy(y_np).unsqueeze(0)  # mono
 
             # Save
             torchaudio.save(
-                os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_input_{b}.wav"), 
-                x_tensor, 
+                os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_input_{b}.wav"),
+                x_tensor,
                 sample_rate=self.sr,
             )
             torchaudio.save(
-                os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_output_{b}.wav"), 
-                y_tensor, 
+                os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_output_{b}.wav"),
+                y_tensor,
                 sample_rate=self.sr,
             )
-                
-                
+
+
                 # print(f"x_np.dtype: {x_np.dtype}")
                 # print(f"y_np.dtype: {y_np.dtype}")
                 # # # Clip + convert
@@ -592,17 +592,17 @@ class RAVE(pl.LightningModule):
                 # # x_np, y_np = (x_np * 32767).astype(np.int16), (y_np * 32767).astype(np.int16)
 
                 # write_wav(
-                #     os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_input_{i*BS + b}.wav"), 
-                #     self.sr, 
+                #     os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_input_{i*BS + b}.wav"),
+                #     self.sr,
                 #     x_np
                 # )
                 # write_wav(
-                #     os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_output_{i*BS + b}.wav"), 
-                #     self.sr, 
+                #     os.path.join(self.save_audio_dir, f"epoch{self.current_epoch:03d}", f"val_output_{i*BS + b}.wav"),
+                #     self.sr,
                 #     y_np
                 # )
                 # break
-        
+
         # # Log to W&B / TensorBoard
         # y = torch.cat(audio, 0)[:8].reshape(-1).numpy()
         # if self.integrator is not None:

@@ -8,8 +8,8 @@ import numpy as np
 
 from .layers import MRDConv, FRDConv, WaveformToLogSpecgram
 
-def dila_conv_block( 
-    in_channel, out_channel, 
+def dila_conv_block(
+    in_channel, out_channel,
     bins_per_octave,
     n_har,
     dilation_mode,
@@ -44,7 +44,7 @@ def dila_conv_block(
         )
     elif(dilation_mode == 'fixed'):
         conv_dil = nn.Conv2d(out_channel, out_channel, kernel_size=dil_kernel_size, padding=[0, dilation_rate], dilation=[1, dilation_rate])
-        
+
         return nn.Sequential(
             conv,nn.ReLU(),
             conv_dil,nn.ReLU(),
@@ -56,11 +56,11 @@ def dila_conv_block(
 
 
 class HarmoF0(nn.Module):
-    def __init__(self, 
-            sample_rate=16000, 
-            n_freq=512, 
-            n_har=12, 
-            bins_per_octave=12 * 4, 
+    def __init__(self,
+            sample_rate=16000,
+            n_freq=512,
+            n_har=12,
+            bins_per_octave=12 * 4,
             dilation_modes=['log_scale', 'fixed', 'fixed', 'fixed'],
             dilation_rates=[48, 48, 48, 48],
             logspecgram_type='logharmgram',
@@ -75,14 +75,14 @@ class HarmoF0(nn.Module):
         n_fft = n_freq * 2
         self.n_freq = n_freq
         self.freq_bins = freq_bins
-        
+
         self.waveform_to_logspecgram = WaveformToLogSpecgram(sample_rate, n_fft, fmin, bins_per_octave, freq_bins, n_freq, logspecgram_type) #, device
 
         bins = bins_per_octave
 
         # [b x 1 x T x 88*8] => [b x 32 x T x 88*4]
         self.block_1 = dila_conv_block(1, channels[0], bins, n_har=n_har, dilation_mode=dilation_modes[0], dilation_rate=dilation_rates[0], dil_kernel_size=dil_kernel_sizes[0], kernel_size=[3, 3], padding=[1,1])
-        
+
         bins = bins // 2
         # => [b x 64 x T x 88*4]
         self.block_2 = dila_conv_block(channels[0], channels[1], bins, 3, dilation_mode=dilation_modes[1], dilation_rate=dilation_rates[1], dil_kernel_size=dil_kernel_sizes[1], kernel_size=[3, 3], padding=[1,1])
@@ -117,5 +117,3 @@ class HarmoF0(nn.Module):
         # x = torch.clip(x, 1e-4, 1 - 1e-4)
         # => [num_frames x n_bins]
         return x, specgram
-
-

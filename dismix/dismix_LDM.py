@@ -72,7 +72,7 @@ class QueryEncoder(nn.Module):
         h = self.encoder(x)
         h = self.temporal_pool(h)
         return h
-    
+
 # Use the pre-trained encoder and freeze
 class MixtureEncoder(nn.Module):
     def __init__(
@@ -81,7 +81,7 @@ class MixtureEncoder(nn.Module):
     ):
         super().__init__()
         self.encoder = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float32).vae.encoder
-        
+
         self.freeze_encoder()
         self.conv = nn.Conv2d(
             in_channels=16,  # Input channels
@@ -100,15 +100,15 @@ class MixtureEncoder(nn.Module):
         with torch.no_grad():
             h = self.encoder(x).permute(0, 1, 3, 2)
 
-        h = self.conv(h)            
+        h = self.conv(h)
         return h
-    
-    
-    
+
+
+
 class StochasticBinarizationLayer(nn.Module):
     def __init__(self):
         super(StochasticBinarizationLayer, self).__init__()
-    
+
     def forward(self, logits):
         """
         Forward pass of the stochastic binarization layer.
@@ -118,10 +118,10 @@ class StochasticBinarizationLayer(nn.Module):
             h = torch.rand_like(prob)  # Use random threshold during training
         else:
             h = torch.full_like(prob, 0.5)  # Fixed threshold of 0.5 during inference
-            
+
         return (prob > h).float()  # Binarize based on the threshold h
-        
-        
+
+
 class PitchEncoder(nn.Module):
     def __init__(
         self,
@@ -164,7 +164,7 @@ class PitchEncoder(nn.Module):
         )
 
 
-        
+
     def forward(self, x):
         y_hat = self.E_phai_nu(x) # BS, 8, 100, 16 --> BS, 129, 400
         y_hat_sb = self.sb_layer(y_hat)
@@ -198,11 +198,11 @@ class TimbreEncoder(nn.Module):
         x = x.permute(0, 1, 3, 2).reshape(BS, C*F, T)
         x = self.conv_layers(x)
         x = self.temporal_pool(x)
-        
+
         split_x = torch.split(x, 128, dim=1)
         reshaped_x = [t.view(t.size(0), 8, 1, 16) for t in split_x]
         mean, logvar = reshaped_x[0], reshaped_x[1]
-        
+
         std = torch.exp(0.5 * logvar)
         std = torch.clamp(std, min=1e-6)
         q = torch.distributions.Normal(mean, std)
@@ -268,27 +268,27 @@ class Partition(nn.Module):
 # DiTPatchPartitioner Class
 class DiTPatchPartitioner(nn.Module):
     def __init__(
-        self, 
+        self,
         batch_size,
-        z_patch_size=4, 
-        z_num_patches=25, 
+        z_patch_size=4,
+        z_num_patches=25,
         z_dim=512,
-        s_patch_size=4, 
-        s_num_patches=25, 
+        s_patch_size=4,
+        s_num_patches=25,
         s_dim=1024,
         max_len=5000
     ):
         super(DiTPatchPartitioner, self).__init__()
         self.z_partition = Partition(
-            patch_size=z_patch_size, 
-            dim=z_dim, 
+            patch_size=z_patch_size,
+            dim=z_dim,
             num_patches=z_num_patches,
             batch_size=batch_size,
             max_len=max_len
         )
         self.s_partition = Partition(
-            patch_size=s_patch_size, 
-            dim=s_dim, 
+            patch_size=s_patch_size,
+            dim=s_dim,
             num_patches=s_num_patches,
             batch_size=batch_size,
             max_len=max_len
@@ -302,8 +302,8 @@ class DiTPatchPartitioner(nn.Module):
 
 class AdaLayerNorm(nn.Module):
     def __init__(
-        self, 
-        normalized_shape, 
+        self,
+        normalized_shape,
         conditioning_dim
     ):
         """
@@ -314,7 +314,7 @@ class AdaLayerNorm(nn.Module):
         """
         super(AdaLayerNorm, self).__init__()
         self.layer_norm = nn.LayerNorm(normalized_shape)
-        
+
         # Projection layers for scaling (gamma) and shifting (beta)
         self.gamma_proj = nn.Linear(conditioning_dim, normalized_shape)
         self.beta_proj = nn.Linear(conditioning_dim, normalized_shape)
@@ -370,7 +370,7 @@ class TransformerBlock(nn.Module):
 
         # Adaptive Layer Norm after Residual
         x = self.ada_ln1(x, condition)#.transpose(0, 1)  # [seq_len, batch, dim]
-        
+
         # Feedforward Network
         ff_output = self.ff(x)  # [seq_len, batch, dim]
         x = x + ff_output  # Residual connection
@@ -384,15 +384,15 @@ class TransformerBlock(nn.Module):
 
 class DiT(nn.Module):
     def __init__(
-        self, 
+        self,
         repo_id,
         batch_size,
         N_s,
-        dim=512, 
+        dim=512,
         num_blocks=3,
-        num_heads=4, 
-        condition_dim=1024, 
-        ff_dim=2048, 
+        num_heads=4,
+        condition_dim=1024,
+        ff_dim=2048,
         dropout=0.1,
     ):
         """
@@ -410,14 +410,14 @@ class DiT(nn.Module):
         self.N_s = N_s # 4
         self.batch_size = batch_size
         self.condition_dim = condition_dim
-        
+
         self.pt_E_VAE = MixtureEncoder(repo_id=repo_id) # pipe.vae.encoder
         self.pt_D_VAE = AudioLDM2Pipeline.from_pretrained(repo_id, torch_dtype=torch.float32).vae.decoder
         self.freeze_decoder()
-        
+
         self.partitioner = DiTPatchPartitioner(batch_size=batch_size)
         self.transformer_blocks = nn.ModuleList([
-            TransformerBlock(dim, num_heads, condition_dim, ff_dim, dropout) 
+            TransformerBlock(dim, num_heads, condition_dim, ff_dim, dropout)
             for _ in range(num_blocks)
         ])
         self.layer_norm = nn.LayerNorm(dim)
@@ -426,13 +426,13 @@ class DiT(nn.Module):
             nn.ReLU(),
             nn.Linear(condition_dim, condition_dim)
         )
-        
+
 
     def freeze_decoder(self):
         """Freeze the parameters of the decoder to prevent training."""
         for param in self.pt_D_VAE.parameters():
             param.requires_grad = False
-        
+
     def unpatchify(self, x):
         """
         Unpatchifies a tensor from patch representation to the original input format.
@@ -458,7 +458,7 @@ class DiT(nn.Module):
         # Flattened patch dimension must match
         patch_size = T_z // L  # Frames per patch
         D_z_prime = patch_size * D_z * C  # Flattened patch dimension
-        
+
         # Ensure patched_tensor shape matches the expected input
         assert x.shape[1] == 4 * L and x.shape[2] == D_z_prime, \
             "Patched tensor shape mismatch with expected dimensions."
@@ -472,10 +472,10 @@ class DiT(nn.Module):
         return x.permute(0, 3, 1, 2)
 
 
-        
+
     def forward(self, x_s, s_i, t):
         """
-        x_s.shape: torch.Size([4, 1, 400, 64]) 
+        x_s.shape: torch.Size([4, 1, 400, 64])
         s_i.shape: torch.Size([4, 8, 100, 32])
         Args:
             x (Tensor): Input tensor of shape [seq_len, batch_size, dim].
@@ -486,28 +486,28 @@ class DiT(nn.Module):
         with torch.no_grad():
             z_s = self.pt_E_VAE(x_s) # [batch*N_s, C=8, H=16, W=100]
             z_s = z_s.permute(0, 1, 3, 2)
-        
+
         # Partition
         z_m_t, s_c = self.partitioner(z_s, s_i)  # z_m0: [batch*N_s*L (100), 512], s_c_patched: [batch*N_s*L, 1024]
 
         # Embed the diffusion step t and combine with sc
         t_embed = self.time_embed(t).view(self.batch_size, -1, self.condition_dim)  # Shape: [batch_size, condition_dim]
         condition = s_c + t_embed
-        
+
         # Pass through transformer blocks
         for block in self.transformer_blocks:
             z_m_t = block(z_m_t, condition)
 
         # Unpatchify
         z_m_t = self.unpatchify(z_m_t)
-        
+
         # Decoder
         with torch.no_grad():
             z_m_t = self.pt_D_VAE(z_m_t).permute(0, 1, 3, 2)
         return z_m_t
-    
-    
-    
+
+
+
     def evaluate(self, noise, s_i, num_steps=1000):
         """
         Evaluation/inference method.
@@ -529,7 +529,7 @@ class DiT(nn.Module):
                 # Compute t_embed for the current step
                 t_tensor = torch.tensor([t / num_steps], device=z_m_t.device).float().view(1, -1)
                 t_embed = self.time_embed(t_tensor).expand(self.batch_size, z_m_t.shape[2], -1)
-                
+
                 # Partition
                 z_m_t_patched, s_c = self.partitioner(z_m_t, s_i)
                 condition = s_c + t_embed
@@ -547,7 +547,7 @@ class DiT(nn.Module):
         return z_m_t# ([8, 1, 400, 64])
 
 
-    
+
 class DisMix_LDM_Model(pl.LightningModule):
     def __init__(
         self,
@@ -556,9 +556,9 @@ class DisMix_LDM_Model(pl.LightningModule):
         D_z=16,
         D_s=32,
         L=25,
-        diffusion_steps=1000, 
-        beta_start=1e-4, 
-        beta_end=0.02, 
+        diffusion_steps=1000,
+        beta_start=1e-4,
+        beta_end=0.02,
         N_s=4,
         batch_size=1,
         pitch_labels=129,
@@ -581,9 +581,9 @@ class DisMix_LDM_Model(pl.LightningModule):
             attn_type="vanilla",
             downsample_time_stride4_levels=[],  # No special downsampling for time
         )
-        
+
         self.M_Encoder = MixtureEncoder(repo_id=repo_id) # Pre-trained model
-        
+
         self.combine_conv = nn.Conv2d(
             in_channels=32,  # 16 from em and 16 from eq after concatenation
             out_channels=16,  # Transform back to original feature dimension
@@ -591,7 +591,7 @@ class DisMix_LDM_Model(pl.LightningModule):
             stride=1,
             padding=0,
         )
-        
+
         self.pitch_encoder = PitchEncoder()
         self.timbre_encoder = TimbreEncoder()
         self.dit = DiT(
@@ -599,7 +599,7 @@ class DisMix_LDM_Model(pl.LightningModule):
             batch_size=batch_size,
             N_s=N_s,
         )
-        
+
         # Params
         self.D_z = D_z
         self.D_s = D_s
@@ -620,31 +620,31 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.elbo_loss_fn = ELBOLoss() # For ELBO
         self.ce_loss_fn = nn.CrossEntropyLoss() #nn.BCEWithLogitsLoss()  # For pitch supervision
         self.bt_loss_fn = BarlowTwinsLoss() # Barlow Twins
-        
-        
+
+
     def forward(self, x_m, x_s, evaluate=False): # x_q exactly is x_s in inference
         # Reshape
         _, _, F, T = x_m.shape
         x_s = x_s.view(-1, 1, F, T) # Shape: [BS*N_s, 1, 64, 400]
-        
+
         e_q = self.Q_Encoder(x_s)
         e_m = self.M_Encoder(x_m)
         e_m = e_m.repeat(self.N_s, 1, 1, 1)  # Shape: [BS*4, 8, 100, 16]
-        
+
         # BroadCast & Concat
         eq_broadcast = e_q.expand(-1, -1, e_m.size(2), -1)
         combined = torch.cat([e_m, eq_broadcast], dim=3).permute(0, 3, 2, 1)
         combined = self.combine_conv(combined)
         combined = combined.permute(0, 3, 2, 1) # BS, 8, 100, 16
-        
+
         # Pitch Encoder
         y_hat, pitch_latent = self.pitch_encoder(combined)
         pitch_latent = pitch_latent.permute(0, 1, 3, 2)
-        
+
         # Timbre Encoder
         timbre_latent, timbre_mean, timbre_std = self.timbre_encoder(combined)
         timbre_latent_expand = timbre_latent.expand(-1, -1, pitch_latent.shape[2], -1)
-        
+
         # Concat: f_phi_s
         s_i = torch.cat((pitch_latent, timbre_latent_expand), dim=3) # s_c: batch*N_s, 8, 100, 32
         x_s = x_s.permute(0, 1, 3, 2) # shape: torch.Size([batch*N_s, 1, 400, 64])
@@ -659,17 +659,17 @@ class DisMix_LDM_Model(pl.LightningModule):
         x_s_recon = x_s_recon.permute(0, 1, 3, 2).view(self.batch_size, self.N_s, F, T)
 
         return e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon #res_audio
-    
-    
+
+
     def training_step(self, batch, batch_idx):
         x_m, x_s_i, y_gt = batch
         e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon = self(x_m, x_s_i, evaluate=False)
-        
+
         # Pitch annotation ohe for BCE Loss
         y_gt = y_gt.view(self.batch_size*self.N_s, -1)
         bs, tf = y_gt.shape
         y_gt_ohe = F.one_hot(y_gt, num_classes=self.pitch_labels).float().permute(0, 2, 1)  # Shape: [Batch_size, 129, Time_frames]
-        
+
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
             None, None, # x_m, x_s_recon.sum(dim=1),
@@ -678,10 +678,10 @@ class DisMix_LDM_Model(pl.LightningModule):
         )
         bce_loss = F.binary_cross_entropy_with_logits(y_hat, y_gt_ohe) # ce_loss = self.ce_loss_fn(y_hat, y_gt)
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
-        
+
         # Total loss
         total_loss = elbo_loss['loss'] + bce_loss + bt_loss #elbo_loss['loss'] + ce_loss + bt_loss
-        
+
         # Log losses with batch size
         self.log('train_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
@@ -689,20 +689,20 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.log('train_elbo_kld_loss', elbo_loss['kld'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_bce_loss', bce_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log('train_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
-        
+
         return total_loss
-    
-    
-        
+
+
+
     def evaluate(self, batch, stage='val'):
         x_m, x_s_i, y_gt = batch
         e_q, y_hat, timbre_latent, timbre_mean, timbre_std, x_s_recon = self(x_m, x_s_i, evaluate=True)
-        
+
         # Pitch annotation ohe for BCE Loss
         y_gt = y_gt.view(self.batch_size*self.N_s, -1)
         bs, tf = y_gt.shape
         y_gt_ohe = F.one_hot(y_gt, num_classes=self.pitch_labels).float().permute(0, 2, 1)  # Shape: [Batch_size, 129, Time_frames]
-        
+
         # Compute losses
         elbo_loss = self.elbo_loss_fn(
             None, None, # x_m, x_s_recon.sum(dim=1),
@@ -711,15 +711,15 @@ class DisMix_LDM_Model(pl.LightningModule):
         )
         bce_loss = F.binary_cross_entropy_with_logits(y_hat, y_gt_ohe) # ce_loss = self.ce_loss_fn(y_hat, y_gt)
         bt_loss = self.bt_loss_fn(e_q, timbre_latent)
-        
+
         # Total loss
         total_loss = elbo_loss['loss'] + bce_loss + bt_loss #elbo_loss['loss'] + ce_loss + bt_loss
-        
+
         # Get accuracy
         predicted_pitches = torch.argmax(y_hat, dim=1)  # Shape: [Batch_size, Time_frames]
         correct_predictions = (predicted_pitches == y_gt).float().sum()
         accuracy = correct_predictions / (bs * tf)
-        
+
         # Log losses and metrics
         self.log(f'{stage}_loss', total_loss, on_epoch=True, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_elbo_loss', elbo_loss['loss'], on_epoch=True, batch_size=self.batch_size, sync_dist=True)
@@ -729,8 +729,8 @@ class DisMix_LDM_Model(pl.LightningModule):
         self.log(f'{stage}_bt_loss', bt_loss, on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         self.log(f'{stage}_acc', accuracy.item(), on_epoch=True, batch_size=self.batch_size, sync_dist=True)
         return total_loss
-        
-    
+
+
     def validation_step(self, batch, batch_idx):
         return self.evaluate(batch, stage='val')
 
@@ -739,12 +739,12 @@ class DisMix_LDM_Model(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
-    
+
         # Gradient Clipping
         for param in self.parameters():
             if param.grad is not None:
                 param.grad.data.clamp_(-0.5, 0.5)
-        
+
         # Learning Rate Scheduler
         warmup_steps = 308000  # 308k steps
         total_steps = 4092000  # 4,092k steps
@@ -754,36 +754,36 @@ class DisMix_LDM_Model(pl.LightningModule):
             return 0.5 * (1 + math.cos(math.pi * (current_step - warmup_steps) / (total_steps - warmup_steps)))
 
         scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-        
+
         return [optimizer], [scheduler]
 
-        
+
     # def on_validation_epoch_end(self):
     #     return self.plotting(stage='val')
-    
+
     # def on_test_epoch_end(self):
     #     return self.plotting(stage='test')
-    
-    
 
-    
+
+
+
 if __name__ == "__main__":
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     BS, N_s = 2, 4
     x_q = torch.randn(BS, N_s, 64, 400).to(device)
     x_m = torch.randn(BS, 1, 64, 400).to(device)
-    
 
-    
+
+
     # choice = ["ema", "mse"]
     # vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{choice[1]}").to(device)
     pipe = AudioLDM2Pipeline.from_pretrained("cvssp/audioldm2", torch_dtype=torch.float32).to(device)
-    vae = pipe.vae 
-    
+    vae = pipe.vae
+
     model = DisMix_LDM_Model(
         batch_size=BS,
         N_s=N_s,
         vae=vae,
     ).to(device)
-    
+
     res = model(x_m, x_q)

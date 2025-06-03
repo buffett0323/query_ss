@@ -19,18 +19,18 @@ from utils import yaml_config_hook
 
 class BeatportDataset(Dataset):
     def __init__(
-        self, 
+        self,
         args,
         data_path_list,
         split="train",
-        n_fft=2048, 
+        n_fft=2048,
         hop_length=1024,
     ):
         self.split = split
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.data_path_list = data_path_list
-        
+
 
     def __len__(self):
         return len(self.data_path_list)
@@ -52,7 +52,7 @@ class BeatportDataModule(LightningDataModule):
         self.args = args
         self.pin_memory = True
         self.drop_last = False
-        
+
         random.shuffle(npy_list)
         valid_size = args.batch_size * round(int(len(npy_list)*0.1) / args.batch_size)
 
@@ -65,8 +65,8 @@ class BeatportDataModule(LightningDataModule):
         print("Train dataset size:", len(self.train_data))
         print("Valid dataset size:", len(self.valid_data))
         print("Test dataset size:", len(self.test_data))
-        
-        
+
+
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
@@ -75,13 +75,13 @@ class BeatportDataModule(LightningDataModule):
                 data_path_list=self.train_data,
                 split="train",
             )
-            
+
             self.val_ds = BeatportDataset(
                 args=self.args,
                 data_path_list=self.valid_data,
                 split="valid",
             )
-        
+
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             self.test_ds = BeatportDataset(
@@ -89,8 +89,8 @@ class BeatportDataModule(LightningDataModule):
                 data_path_list=self.test_data,
                 split="test",
             )
-            
-            
+
+
     def train_dataloader(self):
         """The train dataloader."""
         return self._data_loader(
@@ -108,8 +108,8 @@ class BeatportDataModule(LightningDataModule):
         return self._data_loader(
             self.test_ds,
             shuffle=False)
-        
-    
+
+
     def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
         return DataLoader(
             dataset,
@@ -119,7 +119,7 @@ class BeatportDataModule(LightningDataModule):
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
         )
-    
+
     @property
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
@@ -163,7 +163,7 @@ class SimCLRTransform(nn.Module):
 
     def __call__(self, mel_spec):
         mel_spec = self.amplitude_to_db(mel_spec)
-        
+
         # Apply random augmentations
         transform1, transform2 = random.sample(self.transforms, 2)
         mel_spec1 = transform1(mel_spec)
@@ -172,7 +172,7 @@ class SimCLRTransform(nn.Module):
         # Ensure the output shapes match the input shape
         mel_spec1 = self._preserve_shape(mel_spec1, mel_spec)
         mel_spec2 = self._preserve_shape(mel_spec2, mel_spec)
-        
+
         return mel_spec1, mel_spec2
 
     def _preserve_shape(self, transformed, original):
@@ -195,8 +195,8 @@ class SimCLRTransform(nn.Module):
             transformed = transformed.squeeze(0)
 
         return transformed
-        
-    
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SimCLR")
@@ -228,19 +228,19 @@ if __name__ == "__main__":
     print("Train dataset:", len(train_data))
     print("Valid dataset:", len(valid_data))
     print("Test dataset:", len(test_data))
-    
-    
+
+
     train_dataset = BeatportDataset(
         args=args,
         data_path_list=train_data,
         split="train",
     )
-    
+
     for i in range(100):
         print(train_dataset[i].shape)
     # train_loader = DataLoader(
-    #     train_dataset, 
-    #     batch_size=args.batch_size, 
+    #     train_dataset,
+    #     batch_size=args.batch_size,
     #     num_workers=args.workers,
     #     pin_memory=True,        # Faster transfer to GPU
     #     prefetch_factor=2,      # Prefetch 2 batches per worker

@@ -6,4 +6,3 @@ VariationalPrior:
     cycle_size=4
     n_layers=10
     sr=@get_model_sr()
-    

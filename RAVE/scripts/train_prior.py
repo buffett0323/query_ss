@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 try:
     import rave
 except:
-    import sys, os 
+    import sys, os
     sys.path.append(os.path.abspath('.'))
     import rave
 
@@ -52,7 +52,7 @@ flags.DEFINE_list('rand_pitch',
 flags.DEFINE_bool('progress',
                   default=True,
                   help='Display training progress bar')
-flags.DEFINE_bool('smoke_test', 
+flags.DEFINE_bool('smoke_test',
                   default=False,
                   help="Run training with n_batches=1 to test the model")
 
@@ -65,7 +65,7 @@ def add_gin_extension(config_name: str) -> str:
 def main(argv):
 
     # load pretrained RAVE
-    config_file = rave.core.search_for_config(FLAGS.model) 
+    config_file = rave.core.search_for_config(FLAGS.model)
     if config_file is None:
         print('no configuration file found at address :'%FLAGS.model)
     gin.parse_config_file(config_file)
@@ -88,7 +88,7 @@ def main(argv):
         )
     pretrained.eval()
     gin.clear_config()
-    
+
     # parse configuration
     if FLAGS.ckpt:
         config_file = rave.core.search_for_config(FLAGS.ckpt)
@@ -131,7 +131,7 @@ def main(argv):
     # CHECKPOINT CALLBACKS
     validation_checkpoint = pl.callbacks.ModelCheckpoint(monitor="validation",
                                                          filename="best")
-    last_filename = "last" if FLAGS.save_every is None else "epoch-{epoch:04d}"                                                        
+    last_filename = "last" if FLAGS.save_every is None else "epoch-{epoch:04d}"
     last_checkpoint = rave.core.ModelCheckpoint(filename=last_filename, step_period=FLAGS.save_every)
 
     val_check = {}
@@ -198,7 +198,7 @@ def main(argv):
         print('loading state from file %s'%run)
         loaded = torch.load(run, map_location='cpu')
         trainer.fit_loop.epoch_loop._batches_that_stepped = loaded['global_step']
-    
+
     with open(os.path.join(FLAGS.out_path, RUN_NAME, "config.gin"), "w") as config_out:
         config_out.write(gin.operative_config_str())
 

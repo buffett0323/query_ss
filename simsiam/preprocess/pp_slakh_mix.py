@@ -35,30 +35,30 @@ def process_track(track):
 
     with open(yaml_file, "r") as f:
         data = yaml.safe_load(f)
-    
+
     stem_mapping = {stem: info["inst_class"] for stem, info in data["stems"].items()}
     stems_path = os.path.join(input_path, track, "stems")
     output_folder = os.path.join(output_path, track)
     os.makedirs(output_folder, exist_ok=True)
-    
+
     mixed_stems = {stem: [] for stem in VALID_STEMS.union({"Others"})}
-    
+
     for stem_file in os.listdir(stems_path):
         stem_name, ext = os.path.splitext(stem_file)
         if ext.lower() != ".flac":
             continue
-        
+
         input_flac = os.path.join(stems_path, stem_file)
         stem_category = stem_mapping.get(stem_name, "Others")
 
-        
+
         if "strings" in stem_category.lower():
             mixed_stems["Strings"].append(convert_flac_to_npy(input_flac))
         elif stem_category in VALID_STEMS:
             mixed_stems[stem_category] = [convert_flac_to_npy(input_flac)]
         else:
             mixed_stems["Others"].append(convert_flac_to_npy(input_flac))
-    
+
     # Save processed stems
     for stem, waveforms in mixed_stems.items():
         if waveforms:
@@ -70,8 +70,8 @@ def process_track(track):
 
 if __name__ == "__main__":
     tracks = os.listdir(input_path)  # List all tracks in the input path
-    
+
     with Pool(NUM_PROCESSES) as pool:
         list(tqdm(pool.imap(process_track, tracks), total=len(tracks), desc="Processing Tracks"))
-    
+
     print("Processing complete.")

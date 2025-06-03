@@ -27,7 +27,7 @@ class Conv1dGLU(nn.Module):
         x1, x2 = torch.split(x, split_size_or_sections=self.out_channels, dim=1)
         x = x1 * torch.sigmoid(x2)
         x = residual + self.dropout(x)
-        
+
         return x
 
 class StyleEncoder(torch.nn.Module):
@@ -35,7 +35,7 @@ class StyleEncoder(torch.nn.Module):
 
         super().__init__()
 
-        self.in_dim = in_dim 
+        self.in_dim = in_dim
         self.hidden_dim = hidden_dim
         self.out_dim = out_dim
         self.kernel_size = 5
@@ -81,5 +81,5 @@ class StyleEncoder(torch.nn.Module):
             len_ = mask.sum(dim=2)
             x = x.sum(dim=2)
             out = torch.div(x, len_)
-            
+
         return out

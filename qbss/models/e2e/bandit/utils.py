@@ -566,7 +566,7 @@ if __name__ == "__main__":
 
     band_defs = []
 
-    for bands in [VocalBandsplitSpecification]:  
+    for bands in [VocalBandsplitSpecification]:
         band_name = bands.__name__.replace("BandsplitSpecification", "")
 
         mbs = bands(nfft=2048, fs=44100).get_band_specs()

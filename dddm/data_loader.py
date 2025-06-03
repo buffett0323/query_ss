@@ -26,8 +26,8 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
     Provides dataset management for given filelist.
     """
     def __init__(
-        self, 
-        config, 
+        self,
+        config,
         split="train",
         stems=["other"], #["vocals", "bass", "drums", "other"], # VBDO
         training=True
@@ -40,7 +40,7 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
         # if self.training:
         self.segment_length = config.train.segment_size
         self.sample_rate = config.data.sampling_rate
-        
+
         # Load split files from txt file
         with open(f"../simsiam/info/{split}_bp_8secs.txt", "r") as f:
             bp_listdir = [line.strip() for line in f.readlines()]
@@ -67,28 +67,28 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
         # Infos:
         img_mean = -1.100174903869629
         img_std = 14.353998184204102
-        
+
         # To numpy
         x = x.numpy()
         x = librosa.feature.melspectrogram(
-            y=x, 
-            sr=16000, 
+            y=x,
+            sr=16000,
             n_fft=1024,
             hop_length=256,
         )
         x = librosa.power_to_db(np.abs(x))
         x = torch.from_numpy(x).unsqueeze(0)
-        
+
         # Resize to 256x256
         resizer = transforms.Resize((256, 256))
         x = resizer(x)
         return (x - img_mean) / img_std
-    
+
 
     def __getitem__(self, index):
         audio_path = self.audio_paths[index]
         audio = self.load_audio_to_torch(audio_path)
-        
+
         if audio.shape[-1] > self.segment_length:
             audio_start = np.random.randint(0, audio.shape[-1] - self.segment_length + 1)
             audio_segment = audio[audio_start:audio_start + self.segment_length]
@@ -98,13 +98,13 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
                 audio, (0, self.segment_length - audio.shape[-1]), 'constant'
             ).data
             length = torch.LongTensor([audio.shape[-1] // self.hop_length])
-        
+
         # Get Mel-Spectrogram for Timbre Encoder
         mel_audio = self.mel_timbre(audio_segment)
-        
-        if not self.training:  
+
+        if not self.training:
             return audio_segment, mel_audio
-        
+
         return audio_segment, mel_audio, length
 
 
@@ -118,9 +118,9 @@ class BP_DDDM_Dataset(torch.utils.data.Dataset):
 
 class CocoChorale_Simple_DS(Dataset):
     def __init__(
-        self, 
-        config, 
-        split="train", 
+        self,
+        config,
+        split="train",
         training=True,
         ensemble="random",
     ):
@@ -135,11 +135,11 @@ class CocoChorale_Simple_DS(Dataset):
         self.sample_rate = config.data.sampling_rate
         self.filelist_path = []
         self.file_dir = os.path.join(config.data.filelist_path, split)
-            
+
         txt_file = os.path.join(config.data.txt_path, f"{split}_list.txt")
         if os.path.exists(txt_file):
             with open(txt_file, "r") as f:
-                self.filelist_path = [line.strip() for line in f] 
+                self.filelist_path = [line.strip() for line in f]
 
         else:
             for track in tqdm(os.listdir(self.file_dir)):
@@ -155,36 +155,36 @@ class CocoChorale_Simple_DS(Dataset):
 
     def __len__(self):
         return len(self.filelist_path)
-    
-    
+
+
     def get_pitch_sequence(self, dataframe, start):
         end = start + self.segment_length
         pitch_sequence = []
-        
+
         for _, row in dataframe.iterrows():
             onset = row['onset']
             offset = row['offset']
             pitch = row['pitch']
-            
+
             # Check if the current note overlaps with the specified range
             if onset < end and offset > start:
                 # Determine the overlap range
                 overlap_start = max(onset, start)
                 overlap_end = min(offset, end)
                 pitch_sequence.extend([int(pitch)] * int(overlap_end - overlap_start))
-        
+
         return pitch_sequence
 
-    
+
     def __getitem__(self, idx):
         # TODO: npy faster load
         audio_path = self.filelist_path[idx]
         audio, _ = torchaudio.load(audio_path)
         audio = audio.squeeze()
-        
-        if not self.training:  
+
+        if not self.training:
             return audio
-        
+
         # TODO: CSV file
         if audio.shape[-1] > self.segment_length:
             audio_start = np.random.randint(0, audio.shape[-1] - self.segment_length + 1)
@@ -195,9 +195,9 @@ class CocoChorale_Simple_DS(Dataset):
                 audio, (0, self.segment_length - audio.shape[-1]), 'constant'
             ).data
             length = torch.LongTensor([audio.shape[-1] // self.hop_length])
-            
+
         return audio_segment, length
-        
+
 
 
 
@@ -218,24 +218,24 @@ if __name__ == "__main__":
     hps = utils.get_hparams()
     n_gpus = 1
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    
-    
+
+
     test_dataset = BP_DDDM_Dataset(hps, split="test", training=False)
     test_loader = DataLoader(
-        test_dataset, 
-        batch_size=4, #hps.train.batch_size, 
+        test_dataset,
+        batch_size=4, #hps.train.batch_size,
         num_workers=hps.train.num_workers,
         shuffle=False,
     )
-    
+
     train_dataset = BP_DDDM_Dataset(hps, split="train", training=True)
     train_loader = DataLoader(
-        train_dataset, 
-        batch_size=4, #hps.train.batch_size, 
+        train_dataset,
+        batch_size=4, #hps.train.batch_size,
         num_workers=hps.train.num_workers,
         shuffle=True,
     )
-    
+
     mel_fn = MelSpectrogramFixed(
         sample_rate=hps.data.sampling_rate,
         n_fft=hps.data.filter_length,
@@ -246,12 +246,12 @@ if __name__ == "__main__":
         n_mels=hps.data.n_mel_channels,
         window_fn=torch.hann_window
     )
-    
-    
+
+
     # # HIFIGAN TESTING
     # from vocoder.hifigan import HiFi
     # import utils
-    
+
     # hps = utils.get_hparams()
     # net_v = HiFi(
     #     hps.data.n_mel_channels,
@@ -262,20 +262,20 @@ if __name__ == "__main__":
     # utils.load_checkpoint(path_ckpt, net_v, None)
     # net_v.eval()
     # net_v.dec.remove_weight_norm()
-    
-    
 
-    
+
+
+
     for (audio_segment, mel_audio, length) in train_loader:
         print(audio_segment.shape, mel_audio.shape, length.shape)
-        
+
         # torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
         # torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
         break
-    
+
     for (audio_segment, mel_audio, length) in test_loader:
         print(audio_segment.shape, mel_audio.shape, length.shape)
-        
+
         # torchaudio.save("examples/orig_y2.wav", y.cpu(), 16000)
         # torchaudio.save("examples/recon_y2.wav", recon_y.cpu(), 16000)
         break

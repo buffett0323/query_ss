@@ -55,7 +55,7 @@ class AudioDataset(data.Dataset):
     def __init__(self,
                  db_path: str,
                  audio_key: str = 'waveform',
-                 transforms: Optional[transforms.Transform] = None, 
+                 transforms: Optional[transforms.Transform] = None,
                  n_channels: int = 1) -> None:
         super().__init__()
         self._db_path = db_path
@@ -67,7 +67,7 @@ class AudioDataset(data.Dataset):
         # lens = []
         # with self.env.begin() as txn:
         #     for k in tqdm(self.keys, desc='Discovering dataset'):
-        #        ae = AudioExample.FromString(txn.get(k)) 
+        #        ae = AudioExample.FromString(txn.get(k))
         #        lens.append(np.frombuffer(ae.buffers['waveform'].data, dtype=np.int16).shape)
 
 
@@ -219,7 +219,7 @@ def get_dataset(db_path,
                 derivative: bool = False,
                 normalize: bool = False,
                 rand_pitch: bool = False,
-                augmentations: Union[None, Iterable[Callable]] = None, 
+                augmentations: Union[None, Iterable[Callable]] = None,
                 n_channels: int = 1):
     if db_path[:4] == "http":
         return HTTPAudioDataset(db_path=db_path)

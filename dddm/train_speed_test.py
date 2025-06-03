@@ -116,8 +116,8 @@ def main():
     scaler = GradScaler(f"cuda:{hps.train.device}", enabled=hps.train.fp16_run)
 
     for epoch in range(epoch_str, hps.train.epochs + 1):
-        train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
-                        scheduler_g, scaler, writer, writer_eval, 
+        train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer,
+                        scheduler_g, scaler, writer, writer_eval,
                         hps, epoch, device, logger)
         scheduler_g.step()
 
@@ -130,7 +130,7 @@ def train_one_epoch(model, train_loader, eval_loader, mel_fn, net_v, optimizer, 
         length = length.to(device).squeeze()
         mel_fn_x = mel_fn(x)#.to(device)
         continue
-    
+
 
 if __name__ == "__main__":
     main()

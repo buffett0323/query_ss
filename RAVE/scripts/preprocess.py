@@ -64,10 +64,10 @@ def load_audio_chunk(path: str, n_signal: int,
         channel_map = (math.ceil(channels / input_channels) * list(range(input_channels)))[:channels]
 
     processes = []
-    for i in range(channels): 
+    for i in range(channels):
         process = subprocess.Popen(
             [
-                'ffmpeg', '-hide_banner', '-loglevel', 'panic', '-i', path, 
+                'ffmpeg', '-hide_banner', '-loglevel', 'panic', '-i', path,
                 '-ar', str(sr),
                 '-f', 's16le',
                 '-filter_complex', 'channelmap=%d-0'%channel_map[i],
@@ -76,14 +76,14 @@ def load_audio_chunk(path: str, n_signal: int,
             stdout=subprocess.PIPE,
         )
         processes.append(process)
-    
+
     chunk = [p.stdout.read(n_signal * 4) for p in processes]
-    
+
     if len(chunk[0]) < n_signal * 4:
         print(f"❌ Skipped (too short): {path}, with length {len(chunk[0])}, num_signal: {n_signal*4}")
         process.stdout.close()
         return  # yield nothing
-    
+
     while len(chunk[0]) == n_signal * 4:
         yield b''.join(chunk)
         chunk = [p.stdout.read(n_signal * 4) for p in processes]
@@ -125,7 +125,7 @@ def get_audio_channels(path: str) -> int:
         channels = int(stdout)
         return path, int(channels)
     except:
-        return None 
+        return None
 
 
 def flatten(iterator: Iterable):
@@ -259,7 +259,7 @@ def main(argv):
         chunks = enumerate(chunks)
 
         processed_samples = map(partial(process_audio_array, env=env, channels=FLAGS.channels), chunks)
-        
+
         pbar = tqdm(processed_samples)
         n_seconds = 0
         for audio_id in pbar:

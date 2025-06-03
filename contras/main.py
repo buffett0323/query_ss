@@ -1,4 +1,4 @@
-import os 
+import os
 import argparse
 import torch
 import warnings
@@ -29,16 +29,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
-    
-    
-    if args.log_wandb: 
+
+
+    if args.log_wandb:
         project = "SimCLR"
         name = "SimCLR_Training"
         save_dir = '/data/buffett' if os.path.exists('/data/buffett') else '.'
         wandb_logger = WandbLogger(
-            project=project, 
-            name=name, 
-            save_dir=save_dir, 
+            project=project,
+            name=name,
+            save_dir=save_dir,
             log_model=False,  # Avoid logging full model files to WandB
         )
     else:
@@ -51,13 +51,13 @@ if __name__ == "__main__":
             for file_name in os.listdir(os.path.join(args.npy_dir, folder_name))
                 if file_name.endswith(".npy")
     ]
-    
+
     dm = BeatportDataModule(
         args=args,
         npy_list=npy_list,
     )
     model = ContrastiveLearning(args, device)
-    
+
 
     # Callbacks
     cb = [TQDMProgressBar(refresh_rate=10)]
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         mode="min",  # Save model with the minimum validation loss
     )
     cb.append(model_ckpt)
-    
+
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
         min_delta=0.00,
@@ -94,6 +94,6 @@ if __name__ == "__main__":
     trainer.fit(model, dm)
     print("-------Start Testing-------")
     trainer.test(model.load_from_checkpoint(model_ckpt.best_model_path), datamodule=dm)
-    
-    # # if load best model    
+
+    # # if load best model
     # cl.load_model(checkpoint_name="best_model.ckpt")

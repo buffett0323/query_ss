@@ -63,7 +63,7 @@ class AudioNTT2020Task6(nn.Module, NetworkCommonMixIn):
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.MaxPool2d(2, stride=2),
-            
+
         )
         self.fc = nn.Sequential(
             nn.Linear(64 * (n_mels // (2**3)), d),
@@ -75,7 +75,7 @@ class AudioNTT2020Task6(nn.Module, NetworkCommonMixIn):
         self.d = d
 
     def forward(self, x):
-        x = self.features(x)       # (batch, ch, mel, time)       
+        x = self.features(x)       # (batch, ch, mel, time)
         x = x.permute(0, 3, 2, 1) # (batch, time, mel, ch)
         B, T, D, C = x.shape
         x = x.reshape((B, T, C*D)) # (batch, time, mel*ch)
@@ -234,6 +234,3 @@ class AudioNTT2020X(AudioNTT2020Task6X):
         if by_layers:
             return self.by_layers(x)
         return x
-
-
-

@@ -87,7 +87,7 @@ class PatchEmbedding(nn.Module):
 
         # BxNumber of tokens x Patch Dimension -> B x Number of tokens x Transformer Dimension
         out = self.patch_embed(out)
-        
+
         # Add 2d sinusoidal position embeddings
         pos_embed = get_patch_position_embedding(pos_emb_dim=self.hidden_size,
                                                  grid_size=(grid_size_h, grid_size_w),
@@ -98,9 +98,9 @@ class PatchEmbedding(nn.Module):
 
 if __name__ == "__main__":
     patch_embed = PatchEmbedding(
-        image_height=80, 
-        image_width=600, 
-        im_channels=1, 
+        image_height=80,
+        image_width=600,
+        im_channels=1,
         patch_height=2, patch_width=2, hidden_size=384)
     x = torch.randn(4, 1, 600, 80)
     out = patch_embed(x)

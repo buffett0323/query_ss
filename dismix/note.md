@@ -9,13 +9,13 @@ string_track000001
    |    |-- 0_violin.mid
    |    |-- 1_violin.mid
    |    |-- 2_viola.mid
-   |    |-- 3_cello.mid 
+   |    |-- 3_cello.mid
    |-- mix.wav
    |-- stems_audio
         |-- 0_violin.wav
         |-- 1_violin.wav
         |-- 2_viola.wav
-        |-- 3_cello.wav 
+        |-- 3_cello.wav
 
 There are 28,179 samples of mixtures split into the train, validation, and test sets with a ratio of 70/20/10. The wave- forms are converted into mel spectrograms using 128 mel- filter bands, a window size of 1,024, and a hop length of 512. We crop a 320ms segment, or 10 spectral frames, from the sustain phase of each sample.
 
@@ -27,7 +27,7 @@ There are 28,179 samples of mixtures split into the train, validation, and test 
 - Applied BCE before SB, because back propagating the pitch transcription gradient through SB could be more unstable. Though the argument is hand-wavy and requires experiments to verify, it could be contributing factor to unstable trainings. -- V
 
 
-- ELBO Loss implementation: 
+- ELBO Loss implementation:
 1. reconstruction loss for each individual source -- V
 2. KL Loss check
 
@@ -67,12 +67,12 @@ https://colab.research.google.com/github/pytorch/pytorch.github.io/blob/master/a
 
   | Name           | Type             | Params
 ----------------------------------------------------
-0 | Q_Encoder      | QueryEncoder     | 5.6 M 
+0 | Q_Encoder      | QueryEncoder     | 5.6 M
 1 | M_Encoder      | MixtureEncoder   | 22.4 M
-2 | combine_conv   | Conv2d           | 528   
+2 | combine_conv   | Conv2d           | 528
 3 | pitch_encoder  | PitchEncoder     | 14.2 M
-4 | timbre_encoder | TimbreEncoder    | 279 K 
+4 | timbre_encoder | TimbreEncoder    | 279 K
 5 | dit            | DiT              | 72.2 M
-6 | elbo_loss_fn   | ELBOLoss         | 1     
-7 | ce_loss_fn     | CrossEntropyLoss | 0     
-8 | bt_loss_fn     | BarlowTwinsLoss  | 0     
+6 | elbo_loss_fn   | ELBOLoss         | 1
+7 | ce_loss_fn     | CrossEntropyLoss | 0
+8 | bt_loss_fn     | BarlowTwinsLoss  | 0

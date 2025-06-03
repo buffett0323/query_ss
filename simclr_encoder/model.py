@@ -28,48 +28,48 @@ from dataset import CLARTransform
 from torch_models import Wavegram_Logmel_Cnn14, Wavegram_Logmel128_Cnn14
 
 
-    
+
 
 class SimCLR(nn.Module):
     def __init__(
         self,
         args,
-        n_features=512, 
+        n_features=512,
         projection_dim=128,
     ):
         super(SimCLR, self).__init__()
         self.args = args
         if self.args.encoder_name == "Wavegram_Logmel128_Cnn14": # Wavegram_Logmel128_Cnn14
             self.encoder = Wavegram_Logmel128_Cnn14(
-                sample_rate=self.args.sample_rate, 
-                window_size=self.args.window_size, 
-                hop_size=self.args.hop_length, 
-                mel_bins=128, #self.args.n_mels, 
+                sample_rate=self.args.sample_rate,
+                window_size=self.args.window_size,
+                hop_size=self.args.hop_length,
+                mel_bins=128, #self.args.n_mels,
                 fmin=self.args.fmin,
                 fmax=self.args.fmax,
                 classes_num=n_features,
             )
         elif self.args.encoder_name == "Wavegram_Logmel_Cnn14": # Wavegram_Logmel128_Cnn14
             self.encoder = Wavegram_Logmel_Cnn14(
-                sample_rate=self.args.sample_rate, 
-                window_size=self.args.window_size, 
-                hop_size=self.args.hop_length, 
-                mel_bins=64, #self.args.n_mels, 
+                sample_rate=self.args.sample_rate,
+                window_size=self.args.window_size,
+                hop_size=self.args.hop_length,
+                mel_bins=64, #self.args.n_mels,
                 fmin=self.args.fmin,
                 fmax=self.args.fmax,
                 classes_num=n_features,
             )
         else:
             self.encoder = None
-            
+
         # We use a MLP with one hidden layer to obtain z_i = g(h_i) = W(2)σ(W(1)h_i) where σ is a ReLU non-linearity.
         self.projector = nn.Sequential(
             nn.Linear(n_features, n_features), #, bias=False),
             nn.ReLU(),
             nn.Linear(n_features, projection_dim), #, bias=False),
         )
-        
-        
+
+
         # add mlp projection head
         self.projection = nn.Sequential(
             nn.Linear(in_features=n_features, out_features=n_features),
@@ -82,18 +82,18 @@ class SimCLR(nn.Module):
 
     def forward(self, x, return_embedding=False):
         embedding = self.encoder(x)
-        
+
         if return_embedding:
             return embedding
-        
+
         return self.projection(embedding) # return self.projector(embedding)
-    
+
 
 
 class SimCLR_pl(LightningModule):
     def __init__(
-        self, 
-        args, 
+        self,
+        args,
         device,
     ):
         super(SimCLR_pl, self).__init__()
@@ -103,19 +103,19 @@ class SimCLR_pl(LightningModule):
         self.save_dir = self.args.model_dict_save_dir
         self.my_device = torch.device(device)
         os.makedirs(self.save_dir, exist_ok=True)
-        
+
         # Load Models
         self.model = SimCLR(
             args=args,
             n_features=self.args.encoder_output_dim,
-            projection_dim=self.args.projection_dim, 
+            projection_dim=self.args.projection_dim,
         )
-        
+
         # self.criterion = NT_Xent(args.batch_size, args.temperature, world_size=1,)
         self.criterion = ContrastiveLoss(args.batch_size, temperature=args.temperature)
-        
+
         # self.save_hyperparameters()
-        
+
         self.mel_transform = nn.Sequential(
             T.MelSpectrogram(
                 sample_rate=self.args.sample_rate,
@@ -126,7 +126,7 @@ class SimCLR_pl(LightningModule):
             ),
             T.AmplitudeToDB()
         )
-            
+
 
     def forward(self, x, return_embedding=False):
         if self.args.need_transform:
@@ -138,38 +138,38 @@ class SimCLR_pl(LightningModule):
         x_i, x_j = batch
         if x_i.shape[0] != self.batch_size:
             return None
-        
+
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j)
 
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
-    
-    
+
+
     def validation_step(self, batch, batch_idx):
         x_i, x_j = batch
         if x_i.shape[0] != self.batch_size:
             return None
-        
+
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j)
 
         self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
-    
-    
+
+
     def test_step(self, batch, batch_idx):
         x_i, x_j = batch
         if x_i.shape[0] != self.batch_size:
             return None
-        
+
         z_i, z_j = self(x_i), self(x_j)
         loss = self.criterion(z_i, z_j)
 
         self.log('test_loss', loss, on_epoch=True, prog_bar=True, logger=True, batch_size=self.batch_size, sync_dist=True)
         return loss
 
-    
+
 
     def configure_optimizers(self):
         max_epochs = int(self.args.max_epochs)
@@ -182,15 +182,15 @@ class SimCLR_pl(LightningModule):
                 f'Effective batch size {self.args.batch_size * self.args.gradient_accumulation_steps}')
 
         scheduler_warmup = LinearWarmupCosineAnnealingLR(
-            optimizer, 
-            warmup_epochs=self.args.warmup_epochs, 
-            max_epochs=max_epochs, 
+            optimizer,
+            warmup_epochs=self.args.warmup_epochs,
+            max_epochs=max_epochs,
             warmup_start_lr=0.0
             )
 
         return [optimizer], [scheduler_warmup]
 
-        
+
     def save_model(self, checkpoint_name="simclr.pth"):
         """Save model state dictionary."""
         save_path = os.path.join(self.save_dir, checkpoint_name)
@@ -206,7 +206,7 @@ class SimCLR_pl(LightningModule):
             print(f"Model state loaded from {load_path}")
         else:
             print(f"Checkpoint file not found at {load_path}")
-            
+
 
 
     @classmethod

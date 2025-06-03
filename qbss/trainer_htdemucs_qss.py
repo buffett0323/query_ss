@@ -57,7 +57,7 @@ class Q_HTD_MODEL(LightningModule):
         self.criterion = criterion
         self.batch_size = batch_size
         self.lr = lr
-        
+
         self.val_metric_handler = MetricHandler(stems)
         self.test_metric_handler = MetricHandler(stems)
         self.min_val_loss = 1e10
@@ -68,23 +68,23 @@ class Q_HTD_MODEL(LightningModule):
     def training_step(self, batch, batch_idx):
         batch = InputType.from_dict(batch)
         batch = self._to_device(batch)
-        
+
         batch = self(batch)
         loss = self.criterion(batch)
-        
+
         self.log("train_loss", loss.item(), on_step=True, on_epoch=True, prog_bar=True, batch_size=self.batch_size)
         return loss
 
     def validation_step(self, batch, batch_idx):
         batch = InputType.from_dict(batch)
         batch = self._to_device(batch)
-        
+
         batch = self(batch)
         val_loss = self.criterion(batch)
-        
+
         self.val_metric_handler.calculate_snr(
-            batch.estimates.target.audio, 
-            batch.sources.target.audio, 
+            batch.estimates.target.audio,
+            batch.sources.target.audio,
             batch.metadata.stem
         )
         self.log("val_loss", val_loss.item(), sync_dist=True, batch_size=self.batch_size)
@@ -103,13 +103,13 @@ class Q_HTD_MODEL(LightningModule):
     def test_step(self, batch, batch_idx):
         batch = InputType.from_dict(batch)
         batch = self._to_device(batch)
-        
+
         batch = self(batch)
         test_loss = self.criterion(batch)
-        
+
         self.test_metric_handler.calculate_snr(
-            batch.estimates.target.audioc, 
-            batch.sources.target.audio, 
+            batch.estimates.target.audioc,
+            batch.sources.target.audio,
             batch.metadata.stem
         )
         self.log("test_loss", test_loss.item(), sync_dist=True, batch_size=self.batch_size)
@@ -118,7 +118,7 @@ class Q_HTD_MODEL(LightningModule):
     def on_test_epoch_end(self):
         test_snr = self.test_metric_handler.get_mean_median()
         self.log_dict(test_snr, prog_bar=True, sync_dist=True, batch_size=self.batch_size)
-        
+
     def _to_device(self, batch):
         batch.mixture.audio = batch.mixture.audio.to(self.device)
         batch.sources.target.audio = batch.sources.target.audio.to(self.device)
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     config = _load_config("config/train.yml")
     stems = config.data.train_kwargs.allowed_stems
     print("Training with stems: ", stems)
-    
+
     devices_id = [0] #[0, 1, 2, 3]
     wandb_use = True # False
     batch_size = 4
@@ -189,7 +189,7 @@ if __name__ == "__main__":
         ),
     ]
 
-    
+
     # Trainer
     trainer = Trainer(
         max_epochs=num_epochs,

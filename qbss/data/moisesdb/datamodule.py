@@ -9,7 +9,7 @@ from data.moisesdb.dataset import MoisesDBRandomChunkBalancedRandomQueryDataset,
     MoisesDBFullTrackDataset, MoisesDBVDBODeterministicChunkDataset, \
     MoisesDBVDBOFullTrackDataset, MoisesDBVDBORandomChunkDataset, \
     MoisesDBFullTrackTestQueryDataset
-    
+
 def MoisesDataModule(
     data_root: str,
     batch_size: int,
@@ -143,7 +143,7 @@ def MoisesBalancedTrainDataModule(
     )
 
     return datamodule
-    
+
 
 def MoisesValidationDataModule(
     data_root: str,
@@ -158,21 +158,21 @@ def MoisesValidationDataModule(
 
     if datamodule_kwargs is None:
         datamodule_kwargs = {}
-        
+
     allowed_stems = val_kwargs.get("allowed_stems", None)
-    
+
     assert allowed_stems is not None, "allowed_stems must be provided"
-    
+
     val_datasets = []
-    
+
     for allowed_stem in allowed_stems:
         kwargs = val_kwargs.copy()
         kwargs["allowed_stems"] = [allowed_stem]
         val_dataset = MoisesDBDeterministicChunkDeterministicQueryDataset(
-            data_root=data_root, split="val", 
+            data_root=data_root, split="val",
             **kwargs
         )
-        
+
         val_datasets.append(val_dataset)
 
     datamodule = from_datasets(
@@ -201,9 +201,9 @@ def MoisesTestDataModule(
 
     if datamodule_kwargs is None:
         datamodule_kwargs = {}
-        
+
     allowed_stems = test_kwargs.get("allowed_stems", None)
-    
+
     assert allowed_stems is not None, "allowed_stems must be provided"
 
     test_dataset = MoisesDBFullTrackTestQueryDataset(
@@ -234,8 +234,8 @@ def MoisesVDBODataModule(
     test_kwargs: Optional[Mapping] = None,
     datamodule_kwargs: Optional[Mapping] = None,
 ):
-    
-    
+
+
     if train_kwargs is None:
         train_kwargs = {}
 
@@ -247,21 +247,21 @@ def MoisesVDBODataModule(
 
     if datamodule_kwargs is None:
         datamodule_kwargs = {}
-        
+
     train_dataset = MoisesDBVDBORandomChunkDataset(
         data_root=data_root, split="train", **train_kwargs
     )
-    
+
     val_dataset = MoisesDBVDBODeterministicChunkDataset(
         data_root=data_root, split="val", **val_kwargs
     )
-    
+
     test_dataset = MoisesDBVDBOFullTrackDataset(
         data_root=data_root, split="test", **test_kwargs
     )
-    
+
     predict_dataset = test_dataset
-    
+
     datamodule = from_datasets(
         train_dataset=train_dataset,
         val_dataset=val_dataset,
@@ -271,7 +271,5 @@ def MoisesVDBODataModule(
         num_workers=num_workers,
         **datamodule_kwargs
     )
-    
+
     return datamodule
-    
-    

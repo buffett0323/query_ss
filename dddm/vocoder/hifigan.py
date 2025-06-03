@@ -247,4 +247,3 @@ class HiFi(nn.Module):
 
     o = self.dec(x[:,:,:max_len])
     return o
-

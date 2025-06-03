@@ -40,7 +40,7 @@ class SimSiam(nn.Module):
                                         nn.BatchNorm1d(pred_dim),
                                         nn.ReLU(inplace=True), # hidden layer
                                         nn.Linear(pred_dim, dim)) # output layer
-    
+
 
     def forward(self, x1, x2):
         """
@@ -59,13 +59,13 @@ class SimSiam(nn.Module):
         p2 = self.predictor(z2) # NxC
 
         return p1, p2, z1.detach(), z2.detach()
-    
+
 
 
 def init_timbre_encoder(path):
     model = SimSiam(models.__dict__['resnet50'], None)
     checkpoint = torch.load(path)
-    
+
     # Create a new state_dict without 'module.' prefix
     new_state_dict = OrderedDict()
     for k, v in checkpoint['state_dict'].items():
@@ -73,7 +73,7 @@ def init_timbre_encoder(path):
         new_state_dict[new_key] = v
     model.load_state_dict(new_state_dict)
     model.eval()
-    
+
     # **Freeze parameters to disable backpropagation**
     for param in model.parameters():
         param.requires_grad = False  # This prevents gradients from being computed
@@ -86,7 +86,7 @@ def timbre_encoder(input_array, model):
     with torch.no_grad():
         output = model(input_array)
     return output
-    
+
 
 
 if __name__ == "__main__":

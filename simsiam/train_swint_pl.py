@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 class SimSiamLightning(pl.LightningModule):
     def __init__(
-        self, 
+        self,
         args,
     ):
         super().__init__()
@@ -45,7 +45,7 @@ class SimSiamLightning(pl.LightningModule):
             pred_dim=args.pred_dim,
         )
         self.criterion = nn.CosineSimilarity(dim=1)
-        
+
         # Setting optimizer parameters
         if args.fix_pred_lr:
             optim_params = [{'params': self.model.encoder.parameters(), 'fix_lr': False},
@@ -56,7 +56,7 @@ class SimSiamLightning(pl.LightningModule):
         self.optimizer = torch.optim.SGD(optim_params, self.init_lr,
                                     momentum=args.momentum,
                                     weight_decay=args.weight_decay)
-        
+
         self.save_hyperparameters()
 
 
@@ -67,7 +67,7 @@ class SimSiamLightning(pl.LightningModule):
 
     def on_train_epoch_start(self):
         self.adjust_learning_rate()
-    
+
         self.batch_time = AverageMeter('Time', ':6.3f')
         self.data_time = AverageMeter('Data', ':6.3f')
         self.losses = AverageMeter('Loss', ':.4f')
@@ -76,36 +76,36 @@ class SimSiamLightning(pl.LightningModule):
             [self.batch_time, self.data_time, self.losses],
             prefix="Epoch: [{}]".format(self.current_epoch))
         self.end = time.time()
-        
-        
-        
+
+
+
     def training_step(self, batch, batch_idx):
         self.data_time.update(time.time() - self.end)
-        
+
         x_i, x_j, _ = batch
         p1, p2, z1, z2 = self(x_i, x_j)
         loss = -(self.criterion(p1, z2).mean() + self.criterion(p2, z1).mean()) * 0.5
         avg_std = self.cal_std(z1, z2)
         self.losses.update(loss.item(), x_i.size(0))
-        
+
         self.batch_time.update(time.time() - self.end)
         self.end = time.time()
-        
+
         if batch_idx % self.args.print_freq == 0:
             self.progress.display(batch_idx)
-            
+
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_avg_std", avg_std, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
-    
+
     def on_train_epoch_end(self):
         if self.current_epoch % 10 == 0:
             checkpoint_path = f"checkpoint_{self.current_epoch}.ckpt"
             self.trainer.save_checkpoint(os.path.join(self.args.model_dict_save_dir, checkpoint_path))
             print(f"Checkpoint saved at {checkpoint_path}")
-    
-    
+
+
     def adjust_learning_rate(self):
         cur_lr = self.init_lr * 0.5 * (1. + math.cos(math.pi * self.current_epoch / self.args.epochs))
         for param_group in self.optimizer.param_groups:
@@ -121,8 +121,8 @@ class SimSiamLightning(pl.LightningModule):
         z1_std = z1_normalized.std(dim=0).mean()
         z2_std = z2_normalized.std(dim=0).mean()
         return (z1_std + z2_std) / 2
-    
-    
+
+
     def configure_optimizers(self):
         return self.optimizer
 
@@ -136,8 +136,8 @@ def main():
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
-    
-    
+
+
     # Init settings
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -149,23 +149,23 @@ def main():
         notes=args.wandb_notes,
         config=vars(args),  # Store args
     ) if args.log_wandb else None
-    
-    
+
+
     # GPU Accelerator Settings
     devices = [int(i) for i in args.gpu] if args.gpu else [0]
     if len(devices) == 1:
         strategy = "auto"
     else:
         strategy = DDPStrategy(find_unused_parameters=args.find_unused_parameters)
-        
+
     # Other settings
     cb = [TQDMProgressBar(refresh_rate=args.print_freq)]
-    
+
     # Initialize Lightning Model and DataModule
     model = SimSiamLightning(args)
     data_module = MixedBPDataModule(args)
-    
-    
+
+
     # Trainer with multi-GPU support
     trainer = pl.Trainer(
         max_epochs=args.epochs,
@@ -176,10 +176,10 @@ def main():
         precision="bf16", #16,  # Mixed precision training
         callbacks=cb,
     )
-    
+
     trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_training_path)
 
-    
-    
+
+
 if __name__ == "__main__":
     main()

@@ -86,17 +86,17 @@ class FiLM(Conditioning):
             x = x + beta
 
         return x
-        
+
 class CosineSimiliarity(Conditioning):
     def __init__(self, cond_embedding_dim: int, channels: int, channels_per_group: int = 16):
         super().__init__(cond_embedding_dim, channels, channels_per_group)
-        
+
         self.csim = nn.CosineSimilarity(dim=1)
         self.proj = nn.Linear(self.cond_embedding_dim, self.channels * self.channels)
-        
+
     def forward(self, x, w):
-        
-        
+
+
         x = self.gn(x)
 
         gamma = self.gamma(w)
@@ -109,33 +109,33 @@ class CosineSimiliarity(Conditioning):
             pass
         else:
             raise ValueError(f"Invalid shape for input tensor: {x.shape}")
-        
+
         c = self.csim(gamma, x)
-        
+
         x = c[:, None, ...] * x
 
-        
-        
+
+
 
 
 class GeneralizedBilinear(nn.Bilinear):
     def __init__(self, in1_features: int, in2_features: int, out_features: int, bias: bool = True, device=None, dtype=None) -> None:
         super().__init__(in1_features, in2_features, out_features, bias, device, dtype)
-        
+
     def forward(self, x1, x2):
-        
+
         out = torch.einsum(
             "bc...,acd,bd->ba...", x1, self.weight, x2
         )
-        
+
         if self.bias is not None:
             ndim = out.ndim
             bias = torch.reshape(self.bias, (1, -1) + (1,) * (ndim - 2))
-            
+
             out = out + bias
-            
+
         return out
-           
+
 
 class BilinearFiLM(Conditioning):
     def __init__(

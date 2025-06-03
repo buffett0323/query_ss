@@ -44,7 +44,7 @@ class ContrastiveLoss(nn.Module):
        all_losses = -torch.log(nominator / torch.sum(denominator, dim=1))
        loss = torch.sum(all_losses) / (2 * self.batch_size)
        return loss
-   
+
 
 class GatherLayer(torch.autograd.Function):
     """Gather tensors from all process, supporting backward propagation."""
@@ -62,7 +62,7 @@ class GatherLayer(torch.autograd.Function):
         grad_out = torch.zeros_like(input)
         grad_out[:] = grads[dist.get_rank()]
         return grad_out
-    
+
 
 class NT_Xent(nn.Module):
     def __init__(self, batch_size, temperature, world_size):

@@ -44,8 +44,8 @@ class BaseEndToEndModule(pl.LightningModule):
         self,
     ) -> None:
         super().__init__()
-        
-        
+
+
 class MyBandSplit(BaseEndToEndModule):
     def __init__(
         self,
@@ -84,8 +84,8 @@ class MyBandSplit(BaseEndToEndModule):
         fs: int = 44100,
     ):
         super().__init__()
-        
-        
+
+
         self.stft = torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
             win_length=win_length,
@@ -99,8 +99,8 @@ class MyBandSplit(BaseEndToEndModule):
             center=True,
             onesided=True,
         )
-        
-        
+
+
         self.istft = torchaudio.transforms.InverseSpectrogram(
             n_fft=n_fft,
             win_length=win_length,
@@ -113,8 +113,8 @@ class MyBandSplit(BaseEndToEndModule):
             center=True,
             onesided=True,
         )
-        
-        
+
+
         self.instantiate_bandsplit(
             in_channel=in_channel,
             band_type=band_type,
@@ -127,8 +127,8 @@ class MyBandSplit(BaseEndToEndModule):
             n_fft=n_fft,
             fs=fs,
         )
-        
-        
+
+
         self.instantiate_tf_modelling(
             n_sqm_modules=n_sqm_modules,
             emb_dim=emb_dim,
@@ -136,7 +136,7 @@ class MyBandSplit(BaseEndToEndModule):
             bidirectional=bidirectional,
             rnn_type=rnn_type,
         )
-        
+
 
         self.instantiate_mask_estim(
             in_channel=in_channel,
@@ -148,13 +148,13 @@ class MyBandSplit(BaseEndToEndModule):
             n_freq=n_fft // 2 + 1,
             use_freq_weights=use_freq_weights,
         )
-        
+
 
         self.query_encoder = Passt(
             original_fs=fs,
             passt_fs=32000,
         )
-        
+
 
         self.film = FiLM(
             self.query_encoder.PASST_EMB_DIM,
@@ -163,7 +163,7 @@ class MyBandSplit(BaseEndToEndModule):
             multiplicative=multiplicative_film,
             depth=film_depth,
         )
-        
+
         self.use_beats = use_beats
         if self.use_beats:
             self.instantiate_beats(beats_check_point_pth='beats/pt_dict/BEATs_iter3_plus_AS2M.pt')
@@ -209,9 +209,9 @@ class MyBandSplit(BaseEndToEndModule):
             treat_channel_as_feature=treat_channel_as_feature,
             emb_dim=emb_dim,
         )
-        
-        
-        
+
+
+
     def beats_query(self, wav):
         wav = wav.mean(dim=1, keepdim=False)
         padding_mask = torch.zeros(1, wav.shape[1]).bool().cuda()  # Move padding mask to GPU
@@ -222,9 +222,9 @@ class MyBandSplit(BaseEndToEndModule):
 
         embed = torch.cat(embed, dim=0)
         return embed
-    
-    
-    
+
+
+
     def instantiate_tf_modelling(
         self,
         n_sqm_modules: int = 12,
@@ -240,8 +240,8 @@ class MyBandSplit(BaseEndToEndModule):
             bidirectional=bidirectional,
             rnn_type=rnn_type,
         )
-        
-        
+
+
     def instantiate_mask_estim(
         self,
         in_channel: int,
@@ -270,12 +270,12 @@ class MyBandSplit(BaseEndToEndModule):
             complex_mask=complex_mask,
             use_freq_weights=use_freq_weights,
         )
-        
-        
+
+
     def mask(self, x, m):
         return x * m
-    
-    
+
+
     def forward(self, batch: InputType):
         with torch.no_grad():
             x = self.stft(batch.mixture.audio)
@@ -286,12 +286,12 @@ class MyBandSplit(BaseEndToEndModule):
                     s = batch.sources[stem].audio
                     s = self.stft(s)
                     batch.sources[stem].spectrogram = s
-                    
+
         batch = self.separate(batch)
 
         return batch
-    
-    
+
+
     def separate(self, batch):
 
         x, q, length = self.encode(batch)
@@ -306,8 +306,8 @@ class MyBandSplit(BaseEndToEndModule):
         )
 
         return batch
-    
-    
+
+
     def encode(self, batch):
         x = batch.mixture.spectrogram
         length = batch.mixture.audio.shape[-1]
@@ -315,22 +315,22 @@ class MyBandSplit(BaseEndToEndModule):
         q = self.tf_model(z)  # (batch, emb_dim, n_band, n_time)
 
         return x, q, length
-    
-    
+
+
     def adapt_query(self, q, batch):
         if self.use_beats:
             w = self.beats_query(batch.query.audio)
         else:
             w = self.query_encoder(batch.query.audio)
-            
-        # BF: torch.Size([1, 2, 441000]) 
+
+        # BF: torch.Size([1, 2, 441000])
         # AF: torch.Size([1, 768])
         q = torch.permute(q, (0, 3, 1, 2)) # (batch, n_band, n_time, emb_dim) -> (batch, emb_dim, n_band, n_time)
         q = self.film(q, w)
         q = torch.permute(q, (0, 2, 3, 1)) # -> (batch, n_band, n_time, emb_dim)
-        
+
         return q
-    
+
 ###------------------------------------------------------------------------------------------###
 
 class BandSplitMamba(BaseEndToEndModule):
@@ -371,8 +371,8 @@ class BandSplitMamba(BaseEndToEndModule):
         fs: int = 44100,
     ):
         super().__init__()
-        
-        
+
+
         self.stft = torchaudio.transforms.Spectrogram(
             n_fft=n_fft,
             win_length=win_length,
@@ -386,8 +386,8 @@ class BandSplitMamba(BaseEndToEndModule):
             center=True,
             onesided=True,
         )
-        
-        
+
+
         self.istft = torchaudio.transforms.InverseSpectrogram(
             n_fft=n_fft,
             win_length=win_length,
@@ -400,8 +400,8 @@ class BandSplitMamba(BaseEndToEndModule):
             center=True,
             onesided=True,
         )
-        
-        
+
+
         self.instantiate_bandsplit(
             in_channel=in_channel,
             band_type=band_type,
@@ -426,13 +426,13 @@ class BandSplitMamba(BaseEndToEndModule):
             n_freq=n_fft // 2 + 1,
             use_freq_weights=use_freq_weights,
         )
-        
+
 
         self.query_encoder = Passt(
             original_fs=fs,
             passt_fs=32000,
         )
-        
+
 
         self.film = FiLM(
             self.query_encoder.PASST_EMB_DIM,
@@ -450,8 +450,8 @@ class BandSplitMamba(BaseEndToEndModule):
             n_layer=6, #6,
             bidirectional=True, #True,
         )
-        
-        
+
+
     def instantiate_mamba(
         self,
         emb_dim=64, # 48,
@@ -507,9 +507,9 @@ class BandSplitMamba(BaseEndToEndModule):
             treat_channel_as_feature=treat_channel_as_feature,
             emb_dim=emb_dim,
         )
-    
-        
-        
+
+
+
     def instantiate_mask_estim(
         self,
         in_channel: int,
@@ -538,12 +538,12 @@ class BandSplitMamba(BaseEndToEndModule):
             complex_mask=complex_mask,
             use_freq_weights=use_freq_weights,
         )
-        
-        
+
+
     def mask(self, x, m):
         return x * m
-    
-    
+
+
     def forward(self, batch: InputType):
         with torch.no_grad():
             x = self.stft(batch.mixture.audio)
@@ -554,12 +554,12 @@ class BandSplitMamba(BaseEndToEndModule):
                     s = batch.sources[stem].audio
                     s = self.stft(s)
                     batch.sources[stem].spectrogram = s
-                    
+
         batch = self.separate(batch)
 
         return batch
-    
-    
+
+
     def separate(self, batch):
 
         x, q, length = self.encode(batch)
@@ -574,30 +574,30 @@ class BandSplitMamba(BaseEndToEndModule):
         )
 
         return batch
-    
-    
+
+
     def encode(self, batch):
         x = batch.mixture.spectrogram
         length = batch.mixture.audio.shape[-1]
         z = self.band_split(x)  # (batch, emb_dim, n_band, n_time) # print(z.shape) # torch.Size([BS, 64, 576, 128])
-        
+
         # Mamba Block
         z = self.adapt_mamba(z) # (batch, emb_dim, n_band, n_time): Same size
 
         return x, z, length
-    
-    
+
+
     def adapt_query(self, q, batch):
         w = self.query_encoder(batch.query.audio)
-            
-        # BF: torch.Size([1, 2, 441000]) 
+
+        # BF: torch.Size([1, 2, 441000])
         # AF: torch.Size([1, 768])
         q = torch.permute(q, (0, 3, 1, 2)) # (batch, n_band, n_time, emb_dim) -> (batch, emb_dim, n_band, n_time)
         q = self.film(q, w)
         q = torch.permute(q, (0, 2, 3, 1)) # -> (batch, n_band, n_time, emb_dim)
-        
+
         return q
-    
+
 
     def adapt_mamba(self, x):
         B, C, n_band, T = x.shape
@@ -615,18 +615,18 @@ class BandSplitMamba(BaseEndToEndModule):
         intra_rnn = intra_rnn.transpose(1, 2)  # [B * n_band, T, C]
 
         # Apply the Mamba block over the time dimension
-        # print("Before mamba:", intra_rnn.shape) # torch.Size([1152, 128, 64]) 
+        # print("Before mamba:", intra_rnn.shape) # torch.Size([1152, 128, 64])
         intra_rnn = self.intra_mamba(intra_rnn)  # [B * n_band, T, C] ([1152, 128, 64])
         # print("After mamba:", intra_rnn.shape) # Bidirection: torch.Size([1152, 128, 128])
-        
-        
+
+
         # Transpose back to [B * n_band, C, T]
         intra_rnn = intra_rnn.transpose(1, 2)  # [B * n_band, C, 2*T]
-        
+
         # Intra Linear Conv1D
         intra_rnn = self.intra_linear(intra_rnn)  # [BT, C, Q]
         # print("After Linear:", intra_rnn.shape) # After Linear: torch.Size([1152, 128, 64])
-        
+
         # Reshape back to original dimensions
         intra_rnn = intra_rnn.view(B, n_band, C, T)  # [B, n_band, C, T]
 
@@ -638,9 +638,9 @@ class BandSplitMamba(BaseEndToEndModule):
 
         return intra_rnn
 
-    
-    
-    
+
+
+
 class MambaBlock(nn.Module):
     def __init__(self, in_channels, n_layer=1, bidirectional=False):
         super(MambaBlock, self).__init__()
@@ -693,9 +693,9 @@ class MambaBlock(nn.Module):
             output = torch.cat([output, back_output], dim=-1)  # Concatenate along the feature dimension
 
         return output
-    
-    
-    
+
+
+
 class LayerNormalization4D(nn.Module):
     def __init__(self, input_dimension, eps=1e-5):
         super().__init__()

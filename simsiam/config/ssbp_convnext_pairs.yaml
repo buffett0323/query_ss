@@ -15,7 +15,7 @@ workers: 24 # 24 for terra, 56 for fatcat
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #256 
+batch_size: 256 #256
 start_epoch: 0
 epochs: 1000 # 200
 lr: 0.05 # 0.05 #0.001
@@ -76,7 +76,7 @@ lr_decay_factor: 0.05 #0.01
 
 
 # reload options
-model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+model_path: "save" # set to the directory containing `checkpoint_##.tar`
 reload: False
 
 # knn options

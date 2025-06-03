@@ -9,7 +9,7 @@ if __name__ == "__main__":
     parser.add_argument("--npy_file", type=str, required=True, help="Path to the .npy file")
     parser.add_argument("--output_fig", type=str, default="waveform.png", help="Path to save the output figure")
     parser.add_argument("--sample_rate", type=int, default=16000, help="Sample rate of the audio")
-    
+
     args = parser.parse_args()
     waveform = np.load(args.npy_file)
     sample_rate = args.sample_rate  # Based on the context files showing 16000Hz sample rate

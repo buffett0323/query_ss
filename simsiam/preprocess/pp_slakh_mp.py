@@ -21,7 +21,7 @@ def convert_flac_to_npy(input_flac, target_sr=16000):
     """ Convert FLAC file to NumPy array with target sample rate. """
     waveform, sr = torchaudio.load(input_flac, format="flac")
     if sr != 44100:
-        print("Wrong sr when converting:", sr)    
+        print("Wrong sr when converting:", sr)
 
     if sr != target_sr:
         resampler = T.Resample(orig_freq=sr, new_freq=target_sr)
@@ -54,17 +54,17 @@ def energy_activity_detection(audio, output_path, basename, sr=16000):
 def process_track(track):
     """ Function to process a single track. This will run in parallel. """
     yaml_file = os.path.join(input_path, track, "metadata.yaml")
-    
+
     if not os.path.exists(yaml_file):
         return None  # Skip if metadata is missing
 
     with open(yaml_file, "r") as f:
         data = yaml.safe_load(f)
-    
+
     stem_mapping = {stem: info["inst_class"] for stem, info in data["stems"].items()}
-    
+
     label_set = set()
-    
+
     for stem in os.listdir(os.path.join(input_path, track, "stems")):
         input_flac = os.path.join(input_path, track, "stems", stem)
         output_wav_folder = os.path.join(output_path, track)
@@ -82,7 +82,7 @@ def process_track(track):
 
         # Perform energy-based activity detection
         energy_activity_detection(wav_npy, output_wav_folder, basename=basename)
-    
+
     return label_set
 
 

@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 try:
     import rave
 except:
-    import sys, os 
+    import sys, os
     sys.path.append(os.path.abspath('.'))
     import rave
 
@@ -75,7 +75,7 @@ flags.DEFINE_float('ema',
 flags.DEFINE_bool('progress',
                   default=True,
                   help='Display training progress bar')
-flags.DEFINE_bool('smoke_test', 
+flags.DEFINE_bool('smoke_test',
                   default=False,
                   help="Run training with n_batches=1 to test the model")
 # Buffett Added
@@ -169,7 +169,7 @@ def main(argv):
 
     # create model
     model = rave.RAVE(
-        n_channels=FLAGS.channels, 
+        n_channels=FLAGS.channels,
         sampling_rate=FLAGS.sr,
         save_audio_dir=os.path.join(FLAGS.out_path, RUN_NAME, "audio"),
     )
@@ -202,7 +202,7 @@ def main(argv):
     # CHECKPOINT CALLBACKS
     validation_checkpoint = pl.callbacks.ModelCheckpoint(monitor="validation",
                                                          filename="best")
-    last_filename = "last" if FLAGS.save_every is None else "epoch-{epoch:04d}"                                                        
+    last_filename = "last" if FLAGS.save_every is None else "epoch-{epoch:04d}"
     last_checkpoint = rave.core.ModelCheckpoint(filename=last_filename, step_period=FLAGS.save_every)
 
     val_check = {}
@@ -218,7 +218,7 @@ def main(argv):
 
     # Loggers
     tb_logger = TensorBoardLogger(
-        FLAGS.out_path, 
+        FLAGS.out_path,
         name=RUN_NAME
     )
     wandb_logger = WandbLogger(
@@ -248,7 +248,7 @@ def main(argv):
         accelerator = "mps"
         devices = 1
     print('selected gpu:', gpu, "devices: ", devices)
-    
+
     callbacks = [
         validation_checkpoint,
         last_checkpoint,
@@ -280,12 +280,12 @@ def main(argv):
         # model = model.load_state_dict(loaded)
         trainer.fit_loop.epoch_loop._batches_that_stepped = loaded['global_step']
         # model = model.load_state_dict(loaded['state_dict'])
-    
+
     with open(os.path.join(FLAGS.out_path, RUN_NAME, "config.gin"), "w") as config_out:
         config_out.write(gin.operative_config_str())
 
     trainer.fit(model, train, val, ckpt_path=run)
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     app.run(main)

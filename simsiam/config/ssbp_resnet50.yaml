@@ -20,7 +20,7 @@ gpu: 1 #[1, 3] #[0,1,2,3]
 
 # train options
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 256 #256 #512 
+batch_size: 256 #256 #512
 start_epoch: 0
 epochs: 200 # 100
 lr: 0.05 #0.001 # 0.03  # 0.0003
@@ -65,7 +65,7 @@ lr_decay_factor: 0.05 #0.01
 
 
 # reload options
-model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+model_path: "save" # set to the directory containing `checkpoint_##.tar`
 reload: False
 
 # knn options

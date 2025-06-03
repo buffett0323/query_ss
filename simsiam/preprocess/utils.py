@@ -15,14 +15,14 @@ from tqdm import tqdm
 
 
 def get_top_2_peak_infos(
-    load_path, 
-    segment_duration=0.95, 
+    load_path,
+    segment_duration=0.95,
     sample_rate=16000,
     amp_thres=0.5
 ):
     # Load waveform
     waveform = np.load(load_path).astype(np.float32)
-   
+
     # Pretend out of bounds
     segment_samples = int(segment_duration*sample_rate)
     thres = waveform.shape[0] - segment_samples
@@ -34,24 +34,24 @@ def get_top_2_peak_infos(
     # Find peaks
     peaks, _ = scipy.signal.find_peaks(envelope, distance=sample_rate // 20)
     if len(peaks) == 0: return [] # print("No peaks found.")
-        
+
     # Get peak amplitudes
     peak_amplitudes = envelope[peaks]
-    
+
     # Filter peaks above threshold
     peak_info = []
     for peak_idx, amp in zip(peaks, peak_amplitudes):
         if amp >= amp_thres:
             time_sec = peak_idx / sample_rate
             peak_info.append((peak_idx, amp, time_sec))
-            
+
     return peak_info
 
 
 
 def find_top_2_peak_segments(
-    load_path, 
-    segment_duration=0.95, 
+    load_path,
+    segment_duration=0.95,
     sample_rate=16000,
     amp_thres=0.5
 ):
@@ -61,7 +61,7 @@ def find_top_2_peak_segments(
     elif load_path.endswith(".wav"):
         waveform, sr = torchaudio.load(load_path)
         waveform = waveform.numpy()
-        
+
         # Resample if needed
         if sr != sample_rate:
             waveform = torchaudio.functional.resample(
@@ -83,12 +83,12 @@ def find_top_2_peak_segments(
     # Find peaks
     peaks, _ = scipy.signal.find_peaks(envelope, distance=sample_rate // 20)
     if len(peaks) == 0: return [] # print("No peaks found.")
-        
+
 
     # Get peak amplitudes and top 5
     peak_amplitudes = envelope[peaks]
     top_indices = np.argsort(peak_amplitudes)#[::-1]  # highest to lowest
-    
+
     top_peaks = peaks[top_indices]
     top_amplitudes = peak_amplitudes[top_indices]
     top_times = top_peaks / sample_rate
@@ -100,10 +100,10 @@ def find_top_2_peak_segments(
     for i, (amp, peak_idx, time_sec) in enumerate(sorted_peaks, 1):
         if amp < amp_thres:
             break
-       
+
         start_idx = peak_idx
         end_idx = start_idx + segment_samples
-        
+
         segment = waveform[start_idx:end_idx]
         segments.append(segment)
 
@@ -117,7 +117,7 @@ def plot_waveform(npy_path, savefig_name="../sample_audio/waveform.png"):
     sample_rate = 16000
     if len(waveform.shape) == 1:
         waveform = waveform[np.newaxis, :]
-        
+
     num_samples = waveform.shape[1]
     duration = num_samples / sample_rate
     time_axis = np.linspace(0, duration, num_samples)
@@ -132,8 +132,8 @@ def plot_waveform(npy_path, savefig_name="../sample_audio/waveform.png"):
     plt.savefig(savefig_name)
     plt.close()
     print("Saved the figure to ", savefig_name)
-    
-    
+
+
 def npy2audio(npy_path, savefig_name="../sample_audio/temp_audio.wav"):
     waveform = np.load(npy_path)
 
@@ -195,22 +195,22 @@ def save_to_txt(filename, data):
     with open(filename, "w") as f:
         for item in data:
             f.write(f"{item}\n")
-            
+
 def load_from_txt(filename):
     with open(filename, "r") as f:
         return [line.strip() for line in f.readlines()]
 
 
-    
+
 def plot_spec_and_save(spectrogram, savefig_name, sr=16000):
     if isinstance(spectrogram, torch.Tensor):
         spectrogram = spectrogram.squeeze().numpy()
-                
+
     plt.figure(figsize=(6, 6))
     librosa.display.specshow(
         spectrogram,
-        x_axis='time', 
-        y_axis='mel', 
+        x_axis='time',
+        y_axis='mel',
         sr=sr,
     )
     plt.colorbar(format='%+2.0f dB')
@@ -227,7 +227,7 @@ def resize_spec(spectrogram, target_size=(256, 256)):
 def plot_and_save_logmel_spectrogram(x_i, x_j, song_name, output_dir, stage="original", sample_rate=16000):
     """
     Plots and saves the log-mel spectrograms for the transformed, normed, and augmented versions.
-    
+
     Args:
         x_i (Tensor): Transformed spectrogram of x_i
         x_j (Tensor): Transformed spectrogram of x_j
@@ -270,20 +270,20 @@ def plot_mel_spectrogram_librosa(log_mel_spec, output_dir, song_name, stage="ori
 
     # Plot Mel Spectrogram
     plt.figure(figsize=(10, 6), dpi=150)
-    librosa.display.specshow(log_mel_spec, x_axis='time', y_axis='mel', sr=sample_rate, 
+    librosa.display.specshow(log_mel_spec, x_axis='time', y_axis='mel', sr=sample_rate,
                              hop_length=160, n_fft=1024, n_mels=64, fmin=60, fmax=7800, cmap='inferno')
     plt.colorbar(format="%+2.0f dB")
     plt.title(f"{song_name} - {stage} Mel Spectrogram")
     plt.xlabel("Time (s)")
     plt.ylabel("Mel Frequency Bands")
-    
+
     # Save the plot
     plt.tight_layout()
     plot_filename = f"{song_name}_{stage}_mel_spec_librosa.png"
     plt.savefig(f"{output_dir}/{plot_filename}")
     plt.close()
-    
-    
+
+
 if __name__ == "__main__":
     path = "/mnt/gestalt/home/buffett/beatport_analyze/chorus_audio_16000_095sec_npy_bass_other/0747dfb4-58bf-4be6-9b2e-7b08c69e07df_1/bass_other_seg_0.npy"
     npy2audio(path)

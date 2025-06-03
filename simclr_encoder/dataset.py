@@ -51,10 +51,10 @@ class NSynthDataset(Dataset):
         path = self.data_path_list[idx]
         x = np.load(path).squeeze(0)
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
-        
+
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
-            
+
         if self.split == "inference":
             return torch.tensor(x, dtype=torch.float32), path
         return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
@@ -64,14 +64,14 @@ class NSynthDataModule(LightningDataModule):
     def __init__(
         self,
         args,
-        data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/", 
+        data_dir="/mnt/gestalt/home/ddmanddman/nsynth_dataset/",
     ):
         super(NSynthDataModule, self).__init__()
         self.args = args
         self.data_dir = data_dir
         self.pin_memory = True
         self.drop_last = False
-        
+
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
@@ -82,7 +82,7 @@ class NSynthDataModule(LightningDataModule):
                 split="train",
                 need_transform=self.args.need_clar_transform,
             )
-            
+
             self.val_ds = NSynthDataset(
                 sample_rate=self.args.sample_rate,
                 duration=self.args.segment_second,
@@ -90,7 +90,7 @@ class NSynthDataModule(LightningDataModule):
                 split="valid",
                 need_transform=self.args.need_clar_transform,
             )
-        
+
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             self.test_ds = NSynthDataset(
@@ -100,8 +100,8 @@ class NSynthDataModule(LightningDataModule):
                 split="test",
                 need_transform=self.args.need_clar_transform,
             )
-            
-            
+
+
     def train_dataloader(self):
         """The train dataloader."""
         return self._data_loader(
@@ -122,8 +122,8 @@ class NSynthDataModule(LightningDataModule):
             self.test_ds,
             shuffle=False
         )
-        
-    
+
+
     def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
         return DataLoader(
             dataset,
@@ -133,7 +133,7 @@ class NSynthDataModule(LightningDataModule):
             drop_last=self.drop_last,
             pin_memory=self.pin_memory,
         )
-    
+
     @property
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
@@ -174,25 +174,25 @@ class BPDataset(Dataset):
 
     def __len__(self): #""" Total we got 175698 files * 4 tracks """
         return len(self.data_path_list)
-    
-    
+
+
     # def segment_length(self, x):
     #     if self.random_slice:
     #         max_start_index = x.shape[-1] - self.slice_duration
     #         start_idx = np.random.randint(0, max_start_index)
     #         end_idx = start_idx + self.slice_duration
     #         return x[start_idx:end_idx]
-            
+
     #     return x[:self.slice_duration]
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
         x = np.load(path)
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
-        
+
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
-            
+
         if self.split == "inference":
             return torch.tensor(x, dtype=torch.float32), path
         return torch.tensor(x_i, dtype=torch.float32), torch.tensor(x_j, dtype=torch.float32)
@@ -202,15 +202,15 @@ class BPDataModule(LightningDataModule):
     def __init__(
         self,
         args,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy", 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy",
     ):
         super(BPDataModule, self).__init__()
         self.args = args
         self.data_dir = data_dir
         self.pin_memory = args.pin_memory
         self.drop_last = args.drop_last
-        self.num_workers = min(8, args.num_workers) 
-        
+        self.num_workers = min(8, args.num_workers)
+
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
@@ -222,7 +222,7 @@ class BPDataModule(LightningDataModule):
                 need_transform=self.args.need_clar_transform,
                 random_slice=self.args.random_slice,
             )
-            
+
             self.val_ds = BPDataset(
                 sample_rate=self.args.sample_rate,
                 duration=self.args.segment_second,
@@ -231,7 +231,7 @@ class BPDataModule(LightningDataModule):
                 need_transform=self.args.need_clar_transform,
                 random_slice=self.args.random_slice,
             )
-        
+
         # Assign test dataset for use in dataloader(s)
         if stage == "test" or stage is None:
             self.test_ds = BPDataset(
@@ -242,8 +242,8 @@ class BPDataModule(LightningDataModule):
                 need_transform=self.args.need_clar_transform,
                 random_slice=self.args.random_slice,
             )
-            
-            
+
+
     def train_dataloader(self):
         """The train dataloader."""
         return self._data_loader(
@@ -264,8 +264,8 @@ class BPDataModule(LightningDataModule):
             self.test_ds,
             shuffle=False
         )
-        
-    
+
+
     def _data_loader(self, dataset: Dataset, shuffle: bool = False) -> DataLoader:
         return DataLoader(
             dataset,
@@ -277,7 +277,7 @@ class BPDataModule(LightningDataModule):
             persistent_workers=True,  # Keep workers alive to reduce loading overhead
             prefetch_factor=4 if self.num_workers > 0 else None,  # Prefetch data in advance
         )
-    
+
     @property
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
@@ -288,7 +288,7 @@ class BPDataModule(LightningDataModule):
 
 class CLARTransform(nn.Module):
     def __init__(
-        self, 
+        self,
         sample_rate,
         duration,
     ):
@@ -303,8 +303,8 @@ class CLARTransform(nn.Module):
             self.time_shift_transform,
             self.time_stretch_transform,
         ]
-        
-        
+
+
     def pitch_shift_transform(self, x, n_steps=15):
         return effects.pitch_shift(x, sr=self.sample_rate, n_steps=torch.randint(low=-n_steps, high=n_steps, size=[1]).item())
 
@@ -344,8 +344,8 @@ class CLARTransform(nn.Module):
         fade_out_len = np.random.randint(int(x.shape[0] * max_fade_size))
         fade_in_len = np.random.randint(int(x.shape[0] * max_fade_size))
         return np.float32(
-            _fade_in(fade_shape, waveform_length, fade_in_len) * 
-            _fade_out(fade_shape, waveform_length, fade_out_len) * 
+            _fade_in(fade_shape, waveform_length, fade_in_len) *
+            _fade_out(fade_shape, waveform_length, fade_out_len) *
             x
         )
 
@@ -353,7 +353,7 @@ class CLARTransform(nn.Module):
     def add_noise_transform(self, x):
         noise_type = random.choice(['white', 'brown', 'pink'])
         snr = random.uniform(0.5, 1.5)  # Signal-to-noise ratio
-        
+
         if noise_type == 'white':
             noise = np.random.normal(0, 1, len(x))
         elif noise_type == 'brown':
@@ -362,7 +362,7 @@ class CLARTransform(nn.Module):
         else:  # pink noise
             freqs = np.fft.rfftfreq(len(x))
             noise = np.fft.irfft(np.random.randn(len(freqs)) / (freqs + 1e-6))
-        
+
         noise = noise / np.max(np.abs(noise))
         x = x + noise / snr
         return np.clip(x, -1, 1)
@@ -385,7 +385,7 @@ class CLARTransform(nn.Module):
         return np.pad(x, [0, (self.sample_rate * self.duration) - x.shape[0]])
 
 
-    def __call__(self, x1, x2):        
+    def __call__(self, x1, x2):
         # Apply random augmentations
         transform1, transform2 = random.sample(self.transforms, 2)
         x1 = transform1(x1)
@@ -403,19 +403,19 @@ if __name__ == "__main__":
     #     parser.add_argument(f"--{k}", default=v, type=type(v))
 
     # args = parser.parse_args()
-    
+
     # # ds1 = NSynthDataset(args.sample_rate, args.segment_second)
     # # print(ds1[0])
-    
+
     # dm = NSynthDataModule(
     #     args=args,
     # )
     # dm.setup()
-    
+
     # for tr in tqdm(dm.train_dataloader()):
     #     pass; #print(tr[0].shape)
-    
-    
+
+
     parser = argparse.ArgumentParser(description="SimCLR_BP")
 
     config = yaml_config_hook("bp_config.yaml")
@@ -423,16 +423,16 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-    
+
     # ds = BPDataset(args.sample_rate, args.segment_second)
     # print(ds[0])
-    
+
     dm = BPDataModule(
         args=args,
-        data_dir=args.data_dir, 
+        data_dir=args.data_dir,
     )
     dm.setup()
-    
-    
+
+
     for tr in tqdm(dm.train_dataloader()):
         pass; #print(tr[0].shape)

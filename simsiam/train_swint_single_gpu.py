@@ -107,7 +107,7 @@ def main():
         persistent_workers=args.persistent_workers,
         prefetch_factor=8, #4,
     )
-    
+
     tp = Transform_Pipeline(
         sample_rate=args.sample_rate,
         n_fft=args.n_fft,
@@ -135,11 +135,11 @@ def main():
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-            }, 
-                filename=f'checkpoint_{epoch:04d}.pth.tar', 
+            },
+                filename=f'checkpoint_{epoch:04d}.pth.tar',
                 save_dir=args.model_dict_save_path
             )
-            
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args, tp):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -155,7 +155,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, tp):
 
         x_i = x_i.cuda(non_blocking=True)
         x_j = x_j.cuda(non_blocking=True)
-        
+
         x_i = tp(x_i)
         x_j = tp(x_j)
 

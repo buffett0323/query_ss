@@ -120,4 +120,3 @@ rave.RAVE:
     input_mode = "mel"
     output_mode = "pqmf"
     audio_monitor_epochs = 10
-    

@@ -40,7 +40,7 @@ from basic_pitch_torch import note_creation as infer
 
 def frame_with_pad(x: np.array, frame_length: int, hop_size: int) -> np.array:
     """
-    Extends librosa.util.frame with end padding if required, similar to 
+    Extends librosa.util.frame with end padding if required, similar to
     tf.signal.frame(pad_end=True).
 
     Returns:
@@ -297,7 +297,7 @@ def predict(
     """
     model = BasicPitchTorch()
     model.load_state_dict(torch.load(str(model_path)))
-    model.eval() 
+    model.eval()
     if torch.cuda.is_available():
         model.cuda()
 

@@ -11,11 +11,11 @@ coco_path = f"{base}/cocochorales_output/main_dataset/{split}"
 
 # Get all WAV files
 def get_wav_files():
-    
+
     txt_file = f"../info/{split}_list.txt"
     if os.path.exists(txt_file):
         with open(txt_file, "r") as f:
-            file_list = [line.strip() for line in f] 
+            file_list = [line.strip() for line in f]
     else:
         file_list = []
         for track in tqdm(os.listdir(coco_path)):
@@ -24,11 +24,11 @@ def get_wav_files():
                 for stem in os.listdir(track_path):
                     if stem.endswith(".wav"):
                         file_list.append(os.path.join(track_path, stem))
-                        
+
         with open(txt_file, "w") as f:
             for path in file_list:
                 f.write(path + "\n")
-                
+
     return file_list
 
 # Convert WAV to NPY
@@ -47,7 +47,7 @@ def main():
 
     # Use multiprocessing Pool
     num_workers = max(mp.cpu_count()-2, 24)
-    
+
     with mp.Pool(num_workers) as pool:
         list(tqdm(pool.imap(process_wav, wav_files), total=len(wav_files)))
 

@@ -39,5 +39,4 @@ blocks.GRU:
 
 rave.RAVE:
     spectrogram = @transforms.MelSpectrogram()
-    input_mode = "mel" 
-    
+    input_mode = "mel"

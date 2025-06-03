@@ -26,15 +26,15 @@ def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
     one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0) # weighted score -> [B, C]
     pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, classes) * sim_weight.unsqueeze(dim=-1), dim=1)
     pred_labels = pred_scores.argsort(dim=-1, descending=True)
-    
+
     return pred_labels
 
 
 class SimSiamPL(pl.LightningModule):
     def __init__(
-        self, 
+        self,
         args,
-        dim=2048, 
+        dim=2048,
         pred_dim=512,
     ):
         """
@@ -43,18 +43,18 @@ class SimSiamPL(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()  # Saves args automatically for checkpointing
         self.args = args
-        
+
         # Create the encoder
         self.encoder = Wavegram_Logmel128_Cnn14(
-            sample_rate=self.args.sample_rate, 
-            window_size=self.args.window_size, 
-            hop_size=self.args.hop_length, 
-            mel_bins=128, #self.args.n_mels, 
+            sample_rate=self.args.sample_rate,
+            window_size=self.args.window_size,
+            hop_size=self.args.hop_length,
+            mel_bins=128, #self.args.n_mels,
             fmin=self.args.fmin,
             fmax=self.args.fmax,
             classes_num=dim, #n_features,
         )
-        
+
        # build a 3-layer projector
         prev_dim = self.encoder.fc1.weight.shape[1]
         self.encoder.fc1 = nn.Sequential(
@@ -75,11 +75,11 @@ class SimSiamPL(pl.LightningModule):
             nn.Linear(dim, pred_dim, bias=False),
             nn.BatchNorm1d(pred_dim),
             nn.ReLU(inplace=True), # hidden layer
-            nn.Linear(pred_dim, dim),    
+            nn.Linear(pred_dim, dim),
         ) # output layer
 
         self.criterion = nn.CosineSimilarity(dim=1)
-        
+
         for param in self.parameters():
             param.data = param.data.contiguous()
 
@@ -98,14 +98,14 @@ class SimSiamPL(pl.LightningModule):
 
         p1, p2, z1, z2 = self(x_i, x_j)
         loss = -(self.criterion(p1, z2).mean() + self.criterion(p2, z1).mean()) * 0.5
-        
+
         # Compute per-channel std of L2-normalized output
         z1_normalized = F.normalize(z1, dim=1)
         z2_normalized = F.normalize(z2, dim=1)
         z1_std = z1_normalized.std(dim=0).mean()
         z2_std = z2_normalized.std(dim=0).mean()
         avg_std = (z1_std + z2_std) / 2
-        
+
         # Log learning rate (fetch from optimizer)
         lr = self.optimizers().param_groups[0]["lr"]  # Get current learning rate
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, batch_size=self.args.batch_size, sync_dist=True)
@@ -113,8 +113,8 @@ class SimSiamPL(pl.LightningModule):
         self.log("avg_std_train", avg_std, on_epoch=True, prog_bar=True, logger=True, batch_size=self.args.batch_size, sync_dist=True)
 
         return loss
-    
-    
+
+
     # def validation_step(self, batch, batch_idx):
     #     x_i, x_j, _ = batch
     #     x_i, x_j = x_i.contiguous(), x_j.contiguous()
@@ -141,13 +141,13 @@ class SimSiamPL(pl.LightningModule):
     #     # kNN validation monitoring inside PyTorch Lightning
     #     model = self.encoder
     #     model.eval()
-        
+
     #     # Get train (memory) and test (validation) data from datamodule
     #     if self.trainer.world_size > 1:
     #         memory_sampler = torch.utils.data.distributed.DistributedSampler(self.trainer.datamodule.memory_ds)
     #     else:
     #         memory_sampler = None
-            
+
     #     memory_loader = torch.utils.data.DataLoader(
     #         self.trainer.datamodule.memory_ds,
     #         batch_size=self.args.batch_size,
@@ -158,8 +158,8 @@ class SimSiamPL(pl.LightningModule):
     #         pin_memory=self.args.pin_memory,
     #     )
     #     test_loader = self.trainer.datamodule.test_dataloader()
-        
-        
+
+
     #     # Step 1: Extract feature bank
     #     feature_bank, feature_labels = [], []
     #     with torch.no_grad():
@@ -175,8 +175,8 @@ class SimSiamPL(pl.LightningModule):
 
     #         feature_bank = torch.cat(feature_bank, dim=0)
     #         feature_labels = torch.cat(feature_labels, dim=0)
-            
-            
+
+
     #         # Handle Distributed Training (DDP)
     #         if self.trainer.world_size > 1:
     #             feature_bank_list = [torch.zeros_like(feature_bank) for _ in range(self.trainer.world_size)]
@@ -188,8 +188,8 @@ class SimSiamPL(pl.LightningModule):
     #             feature_labels = torch.cat(feature_labels_list, dim=0)
 
     #         feature_bank = feature_bank.T.contiguous()  # [D, N]
-        
-        
+
+
     #     # Step 2: kNN Classification on Validation Data
     #     total_top1, total_num = 0.0, 0
     #     for data, target in tqdm(test_loader, desc="Testing kNN"):
@@ -203,7 +203,7 @@ class SimSiamPL(pl.LightningModule):
     #         pred_labels = self.knn_predict(
     #             feature, feature_bank, feature_labels,
     #             classes=self.args.knn_classes,
-    #             knn_k=self.args.knn_k, 
+    #             knn_k=self.args.knn_k,
     #             knn_t=self.args.knn_t,
     #         )
 
@@ -233,15 +233,15 @@ class SimSiamPL(pl.LightningModule):
 
     #     pred_labels = pred_scores.argsort(dim=-1, descending=True)
     #     return pred_labels
-    
-    
+
+
     def inference(self, x):
         return self.encoder(x)
 
 
     def configure_optimizers(self):
         """Configure optimizer and scheduler with cosine LR decay & fixed predictor LR"""
-        
+
         # Define optimizer parameters: Fix predictor LR if needed
         if self.args.fix_pred_lr:
             optim_params = [
@@ -250,12 +250,12 @@ class SimSiamPL(pl.LightningModule):
             ]
         else:
             optim_params = self.parameters()
-        
+
         # Define SGD optimizer
         optimizer = optim.SGD(
-            optim_params, 
-            lr=self.args.lr, 
-            momentum=self.args.momentum, 
+            optim_params,
+            lr=self.args.lr,
+            momentum=self.args.momentum,
             weight_decay=self.args.weight_decay,
         )
 
@@ -271,7 +271,3 @@ class SimSiamPL(pl.LightningModule):
         scheduler = LambdaLR(optimizer, lr_lambda=cosine_annealing)
 
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch", "monitor": "val_loss"}]
-
-
-
-

@@ -12,27 +12,27 @@ from model.styleencoder import StyleEncoder
 from model.utils import sequence_mask, fix_len_compatibility
 
 import utils
-import transformers 
+import transformers
 import commons
 from modules_sf.modules import *
-from commons import init_weights, get_padding  
+from commons import init_weights, get_padding
 
 class Wav2vec2(torch.nn.Module):
-    def __init__(self, layer=12): 
-        super().__init__() 
+    def __init__(self, layer=12):
+        super().__init__()
         self.wav2vec2 = transformers.Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-xls-r-300m")
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
             param.grad = None
         self.wav2vec2.eval()
         self.feature_layer = layer
-        
+
     @torch.no_grad()
-    def forward(self, x): 
+    def forward(self, x):
         outputs = self.wav2vec2(x.squeeze(1), output_hidden_states=True)
-        y = outputs.hidden_states[self.feature_layer]    
-        
-        return y.permute((0, 2, 1))    
+        y = outputs.hidden_states[self.feature_layer]
+
+        return y.permute((0, 2, 1))
 
 
 class Decoder(nn.Module):
@@ -84,7 +84,7 @@ class SynthesizerTrn(nn.Module):
                  encoder_hidden_size,
                  **kwargs):
         super().__init__()
-        
+
         self.spec_channels = spec_channels
         self.inter_channels = inter_channels
         self.hidden_channels = hidden_channels
@@ -107,7 +107,7 @@ class SynthesizerTrn(nn.Module):
         self.emb_g = StyleEncoder(in_dim=80, hidden_dim=256, out_dim=256)
 
         self.dec_f = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256)
-        self.dec_s = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256) 
+        self.dec_s = Decoder(encoder_hidden_size, encoder_hidden_size, 5, 1, 8, mel_size=80, gin_channels=256)
 
     def forward(self, w2v, f0_code, x_mel, length, mixup=False):
         content = self.emb_c(w2v)
@@ -130,7 +130,7 @@ class SynthesizerTrn(nn.Module):
             y_s = self.dec_s(f0, x_mask, g=g)
 
         return g, y_s, y_f
-        
+
     def voice_conversion(self, w2v, x_length, f0_code, x_mel, length):
         y_mask = torch.unsqueeze(commons.sequence_mask(x_length, w2v.size(2)), 1).to(w2v.dtype)
 
@@ -149,7 +149,7 @@ class SynthesizerTrn(nn.Module):
 
 class DDDM(BaseModule):
     def __init__(self, n_feats, spk_dim, dec_dim, beta_min, beta_max, hps):
-        super(DDDM, self).__init__()  
+        super(DDDM, self).__init__()
         self.n_feats = n_feats
         self.spk_dim = spk_dim
         self.dec_dim = dec_dim
@@ -162,8 +162,8 @@ class DDDM(BaseModule):
         self.decoder = Diffusion(n_feats, dec_dim, spk_dim, beta_min, beta_max)
 
     @torch.no_grad()
-    def forward(self, x, w2v_x, f0_x, x_lengths, n_timesteps, mode='ml'): 
-        x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype) 
+    def forward(self, x, w2v_x, f0_x, x_lengths, n_timesteps, mode='ml'):
+        x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype)
         spk, src_out, ftr_out = self.encoder(w2v_x, f0_x, x, x_lengths)
         src_mean_x, ftr_mean_x = self.decoder.compute_diffused_mean(x, x_mask, src_out, ftr_out, 1.0)
 
@@ -191,10 +191,10 @@ class DDDM(BaseModule):
         y_src, y_ftr = self.decoder(z_src, z_ftr, x_mask_new, src_new, ftr_new, spk, n_timesteps, mode)
         y = (y_src + y_ftr)/2
         enc_out = src_out + ftr_out
-        
+
         return enc_out, src_out, ftr_out, y[:, :, :max_length]
-    
-    def vc(self, x, w2v_x, f0_x, x_lengths, y, y_lengths, n_timesteps, mode='ml'): 
+
+    def vc(self, x, w2v_x, f0_x, x_lengths, y, y_lengths, n_timesteps, mode='ml'):
         x_mask = sequence_mask(x_lengths, x.size(2)).unsqueeze(1).to(x.dtype)
 
         out_enc, spk, src_out, ftr_out = self.encoder.voice_conversion(w2v_x, x_lengths, f0_x, y, y_lengths)
@@ -204,7 +204,7 @@ class DDDM(BaseModule):
         max_length = int(x_lengths.max())
         max_length_new = fix_len_compatibility(max_length)
         x_mask_new = sequence_mask(x_lengths, max_length_new).unsqueeze(1).to(x.dtype)
-        
+
         src_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
         ftr_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
         src_x_new = torch.zeros((b, self.n_feats, max_length_new), dtype=x.dtype, device=x.device)
@@ -226,8 +226,8 @@ class DDDM(BaseModule):
         y = (y_src + y_ftr)/2
 
         return y[:, :, :max_length]
-    
-    def compute_loss(self, x, w2v_x, f0_x, x_length): 
+
+    def compute_loss(self, x, w2v_x, f0_x, x_length):
         x_mask = sequence_mask(x_length, x.size(2)).unsqueeze(1).to(x.dtype)
         spk, src_out, ftr_out = self.encoder(w2v_x, f0_x, x, x_length, mixup=True)
 

@@ -48,7 +48,7 @@ def main():
         parser.add_argument(f"--{k}", default=v, type=type(v))
 
     args = parser.parse_args()
-        
+
     # Initial settings
     if args.seed is not None:
         random.seed(args.seed)
@@ -70,7 +70,7 @@ def main():
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count() #len(args.gpu.split(',')) #
-    
+
     # Multiprocess
     if args.multiprocessing_distributed:
         # Since we have ngpus_per_node processes per node, the total world_size
@@ -84,11 +84,11 @@ def main():
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
-    
-    
+
+
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
-    
+
     # suppress printing if not master
     if args.multiprocessing_distributed and args.gpu != 0:
         def print_pass(*args, **kwargs):  # Allow any extra keyword arguments
@@ -106,10 +106,10 @@ def main_worker(gpu, ngpus_per_node, args):
             # global rank among all the processes
             args.rank = args.rank * ngpus_per_node + gpu
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                world_size=args.world_size, rank=args.rank) 
+                                world_size=args.world_size, rank=args.rank)
                                 # group_name="my_ddp_group") # Added group name
         torch.distributed.barrier()
-    
+
 
 
     # Only initialize WandB on the master process (rank 0)
@@ -119,7 +119,7 @@ def main_worker(gpu, ngpus_per_node, args):
             notes="SSBP Official Training",
             config=vars(args),  # Store args
         )
-        
+
     # create model
     print("=> Creating model with backbone encoder: '{}'".format(args.encoder_name))
     model = SimSiam(
@@ -145,7 +145,7 @@ def main_worker(gpu, ngpus_per_node, args):
             # ourselves based on the total number of GPUs we have
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu, 
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu,
                                                               find_unused_parameters=args.find_unused_parameters)
 
         else:
@@ -153,7 +153,7 @@ def main_worker(gpu, ngpus_per_node, args):
             # DistributedDataParallel will divide and allocate batch_size to all
             # available GPUs if device_ids are not set
             model = torch.nn.parallel.DistributedDataParallel(model)
-            
+
     elif args.gpu is not None:
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
@@ -161,7 +161,7 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         raise NotImplementedError("Only DistributedDataParallel is supported.")
 
-    
+
     # Loss function (criterion) and optimizer
     criterion = nn.CosineSimilarity(dim=1).cuda(args.gpu)
 
@@ -195,19 +195,19 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
-    
+
     # Loading dataset
     train_dataset = BPDataset(
-        sample_rate=args.sample_rate, 
-        duration=args.segment_second, 
+        sample_rate=args.sample_rate,
+        duration=args.segment_second,
         data_dir=args.data_dir,
         split="train",
         random_slice=False,
         need_transform=True,
         stems=['other'],
     )
-    
-    
+
+
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
@@ -218,7 +218,7 @@ def main_worker(gpu, ngpus_per_node, args):
         num_workers=args.workers, pin_memory=True, sampler=train_sampler, drop_last=True)
 
 
-    
+
     # Training loops
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
@@ -241,10 +241,10 @@ def main_worker(gpu, ngpus_per_node, args):
                     'state_dict': model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
                 }, is_best=False, filename='checkpoint_{:04d}.pth.tar'.format(epoch))
-        
+
     if args.distributed:
         dist.destroy_process_group()
-    
+
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -281,10 +281,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-        
+
         if i % args.print_freq == 0:
             progress.display(i)
-            
+
             # Log training loss per step only from GPU 0
             if args.gpu == 0 and args.log_wandb:
                 wandb.log({"train_loss_step": loss.item(), "step": epoch * len(train_loader) + i})
@@ -308,7 +308,7 @@ def save_checkpoint(state, is_best, filename, save_dir="model_dict/"):
     torch.save(state, os.path.join(save_dir, filename))
     if is_best:
         shutil.copyfile(filename, os.path.join(save_dir, 'model_best.pth.tar'))
-    
-    
+
+
 if __name__ == "__main__":
     main()

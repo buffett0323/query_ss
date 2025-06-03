@@ -35,7 +35,7 @@ gpu: 3 # [0, 1] #[0,1,2,3]
 img_mean: -1.1041008234024048
 img_std: 14.636213302612305 # for 224
 seed: 42 # sacred handles automatic seeding when passed in the config
-batch_size: 128 #256 #512 
+batch_size: 128 #256 #512
 gradient_accumulation_steps: 8 # Effective Batch Size = Batch Size per GPU × Number of GPUs × Gradient Accumulation Steps
 start_epoch: 0
 epochs: 200 # 100
@@ -83,7 +83,7 @@ lr_decay_factor: 0.05 #0.01
 
 
 # reload options
-model_path: "save" # set to the directory containing `checkpoint_##.tar` 
+model_path: "save" # set to the directory containing `checkpoint_##.tar`
 reload: False
 resume: '' # path to latest checkpoint (default: none)
 

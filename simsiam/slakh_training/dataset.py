@@ -44,7 +44,7 @@ class SlakhDataset(Dataset):
         ]
         with open("info/slakh_label.txt", "r") as f:
             self.labels = [line.strip() for line in f.readlines()]
-            
+
         self.transform = CLARTransform(
             sample_rate=sample_rate,
             duration=int(duration/2),
@@ -59,21 +59,21 @@ class SlakhDataset(Dataset):
 
     def __len__(self):
         return len(self.data_path_list)
-    
+
 
     def __getitem__(self, idx):
         path = self.data_path_list[idx]
         label = self.labels.index(path.split('/')[-1].split('.npy')[0])
-        
+
         x = np.load(path)
-        
+
         if self.split == "test":
             return x[int(x.shape[0]/4) : int(x.shape[0]*3/4)], \
                 torch.tensor(label, dtype=torch.int64)
-        
+
         # Augmentation for training
         x_i, x_j = x[:x.shape[0]//2], x[x.shape[0]//2:]
-        
+
         if self.need_transform:
             x_i, x_j = self.transform(x_i, x_j)
 
@@ -86,7 +86,7 @@ class SlakhDataModule(LightningDataModule):
     def __init__(
         self,
         args,
-        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy", 
+        data_dir="/mnt/gestalt/home/ddmanddman/beatport_analyze/chorus_audio_16000_4secs_npy",
     ):
         super(SlakhDataModule, self).__init__()
         self.args = args
@@ -94,7 +94,7 @@ class SlakhDataModule(LightningDataModule):
         self.pin_memory = args.pin_memory
         self.drop_last = args.drop_last
         self.num_workers = args.workers #args.num_workers
-        
+
     def setup(self, stage: Optional[str] = None):
         # Assign train/val datasets for use in dataloaders
         self.train_ds = SlakhDataset(
@@ -104,7 +104,7 @@ class SlakhDataModule(LightningDataModule):
             split="train",
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
-        )   
+        )
         self.val_ds = SlakhDataset(
             sample_rate=self.args.sample_rate,
             duration=self.args.segment_second,
@@ -129,8 +129,8 @@ class SlakhDataModule(LightningDataModule):
             need_transform=self.args.need_clar_transform,
             random_slice=self.args.random_slice,
         )
-            
-            
+
+
     def train_dataloader(self):
         """Train DataLoader with Distributed Sampler for DDP"""
         train_sampler = DistributedSampler(self.train_ds) if self.trainer.world_size > 1 else None
@@ -171,7 +171,7 @@ class SlakhDataModule(LightningDataModule):
             persistent_workers=self.args.persistent_workers,  # Keep workers alive to reduce loading overhead
             prefetch_factor=4 if self.num_workers > 0 else None,  # Prefetch data in advance
         )
-    
+
     @property
     def num_samples(self) -> int:
         self.setup(stage = 'fit')
