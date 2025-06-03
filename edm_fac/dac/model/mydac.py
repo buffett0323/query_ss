@@ -392,7 +392,7 @@ class MyDAC(BaseModel, CodecMixin):
     ):
         
         length = audio_data.shape[-1]
-        audio_data = self.preprocess(audio_data, sample_rate)
+        # audio_data = self.preprocess(audio_data, sample_rate)
         content_match = self.preprocess(content_match, sample_rate)
         timbre_match = self.preprocess(timbre_match, sample_rate)
         
