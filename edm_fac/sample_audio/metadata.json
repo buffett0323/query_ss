@@ -1,0 +1,24 @@
+{
+    "sample_0": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/LD - Arp Attack_923256.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/Lead - Down Trumpet_923256.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/LD - Arp Attack_143337.wav",
+        "vq_commitment_loss": 0.5428879857063293,
+        "vq_codebook_loss": 0.5428879261016846,
+        "stft_loss": 3.011995315551758,
+        "mel_loss": 2.436055898666382,
+        "l1_loss": 0.10336226224899292,
+        "content_loss": 64.00172424316406
+    },
+    "sample_1": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/LD - Amplified_143337.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/Lead - Microkorg_143337.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/LD - Amplified_116478.wav",
+        "vq_commitment_loss": 0.6315904259681702,
+        "vq_codebook_loss": 0.6315904259681702,
+        "stft_loss": 1.8852907419204712,
+        "mel_loss": 1.623194694519043,
+        "l1_loss": 0.09010453522205353,
+        "content_loss": 84.93788146972656
+    }
+}
