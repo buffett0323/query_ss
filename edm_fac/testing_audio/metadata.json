@@ -1,0 +1,112 @@
+{
+    "sample_0": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Detuned_45874.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Squaretalker_45874.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Detuned_39028.wav",
+        "vq_commitment_loss": 0.5584145784378052,
+        "vq_codebook_loss": 0.5584145784378052,
+        "stft_loss": 4.6120171546936035,
+        "mel_loss": 4.275835037231445,
+        "l1_loss": 0.15923060476779938,
+        "content_loss": 84.18367004394531
+    },
+    "sample_1": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Detuned_73322.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Squaretalker_73322.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Detuned_620636.wav",
+        "vq_commitment_loss": 0.5128171443939209,
+        "vq_codebook_loss": 0.5128171443939209,
+        "stft_loss": 6.524105072021484,
+        "mel_loss": 6.075969219207764,
+        "l1_loss": 0.14744943380355835,
+        "content_loss": 75.64582824707031
+    },
+    "sample_2": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Voice Lead_96152.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - The Heir_96152.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Voice Lead_1318866.wav",
+        "vq_commitment_loss": 1.2437430620193481,
+        "vq_codebook_loss": 1.2437430620193481,
+        "stft_loss": 4.510693073272705,
+        "mel_loss": 4.962916374206543,
+        "l1_loss": 0.13436689972877502,
+        "content_loss": 83.32433319091797
+    },
+    "sample_3": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - The Heir_126545.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Kawaii_126545.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - The Heir_626681.wav",
+        "vq_commitment_loss": 0.6075871586799622,
+        "vq_codebook_loss": 0.6075871586799622,
+        "stft_loss": 5.397610187530518,
+        "mel_loss": 5.997486114501953,
+        "l1_loss": 0.17663688957691193,
+        "content_loss": 116.47958374023438
+    },
+    "sample_4": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Glide_132848.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Love You_132848.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Glide_907096.wav",
+        "vq_commitment_loss": 0.5683693885803223,
+        "vq_codebook_loss": 0.5683693885803223,
+        "stft_loss": 5.072875022888184,
+        "mel_loss": 4.670264720916748,
+        "l1_loss": 0.12438307702541351,
+        "content_loss": 88.46702575683594
+    },
+    "sample_5": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Squaretalker_116874.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Voice Lead_116874.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Squaretalker_626681.wav",
+        "vq_commitment_loss": 3.055644989013672,
+        "vq_codebook_loss": 3.05564546585083,
+        "stft_loss": 4.617060661315918,
+        "mel_loss": 4.364128112792969,
+        "l1_loss": 0.11292104423046112,
+        "content_loss": 68.35693359375
+    },
+    "sample_6": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Glide_96152.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Voice Lead_96152.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Glide_39028.wav",
+        "vq_commitment_loss": 1.8456560373306274,
+        "vq_codebook_loss": 1.8456560373306274,
+        "stft_loss": 5.296380996704102,
+        "mel_loss": 4.793580055236816,
+        "l1_loss": 0.12417779117822647,
+        "content_loss": 78.49444580078125
+    },
+    "sample_7": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Opera_1353091.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Love You_1353091.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Opera_620636.wav",
+        "vq_commitment_loss": 0.5881805419921875,
+        "vq_codebook_loss": 0.5881805419921875,
+        "stft_loss": 4.861329555511475,
+        "mel_loss": 5.3630242347717285,
+        "l1_loss": 0.1120872050523758,
+        "content_loss": 76.135986328125
+    },
+    "sample_8": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - The Heir_1754871.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Kawaii_1754871.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - The Heir_45874.wav",
+        "vq_commitment_loss": 0.6236993670463562,
+        "vq_codebook_loss": 0.6236993670463562,
+        "stft_loss": 5.364195823669434,
+        "mel_loss": 5.732561111450195,
+        "l1_loss": 0.1239275187253952,
+        "content_loss": 86.87071228027344
+    },
+    "sample_9": {
+        "converted_ground_truth_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Opera_907096.wav",
+        "content_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Kawaii_907096.wav",
+        "timbre_ref_path": "/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/LEAD - Opera_785506.wav",
+        "vq_commitment_loss": 0.8580235838890076,
+        "vq_codebook_loss": 0.8580235838890076,
+        "stft_loss": 5.11333703994751,
+        "mel_loss": 5.068123817443848,
+        "l1_loss": 0.1615903526544571,
+        "content_loss": 75.77729797363281
+    }
+}

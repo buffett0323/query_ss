@@ -328,10 +328,10 @@ class EDMFACInference:
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Get validation data
-        with open("info/evaluation_midi_names.txt", "r") as f:
+        with open("info/evaluation_midi_names_lead_out.txt", "r") as f:
             validation_midi_names = f.read().splitlines()
 
-        with open("info/timbre_names_lead.txt", "r") as f:
+        with open("info/timbre_names_lead_out.txt", "r") as f:
             timbre_names = f.read().splitlines()
 
         # Get both combinations

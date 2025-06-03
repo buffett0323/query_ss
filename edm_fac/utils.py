@@ -97,3 +97,6 @@ def get_timbre_names(path):
             f.write(timbre + "\n")
 
     print(len(timbres))
+
+if __name__ == "__main__":
+    get_timbre_names("/home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out")
