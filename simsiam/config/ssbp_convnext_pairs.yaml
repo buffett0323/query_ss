@@ -32,8 +32,6 @@ norm_stats: [-4.122795844772487, 3.887585349208717] #[-5.36902,  3.7100384]
 
 
 # dataset options
-segment_second: 0.95
-piece_second: 4
 max_length: 64
 n_fft: 1024 #2048
 hop_length: 160 #320 #512 #1024
