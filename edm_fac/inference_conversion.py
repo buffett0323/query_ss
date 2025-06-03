@@ -361,7 +361,7 @@ class EDMFACInference:
             # Random pich one
             timbre_names_wo_myself = [tn for tn in timbre_names if tn != timbre_ref_name]
             content_names_wo_myself = [cn for cn in validation_midi_names if cn != content_ref_name]
-            
+
             random_pick_timbre = random.choice(timbre_names_wo_myself)
             random_pick_content = random.choice(content_names_wo_myself)
 
