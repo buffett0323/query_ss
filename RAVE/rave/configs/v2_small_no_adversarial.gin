@@ -91,9 +91,11 @@ rave.RAVE:
     num_skipped_features = 1
     decoder = @blocks.GeneratorV2
     update_discriminator_every = 2
+    phase_1_duration = 999999999  # Never use discriminator
     weights = {
-        'feature_matching': 20,
-        }
+        'feature_matching': 0,  # No feature matching since no discriminator
+        'adversarial': 0,       # No adversarial loss
+    }
 
 rave.BetaWarmupCallback:
     initial_value = .01
