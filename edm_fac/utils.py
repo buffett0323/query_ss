@@ -120,7 +120,7 @@ def get_midi_names(path, split):
     for file in tqdm(os.listdir(path)):
         if file.endswith(".wav"):
             midis.add(file.split(".wav")[0].split("_")[-1])
-    
+
     midis = list(midis)
     random.shuffle(midis)
     with open(f"info/midi_names_mixed_{split}.txt", "w") as f:
@@ -187,25 +187,25 @@ def get_onset_from_midi(midi_file):
     except Exception as e:
         print(f"Error processing {midi_file}: {e}")
         return []
-    
+
 
 
 def get_top_5_peak_position(audio):
     envelope = np.abs(audio)
     peaks, _ = scipy.signal.find_peaks(envelope, distance=SAMPLE_RATE // 20)
     if len(peaks) == 0: return []
-    
+
     # Get peak amplitudes
     peak_amplitudes = envelope[peaks]
-    
+
     # Get top 5 peaks by amplitude
     if len(peaks) > 5:
         top_indices = np.argsort(peak_amplitudes)[-5:]
         peaks = peaks[top_indices]
-    
+
     # Convert peak indices to time in seconds
     peak_times = peaks / SAMPLE_RATE
-    
+
     # Return as list for JSON compatibility
     return peak_times.tolist()
 
@@ -213,10 +213,10 @@ def get_top_5_peak_position(audio):
 def process_beatport_file(file_info):
     """
     Process a single beatport file to extract peak positions
-    
+
     Args:
         file_info: tuple of (file_path, file_name)
-        
+
     Returns:
         tuple of (file_name, peaks_list)
     """
@@ -236,8 +236,8 @@ if __name__ == "__main__":
     # get_timbre_names("/home/buffett/dataset/EDM_FAC_DATA/train")
     # get_midi_names("/home/buffett/dataset/EDM_FAC_DATA/train", "train")
     # get_midi_names("/home/buffett/dataset/EDM_FAC_DATA/evaluation", "evaluation")
-    
-    
+
+
     # train_path = "/home/buffett/dataset/EDM_FAC_DATA/single_note_midi/train/midi"
     # eval_path = "/home/buffett/dataset/EDM_FAC_DATA/single_note_midi/evaluation/midi"
     # train_midis = []
@@ -271,23 +271,23 @@ if __name__ == "__main__":
     #     json.dump(onset_records_eval, f, indent=4)
 
     beatport_path = "/home/buffett/dataset/EDM_FAC_DATA/beatport/"
-    
+
     for split in ["evaluation", "train"]:
         split_path = os.path.join(beatport_path, split)
-        
+
         # Prepare list of files to process
         file_infos = []
         for file in os.listdir(split_path):
             if file.endswith(".wav"):
                 file_path = os.path.join(split_path, file)
                 file_infos.append((file_path, file))
-        
+
         print(f"Processing {len(file_infos)} files for {split} split...")
-        
+
         # Use multiprocessing to process files in parallel
         num_processes = min(16, os.cpu_count())  # Use up to 8 processes or CPU count
         print(f"Using {num_processes} processes")
-        
+
         with Pool(processes=num_processes) as pool:
             # Process files with progress bar
             results = list(tqdm(
@@ -295,13 +295,12 @@ if __name__ == "__main__":
                 total=len(file_infos),
                 desc=f"Processing {split}"
             ))
-        
+
         # Convert results to dictionary
         peak_records = {file_name: peaks for file_name, peaks in results}
-        
+
         # Save results to JSON
         with open(f"/home/buffett/dataset/EDM_FAC_DATA/json/beatport_peak_records_{split}.json", "w") as f:
             json.dump(peak_records, f, indent=4)
-        
+
         print(f"Saved {len(peak_records)} peak records for {split} split")
-        

@@ -45,8 +45,8 @@ class EDM_Paired_Dataset(Dataset):
         self.max_note = max_note
         self.n_notes = max_note - min_note + 1
         self.split = split
-        
-        
+
+
         # Create ID mappings for all three levels
         self.timbre_to_id = {}
         self.id_to_timbre = {}
@@ -66,7 +66,7 @@ class EDM_Paired_Dataset(Dataset):
         self._shuffle_paired_index()
         self.peak_records = {}
         self._get_offset_pos()
-        
+
 
     def _preprocess(self):
 
@@ -87,23 +87,23 @@ class EDM_Paired_Dataset(Dataset):
             self.midi_to_id[midi] = label
             self.id_to_midi[label] = midi
 
-    
-    
+
+
     def _build_paired_index(self):
 
         # Rendered Dataset
         for timbre in self.unique_timbres: # 1st for-loop: 59/513 timbres
             for midi in self.unique_midis: # 2nd for-loop: 100/500 midis
                 wav_path = os.path.join(self.root_path, f"{timbre}_{midi}.wav")
-                
+
                 # Transfer to class ids
                 midi_id = self.midi_to_id[midi]
                 timbre_id = self.timbre_to_id[timbre]
                 counter = len(self.paired_data)
 
-                if not os.path.exists(wav_path): 
+                if not os.path.exists(wav_path):
                     continue
-                
+
                 # Update mapping dictionaries
                 if timbre_id not in self.timbre_to_files:
                     self.timbre_to_files[timbre_id] = []
@@ -115,13 +115,13 @@ class EDM_Paired_Dataset(Dataset):
 
                 midi_path = os.path.join(self.midi_path, f"{midi}.mid")
                 self.paired_data.append((timbre_id, midi_id, wav_path, midi_path))
-                
-        
+
+
         # # Beatport Dataset
         # for file in tqdm(os.listdir(self.beatport_path), desc=f"Pre-loading {self.split} beatport dataset"):
         #     wav_path = os.path.join(self.beatport_path, file)
         #     self.unpaired_data.append((-1, -1, wav_path, None))
-            
+
         print(f"-> Got {len(self.paired_data)} paired tracks for {self.split}")
 
 
@@ -306,15 +306,15 @@ class EDM_Unpaired_Dataset(Dataset):
         self.total_duration = total_duration
         self.sample_rate = sample_rate
         self.split = split
-        
+
 
         # Create index mappings
         self.unpaired_data = [
-            os.path.join(self.beatport_path, file) 
+            os.path.join(self.beatport_path, file)
                 for file in os.listdir(self.beatport_path)
         ]
         print(f"-> Got {len(self.unpaired_data)} unpaired tracks for {self.split}")
-        
+
         # Load peak records
         self.peak_records = {}
         with open(f"{self.data_path}/json/beatport_peak_records_{self.split}.json", "r") as f:
@@ -331,7 +331,7 @@ class EDM_Unpaired_Dataset(Dataset):
             name="content_augmentation",
             prob=0.9,
         )
-        
+
         self.tim_aug = tfm.Compose(
             [
                 tfm.SeqPerturbReverse(
@@ -373,7 +373,7 @@ class EDM_Unpaired_Dataset(Dataset):
 
 
     def timbre_augment(self, audio: AudioSignal) -> AudioSignal:
-        """ 
+        """
         SeqPerturbReverse --> Pitch Shift
         """
         rn_state = random.randint(0, 1000)
@@ -391,18 +391,18 @@ class EDM_Unpaired_Dataset(Dataset):
 
         # 2. Load input audio with this offset
         target_gt = self._load_audio(wav_path, offset=offset)
-        
+
         # 3. Perturbation of augmentation
         content_match = self.content_augment(target_gt.clone())
         timbre_converted = self.timbre_augment(target_gt.clone())
-        
+
         return {
             'target': target_gt,
             'content_match': content_match,
             'timbre_converted': timbre_converted,
         }
 
-    
+
     @staticmethod
     def collate(batch: List[AudioSignal]) -> Dict:
         """Custom collate function for batching"""
@@ -411,7 +411,7 @@ class EDM_Unpaired_Dataset(Dataset):
             'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
             'timbre_converted': AudioSignal.batch([item['timbre_converted'] for item in batch]),
         }
-        
+
 
 
 # For Training
@@ -1112,7 +1112,7 @@ if __name__ == "__main__":
         max_note=args.max_note,
         split="train",
     )
-    
+
     train_unpaired_data = EDM_Unpaired_Dataset(
         beatport_path=args.beatport_path,
         data_path=args.data_path,
@@ -1121,7 +1121,7 @@ if __name__ == "__main__":
         sample_rate=args.sample_rate,
         split="train",
     )
-    val_paired_data = EDM_Paired_Dataset(   
+    val_paired_data = EDM_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -1132,7 +1132,7 @@ if __name__ == "__main__":
         max_note=args.max_note,
         split="evaluation",
     )
-    
+
     val_unpaired_data = EDM_Unpaired_Dataset(
         beatport_path=args.beatport_path,
         data_path=args.data_path,
@@ -1141,9 +1141,9 @@ if __name__ == "__main__":
         sample_rate=args.sample_rate,
         split="evaluation",
     )
-    
 
-    
+
+
     os.makedirs("sample_audio", exist_ok=True)
     for idx in tqdm(range(1000)):
         a2 = train_unpaired_data[idx]
@@ -1152,11 +1152,9 @@ if __name__ == "__main__":
         # a2["timbre_converted"].write(f"sample_audio/timbre_converted_{idx}.wav")
         if a2['target'].shape[-1] != 44100:
             print("target", a2['target'].shape)
-            
+
         if a2['content_match'].shape[-1] != 44100:
             print("content_match", a2['content_match'].shape)
-            
+
         if a2['timbre_converted'].shape[-1] != 44100:
             print("timbre_converted", a2['timbre_converted'].shape)
-            
-

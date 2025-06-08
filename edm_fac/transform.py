@@ -55,7 +55,7 @@ class SeqPerturb_Reverse(BaseTransform):
         # Get the sample rate and samples
         sample_rate = signal.sample_rate
         samples = signal.audio_data
-        
+
         # Fixed second is 0.3
         x_front = samples[:, :int(sample_rate * fixed_second)]
         x_back = samples[:, int(sample_rate * fixed_second):]
@@ -76,7 +76,7 @@ class SeqPerturb_Reverse(BaseTransform):
 
         # Concatenate the shuffled segments back into one waveform
         processed_audio = np.concatenate([x_front, np.concatenate(segments, axis=-1)], axis=-1)
-        
+
         # Return a new signal with the processed audio
         return signal.clone()._audio_data_setitem(processed_audio)
 

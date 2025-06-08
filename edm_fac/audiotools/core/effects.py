@@ -246,7 +246,7 @@ class EffectMixin:
 
     def pitch_shift(self, n_semitones: int, quick: bool = True):
         """Pitch shift the signal. All items in the batch
-        get the same pitch shift. The output shape is guaranteed 
+        get the same pitch shift. The output shape is guaranteed
         to match the input shape.
 
         Parameters
@@ -264,7 +264,7 @@ class EffectMixin:
         n_semitones = float(util.ensure_tensor(n_semitones).item())
         device = self.device
         original_length = self.signal_length
-        
+
         effects = [
             ["pitch", str(n_semitones * 100)],
             ["rate", str(self.sample_rate)],
@@ -276,7 +276,7 @@ class EffectMixin:
         waveform, sample_rate = torchaudio.sox_effects.apply_effects_tensor(
             waveform, self.sample_rate, effects, channels_first=True
         )
-        
+
         # Ensure the output length matches the original length
         current_length = waveform.shape[-1]
         if current_length > original_length:
@@ -286,7 +286,7 @@ class EffectMixin:
             # Zero-pad if shorter
             pad_length = original_length - current_length
             waveform = torch.nn.functional.pad(waveform, (0, pad_length))
-        
+
         self.sample_rate = sample_rate
         self.audio_data = self._to_3d(waveform)
         return self.to(device)
@@ -539,8 +539,8 @@ class EffectMixin:
 
     def __matmul__(self, other):
         return self.convolve(other)
-    
-    
+
+
     # Buffett Added
     def seq_perturb_reverse(
         self,
@@ -550,7 +550,7 @@ class EffectMixin:
     ):
         """Applies sequence perturbation by segmenting the audio after a fixed
         front portion, randomly reversing some segments, and shuffling them.
-        
+
         This preserves the front portion of the audio (e.g., first 0.3 seconds)
         while applying perturbations to the remaining portion. This is useful
         for data augmentation where some temporal structure should be preserved.
@@ -571,30 +571,30 @@ class EffectMixin:
             AudioSignal with sequence perturbation applied.
         """
         import random
-        
+
         num_segments = int(util.ensure_tensor(num_segments).item())
         fixed_second = util.ensure_tensor(fixed_second).item()
         reverse_prob = util.ensure_tensor(reverse_prob).item()
-        
+
         # Ensure num_segments is at least 2
         num_segments = max(2, num_segments)
-        
+
         # Calculate split point in samples
         split_sample = int(self.sample_rate * fixed_second)
         split_sample = min(split_sample, self.signal_length - 1)
-        
+
         # Split into front (preserved) and back (to be segmented) portions
         front_portion = self.audio_data[..., :split_sample]
         back_portion = self.audio_data[..., split_sample:]
-        
+
         if back_portion.shape[-1] == 0:
             # If back portion is empty, return original signal
             return self
-            
+
         # Split back portion into equal segments
         segment_length = back_portion.shape[-1] // num_segments
         segments = []
-        
+
         for i in range(num_segments):
             start_idx = i * segment_length
             if i == num_segments - 1:
@@ -603,23 +603,23 @@ class EffectMixin:
             else:
                 end_idx = (i + 1) * segment_length
             segments.append(back_portion[..., start_idx:end_idx])
-        
+
         # Randomly reverse some segments
         processed_segments = []
         for segment in segments:
             if random.random() < reverse_prob:
                 segment = torch.flip(segment, dims=[-1])
             processed_segments.append(segment)
-        
+
         # Shuffle the segments
         random.shuffle(processed_segments)
-        
+
         # Concatenate back together
         processed_back = torch.cat(processed_segments, dim=-1)
-        
+
         # Combine front and processed back portions
         self.audio_data = torch.cat([front_portion, processed_back], dim=-1)
-        
+
         return self
 
 

@@ -284,4 +284,3 @@ class EDM_Render_Dataset(Dataset):
             'target_gt': AudioSignal.batch([item['target_gt'] for item in batch]),
             'metadata': [item['metadata'] for item in batch]
         }
-

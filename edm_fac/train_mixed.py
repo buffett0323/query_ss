@@ -119,7 +119,7 @@ def save_samples(args, accelerator, tracker_step, wrapper):
 
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}'), exist_ok=True)
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'conv'), exist_ok=True)
-    
+
 
     # Conversion
     for i, sample_idx in enumerate(args.val_idx):
@@ -137,22 +137,22 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         single_recon_gt.write(recon_gt_path)
         single_ref_content.write(ref_content_path)
         single_ref_timbre.write(ref_timbre_path)
-        
-        
+
+
     """ Unpaired data validation """
     samples = [wrapper.val_unpaired_data[idx] for idx in args.val_idx]
     batch = wrapper.val_unpaired_data.collate(samples)
     batch = util.prepare_batch(batch, accelerator.device)
-    
+
     out = wrapper.generator.forward_unpaired(
         audio_data=batch['target'].audio_data,
     )
-    
+
     recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
     recons_gt = AudioSignal(batch['target'].audio_data.cpu(), args.sample_rate)
-    
+
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'recon'), exist_ok=True)
-    
+
     # Reconstruction
     for i, sample_idx in enumerate(args.val_idx):
         single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
@@ -163,9 +163,9 @@ def save_samples(args, accelerator, tracker_step, wrapper):
 
         single_recon.write(recon_path)
         single_recon_gt.write(recon_gt_path)
-    
-    
-    
+
+
+
 
 
 def main(args, accelerator):
@@ -201,7 +201,7 @@ def main(args, accelerator):
         max_note=args.max_note,
         split="train",
     )
-    
+
     train_unpaired_data = EDM_Unpaired_Dataset(
         beatport_path=args.beatport_path,
         data_path=args.data_path,
@@ -211,7 +211,7 @@ def main(args, accelerator):
         split="train",
     )
 
-    val_paired_data = EDM_Paired_Dataset(   
+    val_paired_data = EDM_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -222,7 +222,7 @@ def main(args, accelerator):
         max_note=args.max_note,
         split="evaluation",
     )
-    
+
     val_unpaired_data = EDM_Unpaired_Dataset(
         beatport_path=args.beatport_path,
         data_path=args.data_path,
@@ -259,7 +259,7 @@ def main(args, accelerator):
     )
     train_paired_loader = get_infinite_loader(train_paired_loader)
     train_unpaired_loader = get_infinite_loader(train_unpaired_loader)
-    
+
     val_paired_loader = accelerator.prepare_dataloader(
         val_paired_data,
         start_idx=0,
@@ -275,7 +275,7 @@ def main(args, accelerator):
         collate_fn=val_unpaired_data.collate,
     )
 
-    
+
     # Trackers settings
     global train_step, validate, save_checkpoint, save_samples
     train_step = tracker.log("Train", "value", history=False)(
@@ -291,7 +291,7 @@ def main(args, accelerator):
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
     save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
 
-    
+
     # Loop
     with tracker.live:
         for tracker.step, paired_batch in enumerate(train_paired_loader, start=tracker.step):
@@ -322,13 +322,13 @@ def validate(args, accelerator, val_paired_loader, val_unpaired_loader, wrapper)
         output = validate_step_paired(args, accelerator, paired_batch, wrapper)
         if i >= args.validate_steps:
             break
-    
+
     for i, unpaired_batch in enumerate(val_unpaired_loader):
         output = validate_step_unpaired(args, accelerator, unpaired_batch, wrapper)
         if i >= args.validate_steps:
             break
-        
-        
+
+
     if hasattr(wrapper.optimizer_g, "consolidate_state_dict"):
         wrapper.optimizer_g.consolidate_state_dict()
         wrapper.optimizer_d.consolidate_state_dict()
@@ -462,7 +462,7 @@ def train_step_paired(args, accelerator, batch, wrapper):
     # output["other/grad_norm_g"] = grad_norm_g
     # output["other/grad_norm_d"] = grad_norm_d
     # output["other/time_per_step"] = time.time() - train_start_time
-    
+
     return {k: v for k, v in sorted(output.items())}
 
 
@@ -495,7 +495,7 @@ def train_step_unpaired(args, accelerator, batch, wrapper):
     accelerator.step(wrapper.optimizer_d)
     wrapper.scheduler_d.step()
 
-    
+
     # Generator Losses
     with accelerator.autocast():
         output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)

@@ -461,14 +461,14 @@ class MyDAC(BaseModel, CodecMixin):
 
 
         # TODO: Augmentation
-        
+
         # EQ + Distortion
         content_z = encode_z
-        
+
         # Pitch Shfit + Time Stretch
         timbre_z = encode_z
-        
-        
+
+
         # Content Encoder
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
             content_z, n_quantizers

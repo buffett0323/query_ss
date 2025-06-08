@@ -1599,7 +1599,7 @@ class SeqPerturbReverse(BaseTransform):
     and a back portion that gets segmented, with some segments randomly reversed and all
     segments shuffled.
 
-    This is useful for audio data augmentation where temporal structure should be 
+    This is useful for audio data augmentation where temporal structure should be
     partially preserved while introducing controlled randomness.
 
     Parameters
@@ -1608,13 +1608,13 @@ class SeqPerturbReverse(BaseTransform):
         Segmentation method to use, by default ("const", "fixed").
         Options are "fixed" or "random".
     num_segments : tuple, optional
-        Number of segments to divide the back portion into, 
+        Number of segments to divide the back portion into,
         by default ("const", 5)
     fixed_second : tuple, optional
         Duration in seconds for the front segment that remains untouched
         (only used with "fixed" method), by default ("const", 0.3)
     reverse_prob : tuple, optional
-        Probability of reversing each individual segment, 
+        Probability of reversing each individual segment,
         by default ("uniform", 0.3, 0.8)
     name : str, optional
         Name of this transform, used to identify it in the dictionary
@@ -1646,11 +1646,11 @@ class SeqPerturbReverse(BaseTransform):
 
     def _transform(self, signal, num_segments, fixed_second, reverse_prob):
         return signal.seq_perturb_reverse(num_segments, fixed_second, reverse_prob)
-    
-    
+
+
 class PitchShift(BaseTransform):
     """Pitch shifts the audio signal.
-    
+
     Parameters
     ----------
     n_semitones : int
@@ -1658,23 +1658,23 @@ class PitchShift(BaseTransform):
     quick : bool, optional
         Using quick pitch shifting, by default True
     """
-    
+
     def __init__(
-        self, 
+        self,
         n_semitones: tuple = ("uniform", -2, 2),
-        quick: bool = True, 
-        name: str = None, 
+        quick: bool = True,
+        name: str = None,
         prob: float = 1.0
     ):
         super().__init__(name=name, prob=prob)
         self.n_semitones = n_semitones
         self.quick = quick
-        
+
     def _instantiate(self, state: RandomState):
         return {
             "n_semitones": util.sample_from_dist(self.n_semitones, state),
             "quick": self.quick
         }
-    
+
     def _transform(self, signal, n_semitones, quick):
         return signal.pitch_shift(n_semitones, quick)
