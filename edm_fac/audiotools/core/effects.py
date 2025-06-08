@@ -246,7 +246,8 @@ class EffectMixin:
 
     def pitch_shift(self, n_semitones: int, quick: bool = True):
         """Pitch shift the signal. All items in the batch
-        get the same pitch shift.
+        get the same pitch shift. The output shape is guaranteed 
+        to match the input shape.
 
         Parameters
         ----------
@@ -258,9 +259,12 @@ class EffectMixin:
         Returns
         -------
         AudioSignal
-            Pitch shifted audio signal.
+            Pitch shifted audio signal with preserved shape.
         """
+        n_semitones = float(util.ensure_tensor(n_semitones).item())
         device = self.device
+        original_length = self.signal_length
+        
         effects = [
             ["pitch", str(n_semitones * 100)],
             ["rate", str(self.sample_rate)],
@@ -272,6 +276,17 @@ class EffectMixin:
         waveform, sample_rate = torchaudio.sox_effects.apply_effects_tensor(
             waveform, self.sample_rate, effects, channels_first=True
         )
+        
+        # Ensure the output length matches the original length
+        current_length = waveform.shape[-1]
+        if current_length > original_length:
+            # Truncate if longer
+            waveform = waveform[..., :original_length]
+        elif current_length < original_length:
+            # Zero-pad if shorter
+            pad_length = original_length - current_length
+            waveform = torch.nn.functional.pad(waveform, (0, pad_length))
+        
         self.sample_rate = sample_rate
         self.audio_data = self._to_3d(waveform)
         return self.to(device)

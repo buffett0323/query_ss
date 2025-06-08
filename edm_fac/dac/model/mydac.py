@@ -343,7 +343,7 @@ class MyDAC(BaseModel, CodecMixin):
         # predictors
         # self.timbre_predictor = TransformerClassifier(latent_dim, timbre_classes, head=1, global_pred=True)
         # self.pitch_predictor = TransformerClassifier(latent_dim, pitch_nums, head=1, global_pred=False)
-        self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
+        # self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
         self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
 
 
@@ -423,7 +423,7 @@ class MyDAC(BaseModel, CodecMixin):
 
 
         # Predictors
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        # pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_pitch = self.pitch_predictor(z)[0]
 
 
@@ -441,6 +441,63 @@ class MyDAC(BaseModel, CodecMixin):
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
             "vq/codebook_loss": codebook_loss,
-            "pred_timbre_id": pred_timbre_id,
+            # "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
+        }
+
+
+    def forward_unpaired(
+        self,
+        audio_data: torch.Tensor,
+        sample_rate: int = None,
+        n_quantizers: int = None,
+    ):
+
+        length = audio_data.shape[-1]
+        audio_data = self.preprocess(audio_data, sample_rate)
+
+        # Perturbation's encoders
+        encode_z = self.encoder(audio_data)
+
+
+        # TODO: Augmentation
+        
+        # EQ + Distortion
+        content_z = encode_z
+        
+        # Pitch Shfit + Time Stretch
+        timbre_z = encode_z
+        
+        
+        # Content Encoder
+        z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
+            content_z, n_quantizers
+        )
+
+        # Timbre Encoder
+        timbre_z = timbre_z.transpose(1, 2)
+        timbre_z = self.transformer(timbre_z, None, None)
+        timbre_z = timbre_z.transpose(1, 2)
+        timbre_z = torch.mean(timbre_z, dim=2) # Global mean pooling
+
+
+        # Project timbre latent to style parameters
+        style = self.style_linear(timbre_z).unsqueeze(2)  # (B, 2d, 1)
+        gamma, beta = style.chunk(2, 1)  # (B, d, 1)
+
+
+        # Apply conditional normalization
+        z = z.transpose(1, 2)
+        z = self.style_norm(z)
+        z = z.transpose(1, 2)
+        z = z * gamma + beta
+
+
+        x = self.decode(z)
+        return {
+            "audio": x[..., :length],
+            "codes": codes,
+            "latents": latents,
+            "vq/commitment_loss": commitment_loss,
+            "vq/codebook_loss": codebook_loss,
         }

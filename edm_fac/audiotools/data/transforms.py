@@ -1646,3 +1646,35 @@ class SeqPerturbReverse(BaseTransform):
 
     def _transform(self, signal, num_segments, fixed_second, reverse_prob):
         return signal.seq_perturb_reverse(num_segments, fixed_second, reverse_prob)
+    
+    
+class PitchShift(BaseTransform):
+    """Pitch shifts the audio signal.
+    
+    Parameters
+    ----------
+    n_semitones : int
+        How many semitones to shift the signal by.
+    quick : bool, optional
+        Using quick pitch shifting, by default True
+    """
+    
+    def __init__(
+        self, 
+        n_semitones: tuple = ("uniform", -2, 2),
+        quick: bool = True, 
+        name: str = None, 
+        prob: float = 1.0
+    ):
+        super().__init__(name=name, prob=prob)
+        self.n_semitones = n_semitones
+        self.quick = quick
+        
+    def _instantiate(self, state: RandomState):
+        return {
+            "n_semitones": util.sample_from_dist(self.n_semitones, state),
+            "quick": self.quick
+        }
+    
+    def _transform(self, signal, n_semitones, quick):
+        return signal.pitch_shift(n_semitones, quick)
