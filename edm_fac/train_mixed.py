@@ -68,9 +68,9 @@ class Wrapper:
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
 
-        # ✅ Switched both to CrossEntropyLoss for balanced classification
+        # ✅ Switched both to appropriate loss functions for classification
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
-        self.content_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # Multi-label for pitch
 
         # Loss lambda parameters
         self.params = {
@@ -106,9 +106,8 @@ def save_samples(args, accelerator, tracker_step, wrapper):
     batch = wrapper.val_paired_data.collate(samples)
     batch = util.prepare_batch(batch, accelerator.device)
 
-    out = wrapper.generator(
-        audio_data=batch['target'].audio_data,
-        content_match=batch['content_match'].audio_data,
+    out = wrapper.generator.conversion(
+        audio_data=batch['content_match'].audio_data,
         timbre_match=batch['timbre_converted'].audio_data,
     )
 
@@ -144,8 +143,9 @@ def save_samples(args, accelerator, tracker_step, wrapper):
     batch = wrapper.val_unpaired_data.collate(samples)
     batch = util.prepare_batch(batch, accelerator.device)
 
-    out = wrapper.generator.forward_unpaired(
-        audio_data=batch['target'].audio_data,
+    out = wrapper.generator.conversion(
+        audio_data=batch['content_match'].audio_data,
+        timbre_match=batch['timbre_converted'].audio_data,
     )
 
     recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
@@ -345,9 +345,8 @@ def validate_step_paired(args, accelerator, batch, wrapper):
 
     target_audio = batch['target']
     with torch.no_grad():
-        out = wrapper.generator(
-            audio_data=target_audio.audio_data,
-            content_match=batch['content_match'].audio_data,
+        out = wrapper.generator.conversion(
+            audio_data=batch['content_match'].audio_data,
             timbre_match=batch['timbre_converted'].audio_data,
         )
     output = {}
@@ -375,8 +374,9 @@ def validate_step_unpaired(args, accelerator, batch, wrapper):
     target_audio = batch['target']
 
     with torch.no_grad():
-        out = wrapper.generator.forward_unpaired(
-            audio_data=target_audio.audio_data,
+        out = wrapper.generator.conversion(
+            audio_data=batch['content_match'].audio_data,
+            timbre_match=batch['timbre_converted'].audio_data,
         )
     output = {}
     recons = AudioSignal(out["audio"], args.sample_rate)
@@ -479,8 +479,10 @@ def train_step_unpaired(args, accelerator, batch, wrapper):
 
     # DAC Model
     with accelerator.autocast():
-        out = wrapper.generator.forward_unpaired(
+        out = wrapper.generator(
             audio_data=target_audio.audio_data,
+            content_match=batch['content_match'].audio_data,
+            timbre_match=batch['timbre_converted'].audio_data,
         )
         output = {}
         recons = AudioSignal(out["audio"], args.sample_rate)

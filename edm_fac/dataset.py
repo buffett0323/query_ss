@@ -92,7 +92,7 @@ class EDM_Paired_Dataset(Dataset):
     def _build_paired_index(self):
 
         # Rendered Dataset
-        for timbre in self.unique_timbres: # 1st for-loop: 59/513 timbres
+        for timbre in self.unique_timbres: # 1st for-loop: 59/510 timbres
             for midi in self.unique_midis: # 2nd for-loop: 100/500 midis
                 wav_path = os.path.join(self.root_path, f"{timbre}_{midi}.wav")
 
@@ -146,7 +146,7 @@ class EDM_Paired_Dataset(Dataset):
         with open(f"{self.data_path}/json/onset_records_mixed_{self.split}.json", "r") as f:
             self.peak_records = json.load(f)
 
-        # print(f"-> Got {len(self.peak_records) * len(self.unique_timbres)} different tracks for {self.split}")
+        print(f"-> Got {len(self.peak_records) * len(self.unique_timbres)} different tracks for {self.split}")
 
 
 
@@ -1144,17 +1144,17 @@ if __name__ == "__main__":
 
 
 
-    os.makedirs("sample_audio", exist_ok=True)
-    for idx in tqdm(range(1000)):
-        a2 = train_unpaired_data[idx]
-        # a2["target"].write(f"sample_audio/target_{idx}.wav")
-        # a2["content_match"].write(f"sample_audio/content_match_{idx}.wav")
-        # a2["timbre_converted"].write(f"sample_audio/timbre_converted_{idx}.wav")
-        if a2['target'].shape[-1] != 44100:
-            print("target", a2['target'].shape)
+    # os.makedirs("sample_audio", exist_ok=True)
+    # for idx in tqdm(range(1000)):
+    #     a2 = train_unpaired_data[idx]
+    #     # a2["target"].write(f"sample_audio/target_{idx}.wav")
+    #     # a2["content_match"].write(f"sample_audio/content_match_{idx}.wav")
+    #     # a2["timbre_converted"].write(f"sample_audio/timbre_converted_{idx}.wav")
+    #     if a2['target'].shape[-1] != 44100:
+    #         print("target", a2['target'].shape)
 
-        if a2['content_match'].shape[-1] != 44100:
-            print("content_match", a2['content_match'].shape)
+    #     if a2['content_match'].shape[-1] != 44100:
+    #         print("content_match", a2['content_match'].shape)
 
-        if a2['timbre_converted'].shape[-1] != 44100:
-            print("timbre_converted", a2['timbre_converted'].shape)
+    #     if a2['timbre_converted'].shape[-1] != 44100:
+    #         print("timbre_converted", a2['timbre_converted'].shape)

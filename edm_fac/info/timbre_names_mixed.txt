@@ -69,7 +69,6 @@ PL Pads Pluck [BR]
 PLUCK - Detune Me
 SY Glassy [PL]
 LD - Arp Attack
-LEAD - Abduction
 PL Downpitcher [FN]
 PLUCK - Pika
 LEAD - Squitar
@@ -107,7 +106,6 @@ VOCAL - Jump
 XLNT-PL Squirt
 PL - Kalimba Mama
 LEAD - Comb My Saw
-PLUCK - Pokemon Tunnel
 Keys - Vocal Keys
 Lead - Soft Flute
 PLUCK - Coffee Break
@@ -311,7 +309,6 @@ LEAD - Screechy
 PLUCK - Backflip
 VOCAL - Control
 LD Scotland [BR]
-XLNT-LD X
 LEAD - Metal Melody
 PLUCK - Ring A Ding
 PLUCK - Modulus

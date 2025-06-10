@@ -6,7 +6,6 @@ import os
 import time
 import torch
 import logging
-import wandb
 warnings.simplefilter('ignore')
 
 from modules.commons import *
@@ -20,7 +19,7 @@ from audiotools import ml
 from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
-from dataset import EDM_Simple_Dataset, EDM_Simple_Dataset_Optimized
+from dataset import EDM_Paired_Dataset
 from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
 import dac
 
@@ -103,9 +102,8 @@ def save_samples(args, accelerator, tracker_step, wrapper):
     batch = wrapper.val_data.collate(samples)
     batch = util.prepare_batch(batch, accelerator.device)
 
-    out = wrapper.generator(
-        audio_data=batch['target'].audio_data,
-        content_match=batch['content_match'].audio_data,
+    out = wrapper.generator.conversion(
+        audio_data=batch['content_match'].audio_data,
         timbre_match=batch['timbre_converted'].audio_data,
     )
 
@@ -123,10 +121,10 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         single_ref_content = AudioSignal(ref_content.audio_data[i], args.sample_rate)
         single_ref_timbre = AudioSignal(ref_timbre.audio_data[i], args.sample_rate)
 
-        recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'recon_{sample_idx}.wav')
-        recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'gt_{sample_idx}.wav')
-        ref_content_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'ref_content_{sample_idx}.wav')
-        ref_timbre_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'ref_timbre_{sample_idx}.wav')
+        recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{sample_idx}_recon.wav')
+        recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{sample_idx}_gt.wav')
+        ref_content_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{sample_idx}_ref_content.wav')
+        ref_timbre_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{sample_idx}_ref_timbre.wav')
 
         single_recon.write(recon_path)
         single_recon_gt.write(recon_gt_path)
@@ -143,14 +141,6 @@ def main(args, accelerator):
     # Checkpoint direction
     os.makedirs(args.ckpt_path, exist_ok=True)
 
-    # Initialize wandb
-    if args.log_wandb and accelerator.local_rank == 0:
-        wandb.init(
-            project=args.wandb_project,
-            name=args.wandb_name,
-            config=vars(args),
-            dir=args.wandb_dir
-        )
 
     Path(args.save_path).mkdir(exist_ok=True, parents=True)
     Path(os.path.join(args.save_path, 'sample_audio')).mkdir(exist_ok=True, parents=True)
@@ -164,7 +154,7 @@ def main(args, accelerator):
     )
 
     # Build datasets and dataloaders
-    train_data = EDM_Simple_Dataset_Optimized(
+    train_data = EDM_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -173,11 +163,9 @@ def main(args, accelerator):
         hop_length=args.hop_length,
         min_note=args.min_note,
         max_note=args.max_note,
-        stems=args.stems,
-        split="train"
+        split="train",
     )
-
-    val_data = EDM_Simple_Dataset_Optimized(
+    val_data = EDM_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -186,7 +174,6 @@ def main(args, accelerator):
         hop_length=args.hop_length,
         min_note=args.min_note,
         max_note=args.max_note,
-        stems=args.stems,
         split="evaluation"
     )
     wrapper = Wrapper(args, accelerator, val_data)
@@ -230,13 +217,13 @@ def main(args, accelerator):
     # Loop
     with tracker.live:
         for tracker.step, batch in enumerate(train_loader, start=tracker.step):
-            train_step(args, accelerator, batch, tracker.step, wrapper)
+            train_step(args, accelerator, batch, wrapper)
 
             if tracker.step % args.save_interval == 0:
                 save_checkpoint(args, tracker.step, wrapper)
 
             if tracker.step % args.validate_interval == 0:
-                validate(args, accelerator, val_loader, wrapper, tracker.step)
+                validate(args, accelerator, val_loader, wrapper)
 
             if tracker.step % args.sample_freq == 0:
                 save_samples(args, accelerator, tracker.step, wrapper)
@@ -244,19 +231,16 @@ def main(args, accelerator):
             if tracker.step == args.num_iters:
                 break
 
-    # Finish wandb run
-    if accelerator.local_rank == 0:
-        try:
-            wandb.finish()
-        except:
-            pass
+
 
 # @timer
 @torch.no_grad()
-def validate(args, accelerator, val_loader, wrapper, iter):
+def validate(args, accelerator, val_loader, wrapper):
     output = {}
-    for batch in val_loader:
-        output = validate_step(args, accelerator, batch, wrapper, iter)
+    for i, batch in enumerate(val_loader):
+        output = validate_step(args, accelerator, batch, wrapper)
+        if i >= args.validate_steps:
+            break
 
     if hasattr(wrapper.optimizer_g, "consolidate_state_dict"):
         wrapper.optimizer_g.consolidate_state_dict()
@@ -267,7 +251,7 @@ def validate(args, accelerator, val_loader, wrapper, iter):
 
 # @timer
 @torch.no_grad()
-def validate_step(args, accelerator, batch, wrapper, iter):
+def validate_step(args, accelerator, batch, wrapper):
     wrapper.generator.eval()
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
@@ -275,9 +259,8 @@ def validate_step(args, accelerator, batch, wrapper, iter):
     target_audio = batch['target']
 
     with torch.no_grad():
-        out = wrapper.generator(
-            audio_data=target_audio.audio_data,
-            content_match=batch['content_match'].audio_data,
+        out = wrapper.generator.conversion(
+            audio_data=batch['content_match'].audio_data,
             timbre_match=batch['timbre_converted'].audio_data,
         )
     output = {}
@@ -293,22 +276,10 @@ def validate_step(args, accelerator, batch, wrapper, iter):
     # output["pred/content_acc"] = wrapper.content_acc(out["pred_pitch"], batch['pitch'])
 
 
-    # Log validation metrics to wandb
-    try:
-        import wandb
-        if wandb.run is not None and args.log_wandb:
-            wandb.log(
-                {f"val/{k}": v.item() if torch.is_tensor(v) else v
-                 for k, v in output.items()},
-                step=iter
-            )
-    except:
-        pass  # Silently continue if wandb logging fails
-
     return {k: v for k, v in sorted(output.items())}
 
 # @timer
-def train_step(args, accelerator, batch, iter, wrapper):
+def train_step(args, accelerator, batch, wrapper):
 
     train_start_time = time.time()
     wrapper.generator.train()
@@ -366,21 +337,9 @@ def train_step(args, accelerator, batch, iter, wrapper):
 
     # Logging
     # output["other/learning_rate"] = wrapper.optimizer_g.param_groups[0]["lr"]
-    output["other/grad_norm_g"] = grad_norm_g
-    output["other/grad_norm_d"] = grad_norm_d
-    output["other/time_per_step"] = time.time() - train_start_time
-
-    # Log to wandb
-    if iter % args.log_interval == 0:  # Log every 10 steps to avoid too frequent logging
-        try:
-            import wandb
-            if wandb.run is not None and args.log_wandb:
-                wandb.log(
-                    {f"train/{k}": v.item() if torch.is_tensor(v) else v for k, v in output.items()},
-                    step=iter
-                )
-        except:
-            pass  # Silently continue if wandb logging fails
+    # output["other/grad_norm_g"] = grad_norm_g
+    # output["other/grad_norm_d"] = grad_norm_d
+    # output["other/time_per_step"] = time.time() - train_start_time
 
     return {k: v for k, v in sorted(output.items())}
 
@@ -388,12 +347,11 @@ def train_step(args, accelerator, batch, iter, wrapper):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config.yaml")
+    config = yaml_config_hook("configs/config_paired.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    os.makedirs(args.wandb_dir, exist_ok=True)
     os.makedirs(args.save_path, exist_ok=True)
     os.makedirs(args.ckpt_path, exist_ok=True)
 

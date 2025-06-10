@@ -340,10 +340,8 @@ class MyDAC(BaseModel, CodecMixin):
         self.sample_rate = sample_rate
         self.apply(init_weights)
 
-        # predictors
-        # self.timbre_predictor = TransformerClassifier(latent_dim, timbre_classes, head=1, global_pred=True)
-        # self.pitch_predictor = TransformerClassifier(latent_dim, pitch_nums, head=1, global_pred=False)
-        # self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
+        # Predictors
+        self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
         self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
 
 
@@ -423,7 +421,7 @@ class MyDAC(BaseModel, CodecMixin):
 
 
         # Predictors
-        # pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_pitch = self.pitch_predictor(z)[0]
 
 
@@ -441,49 +439,48 @@ class MyDAC(BaseModel, CodecMixin):
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
             "vq/codebook_loss": codebook_loss,
-            # "pred_timbre_id": pred_timbre_id,
+            "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
         }
 
 
-    def forward_unpaired(
+    @torch.no_grad()
+    def conversion(
         self,
         audio_data: torch.Tensor,
+        timbre_match: torch.Tensor = None,
         sample_rate: int = None,
         n_quantizers: int = None,
     ):
-
         length = audio_data.shape[-1]
         audio_data = self.preprocess(audio_data, sample_rate)
+        timbre_match = self.preprocess(timbre_match, sample_rate)
 
         # Perturbation's encoders
-        encode_z = self.encoder(audio_data)
+        content_match_z = self.encoder(audio_data)
+        timbre_match_z = self.encoder(timbre_match)
 
 
-        # TODO: Augmentation
-
-        # EQ + Distortion
-        content_z = encode_z
-
-        # Pitch Shfit + Time Stretch
-        timbre_z = encode_z
-
-
-        # Content Encoder
+        # Content match
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
-            content_z, n_quantizers
+            content_match_z, n_quantizers
         )
 
-        # Timbre Encoder
-        timbre_z = timbre_z.transpose(1, 2)
-        timbre_z = self.transformer(timbre_z, None, None)
-        timbre_z = timbre_z.transpose(1, 2)
-        timbre_z = torch.mean(timbre_z, dim=2) # Global mean pooling
+        # Timbre match
+        timbre_match_z = timbre_match_z.transpose(1, 2)
+        timbre_match_z = self.transformer(timbre_match_z, None, None)
+        timbre_match_z = timbre_match_z.transpose(1, 2)
+        timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
 
 
         # Project timbre latent to style parameters
-        style = self.style_linear(timbre_z).unsqueeze(2)  # (B, 2d, 1)
+        style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
+
+
+        # Predictors
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        pred_pitch = self.pitch_predictor(z)[0]
 
 
         # Apply conditional normalization
@@ -500,4 +497,6 @@ class MyDAC(BaseModel, CodecMixin):
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
             "vq/codebook_loss": codebook_loss,
+            "pred_timbre_id": pred_timbre_id,
+            "pred_pitch": pred_pitch,
         }
