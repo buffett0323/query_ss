@@ -14,7 +14,8 @@ from dac.nn.layers import WNConv1d
 from dac.nn.layers import WNConvTranspose1d
 from dac.nn.quantize import ResidualVectorQuantize
 from .encodec import SConv1d, SConvTranspose1d, SLSTM
-from .transformer import TransformerEncoder
+from .transformer import TransformerEncoder, AttentionPooling
+from .moco import MoCo
 from alias_free_torch import *
 from einops.layers.torch import Rearrange
 
@@ -22,27 +23,6 @@ def init_weights(m):
     if isinstance(m, nn.Conv1d):
         nn.init.trunc_normal_(m.weight, std=0.02)
         nn.init.constant_(m.bias, 0)
-
-
-class TransformerClassifier(nn.Module):
-    def __init__(self, indim, outdim, head, global_pred=False):
-        super().__init__()
-        self.global_pred = global_pred
-        self.embedding = nn.Linear(indim, 64)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=64, nhead=8)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
-        self.heads = nn.ModuleList([nn.Linear(64, outdim) for _ in range(head)])
-
-    def forward(self, x):
-        # x: [B, C, T]
-        x = x.permute(2, 0, 1)  # [T, B, C]
-        x = self.embedding(x)  # [T, B, 64]
-        x = self.transformer(x)  # [T, B, 64]
-        x = x.permute(1, 0, 2)  # [B, T, 64]
-        if self.global_pred:
-            x = torch.mean(x, dim=1)  # [B, 64]
-        outs = [head(x) for head in self.heads]
-        return outs
 
 
 class ResidualUnit(nn.Module):
@@ -274,9 +254,6 @@ class Decoder(nn.Module):
         return self.model(x)
 
 
-
-
-
 class MyDAC(BaseModel, CodecMixin):
     def __init__(
         self,
@@ -310,6 +287,8 @@ class MyDAC(BaseModel, CodecMixin):
         self.n_codebooks = n_codebooks
         self.codebook_size = codebook_size
         self.codebook_dim = codebook_dim
+
+        # Content
         self.quantizer = ResidualVectorQuantize(
             input_dim=latent_dim,
             n_codebooks=n_codebooks,
@@ -318,7 +297,7 @@ class MyDAC(BaseModel, CodecMixin):
             quantizer_dropout=quantizer_dropout,
         )
 
-        # Add two transformer encoders
+        # Timbre
         self.transformer = TransformerEncoder(
             enc_emb_tokens=None,
             encoder_layer=4,
@@ -329,7 +308,17 @@ class MyDAC(BaseModel, CodecMixin):
             encoder_dropout=0.1,
             use_cln=False,
         )
+        # self.transformer = transformer
 
+        # # MoCo
+        # self.moco = MoCo(
+        #     base_encoder=self.transformer,
+        #     dim=latent_dim,
+        #     K=2048, # 65536,
+        #     m=0.999,
+        #     T=0.2, # 0.07
+        #     mlp=True, # V2
+        # )
         self.decoder = Decoder(
             latent_dim,
             decoder_dim,
@@ -341,9 +330,17 @@ class MyDAC(BaseModel, CodecMixin):
         self.apply(init_weights)
 
         # Predictors
-        self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
+        # 1. Content predictor
         self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
 
+        # 2. Timbre predictor
+        # self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
+        # self.brightness_predictor = CNNLSTM(latent_dim, 1, head=1, global_pred=False)
+        # self.modulation_predictor = CNNLSTM(latent_dim, 1, head=1, global_pred=False)
+        # self.fx_tail_predictor = AttentionPooling(latent_dim) # This on pooled latent
+
+        # Attention pooling
+        # self.timbre_pooling = AttentionPooling(input_dim=latent_dim)
 
         # conditional LayerNorm
         self.style_linear = nn.Linear(latent_dim, latent_dim * 2)
@@ -390,13 +387,9 @@ class MyDAC(BaseModel, CodecMixin):
     ):
 
         length = audio_data.shape[-1]
-        # audio_data = self.preprocess(audio_data, sample_rate)
         content_match = self.preprocess(content_match, sample_rate)
         timbre_match = self.preprocess(timbre_match, sample_rate)
 
-        # z, codes, latents, commitment_loss, codebook_loss = self.encode(
-        #     audio_data, n_quantizers
-        # )
 
         # Perturbation's encoders
         content_match_z = self.encoder(content_match)
@@ -412,17 +405,25 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = timbre_match_z.transpose(1, 2)
         timbre_match_z = self.transformer(timbre_match_z, None, None)
         timbre_match_z = timbre_match_z.transpose(1, 2)
-        timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
 
+        # timbre_match_z_global = torch.mean(timbre_match_z, dim=2) # Global mean pooling
+        timbre_match_z_global = self.timbre_pooling(timbre_match_z) # Attention pooling
 
         # Project timbre latent to style parameters
-        style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
+        style = self.style_linear(timbre_match_z_global).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
 
 
         # Predictors
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        # 1. Content predictor
         pred_pitch = self.pitch_predictor(z)[0]
+
+        # 2. Timbre predictor
+        # pred_timbre_id = self.timbre_predictor(timbre_match_z_global.unsqueeze(-1))[0]
+        # timbre.shape torch.Size([2, 256, 87]) torch.Size([2, 256])
+        # pred_brightness = self.brightness_predictor(timbre_match_z)[0].squeeze(-1)
+        # pred_modulation = self.modulation_predictor(timbre_match_z)[0].squeeze(-1)
+        # pred_fx_tail = self.fx_tail_predictor(timbre_match_z_global).squeeze(-1)
 
 
         # Apply conditional normalization
@@ -439,9 +440,91 @@ class MyDAC(BaseModel, CodecMixin):
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
             "vq/codebook_loss": codebook_loss,
-            "pred_timbre_id": pred_timbre_id,
+            # "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
+            # "pred_brightness": pred_brightness,
+            # "pred_modulation": pred_modulation,
+            # "pred_fx_tail": pred_fx_tail,
         }
+
+
+    # def forward_contrastive(
+    #     self,
+    #     audio_data: torch.Tensor,
+    #     content_match: torch.Tensor = None,
+    #     timbre_match_1: torch.Tensor = None,
+    #     timbre_match_2: torch.Tensor = None,
+    #     sample_rate: int = None,
+    #     n_quantizers: int = None,
+    # ):
+
+    #     length = audio_data.shape[-1]
+    #     content_match = self.preprocess(content_match, sample_rate)
+    #     timbre_match_1 = self.preprocess(timbre_match_1, sample_rate)
+    #     timbre_match_2 = self.preprocess(timbre_match_2, sample_rate)
+
+
+    #     # Perturbation's encoders
+    #     content_match_z = self.encoder(content_match)
+    #     timbre_match_z_1 = self.encoder(timbre_match_1) # [2, 256, 87]
+    #     timbre_match_z_2 = self.encoder(timbre_match_2) # [2, 256, 87]
+
+
+    #     # Content match
+    #     z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
+    #         content_match_z, n_quantizers
+    #     )
+
+    #     # Timbre match: MoCo
+    #     timbre_match_z_1 = timbre_match_z_1.transpose(1, 2)
+    #     timbre_match_z_2 = timbre_match_z_2.transpose(1, 2)
+
+    #     # Calculate MoCo Loss
+    #     moco_output, moco_target = self.moco(timbre_match_z_1, timbre_match_z_2)
+
+    #     # Get Timbre embedding
+    #     timbre_match_z_global = self.moco.encoder_q(timbre_match_z_1, None, None)
+
+
+    #     # Project timbre latent to style parameters
+    #     style = self.style_linear(timbre_match_z_global).unsqueeze(2)  # (B, 2d, 1)
+    #     gamma, beta = style.chunk(2, 1)  # (B, d, 1)
+
+
+    #     # Predictors
+    #     # 1. Content predictor
+    #     pred_pitch = self.pitch_predictor(z)[0]
+
+    #     # 2. Timbre predictor
+    #     # pred_timbre_id = self.timbre_predictor(timbre_match_z_global.unsqueeze(-1))[0]
+    #     # timbre.shape torch.Size([2, 256, 87]) torch.Size([2, 256])
+    #     # pred_brightness = self.brightness_predictor(timbre_match_z)[0].squeeze(-1)
+    #     # pred_modulation = self.modulation_predictor(timbre_match_z)[0].squeeze(-1)
+    #     # pred_fx_tail = self.fx_tail_predictor(timbre_match_z_global).squeeze(-1)
+
+
+    #     # Apply conditional normalization
+    #     z = z.transpose(1, 2)
+    #     z = self.style_norm(z)
+    #     z = z.transpose(1, 2)
+    #     z = z * gamma + beta
+
+
+    #     x = self.decode(z)
+    #     return {
+    #         "audio": x[..., :length],
+    #         "codes": codes,
+    #         "latents": latents,
+    #         "vq/commitment_loss": commitment_loss,
+    #         "vq/codebook_loss": codebook_loss,
+    #         # "pred_timbre_id": pred_timbre_id,
+    #         "pred_pitch": pred_pitch,
+    #         "moco_output": moco_output,
+    #         "moco_target": moco_target,
+    #         # "pred_brightness": pred_brightness,
+    #         # "pred_modulation": pred_modulation,
+    #         # "pred_fx_tail": pred_fx_tail,
+    #     }
 
 
     @torch.no_grad()
@@ -473,13 +556,17 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
 
 
+        # # Get Timbre embedding from Moco Framework
+        # timbre_match_z = self.moco.encoder_q(timbre_match_z, None, None)
+
+
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
 
 
         # Predictors
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        # pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_pitch = self.pitch_predictor(z)[0]
 
 
@@ -497,6 +584,6 @@ class MyDAC(BaseModel, CodecMixin):
             "latents": latents,
             "vq/commitment_loss": commitment_loss,
             "vq/codebook_loss": codebook_loss,
-            "pred_timbre_id": pred_timbre_id,
+            # "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
         }

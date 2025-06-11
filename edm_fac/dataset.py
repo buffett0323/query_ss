@@ -8,6 +8,7 @@ import soundfile as sf
 import pretty_midi
 import argparse
 import itertools
+import librosa
 
 from audiotools import AudioSignal
 from audiotools import transforms as tfm
@@ -174,8 +175,8 @@ class EDM_Paired_Dataset(Dataset):
             return random.choice(possible_matches)
 
 
-    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float) -> torch.Tensor:
-        """Convert MIDI file to pitch sequence tensor"""
+    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float, offset: float = 0.0) -> torch.Tensor:
+        """Convert MIDI file to pitch sequence tensor starting from offset"""
         try:
             pm = pretty_midi.PrettyMIDI(str(midi_path))
             n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
@@ -183,21 +184,38 @@ class EDM_Paired_Dataset(Dataset):
 
             for instrument in pm.instruments:
                 for note in instrument.notes:
-                    start_frame = int(note.start * self.sample_rate / self.hop_length)
-                    end_frame = int(note.end * self.sample_rate / self.hop_length)
+                    # Adjust note timing by subtracting offset
+                    note_start = note.start - offset
+                    note_end = note.end - offset
+
+                    # Skip notes that end before our offset window starts
+                    if note_end <= 0:
+                        continue
+
+                    # Skip notes that start after our duration window ends
+                    if note_start >= duration:
+                        continue
+
+                    # Clamp note timing to our duration window
+                    note_start = max(0, note_start)
+                    note_end = min(duration, note_end)
+
+                    start_frame = int(note_start * self.sample_rate / self.hop_length)
+                    end_frame = int(note_end * self.sample_rate / self.hop_length)
 
                     start_frame = max(0, min(start_frame, n_frames-1))
                     end_frame = max(0, min(end_frame, n_frames-1))
 
                     note_idx = note.pitch - self.min_note
 
-                    if 0 <= note_idx < self.n_notes:
+                    if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
                         pitch_sequence[start_frame:end_frame+1, note_idx] = 1
 
             return torch.FloatTensor(pitch_sequence)
 
         except Exception as e:
             print(f"Error processing MIDI file {midi_path}: {e}")
+            n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
             return torch.zeros((n_frames, self.n_notes))
 
 
@@ -209,6 +227,44 @@ class EDM_Paired_Dataset(Dataset):
         )
         signal = signal.mean(axis=1, keepdims=False)
         return AudioSignal(signal, self.sample_rate)
+
+
+
+    def extract_edm_timbre_features(self, waveform):
+        # Extract numpy array from AudioSignal object
+        if hasattr(waveform, 'audio_data'):
+            audio_data = waveform.audio_data.squeeze().cpu().numpy()
+        elif hasattr(waveform, 'samples'):
+            audio_data = waveform.samples.squeeze().cpu().numpy()
+        else:
+            # Assume it's already a numpy array or tensor
+            if isinstance(waveform, torch.Tensor):
+                audio_data = waveform.squeeze().cpu().numpy()
+            else:
+                audio_data = waveform
+
+        # Brightness (frame-level)
+        brightness = librosa.feature.spectral_centroid(y=audio_data, sr=self.sample_rate, hop_length=self.hop_length)[0]
+        brightness = torch.from_numpy(brightness).float()
+
+        # Modulation (frame-level)
+        modulation = librosa.onset.onset_strength(y=audio_data, sr=self.sample_rate, hop_length=self.hop_length)
+        modulation = torch.from_numpy(modulation).float()
+
+        # FX tail decay (global scalar)
+        rms = librosa.feature.rms(y=audio_data, frame_length=2048, hop_length=self.hop_length)[0]
+        tail_len = int(len(rms) * 0.2)
+        tail_rms = rms[-tail_len:]
+        x = np.arange(tail_len)
+        slope = np.polyfit(x, np.log(tail_rms + 1e-7), 1)[0]
+        fx_tail = torch.tensor(slope).float()
+
+        return {
+            "brightness": brightness,        # shape: (n_frames,)
+            "modulation": modulation,        # shape: (n_frames,)
+            "fx_tail": fx_tail               # shape: scalar
+        }
+
 
 
     def __len__(self) -> int:
@@ -224,12 +280,12 @@ class EDM_Paired_Dataset(Dataset):
 
         # 2. Load input audio with this offset
         target_gt = self._load_audio(wav_path, offset=offset)
-        pitch_info = self._midi_to_pitch_sequence(midi_path, self.duration)
+        pitch_info = self._midi_to_pitch_sequence(midi_path, self.duration, offset)
 
         # 3. Find matches for content and timbre
         content_match_idx = self._get_random_match_content(timbre_id, midi_id)
-        timbre_converted_idx = self._get_random_match_timbre(timbre_id, midi_id)
-
+        timbre_converted_idx1 = self._get_random_match_timbre(timbre_id, midi_id)
+        timbre_converted_idx2 = self._get_random_match_timbre(timbre_id, midi_id)
 
         """ Perturbation """
         # 1). Load content match
@@ -237,7 +293,8 @@ class EDM_Paired_Dataset(Dataset):
         # content_pitch = self._midi_to_pitch_sequence(self.paired_data[content_match_idx][3], self.duration) # Actually the same as input_pitch -> no need
 
         # 2). Load timbre match
-        timbre_converted = self._load_audio(self.paired_data[timbre_converted_idx][2], offset=offset)
+        timbre_converted1 = self._load_audio(self.paired_data[timbre_converted_idx1][2], offset=offset)
+        timbre_converted2 = self._load_audio(self.paired_data[timbre_converted_idx2][2], offset=offset)
         # timbre_pitch = self._midi_to_pitch_sequence(self.paired_data[timbre_match_idx][3], self.duration) # No need
 
         # # Validation use for conversion
@@ -245,20 +302,25 @@ class EDM_Paired_Dataset(Dataset):
         #     orig_audio_input = self._get_random_match_content(timbre_id, midi_id)
 
 
+        # Timbre features
+        timbre_features = self.extract_edm_timbre_features(target_gt)
+
         return {
-            # "input": orig_audio_input,
             'target': target_gt,
             'pitch': pitch_info,
             'timbre_id': timbre_id,
             'content_match': content_match,
-            # 'content_pitch': content_pitch,
-            'timbre_converted': timbre_converted,
-            # 'timbre_pitch': timbre_pitch,
+            'timbre_converted': timbre_converted1,
+            'timbre_pair': timbre_converted2,
+            'timbre_brightness': timbre_features['brightness'],
+            'timbre_modulation': timbre_features['modulation'],
+            'timbre_fx_tail': timbre_features['fx_tail'],
             'metadata': {
                 'target': {
                     'timbre_id': timbre_id,
                     'content_id': midi_id,
-                    'path': str(wav_path)
+                    'path': str(wav_path),
+                    'offset': offset
                 },
                 'content_match': {
                     'timbre_id': self.paired_data[content_match_idx][0],
@@ -266,9 +328,14 @@ class EDM_Paired_Dataset(Dataset):
                     'path': str(self.paired_data[content_match_idx][2])
                 },
                 'timbre_converted': {
-                    'timbre_id': self.paired_data[timbre_converted_idx][0],
-                    'content_id': self.paired_data[timbre_converted_idx][1],
-                    'path': str(self.paired_data[timbre_converted_idx][2])
+                    'timbre_id': self.paired_data[timbre_converted_idx1][0],
+                    'content_id': self.paired_data[timbre_converted_idx1][1],
+                    'path': str(self.paired_data[timbre_converted_idx1][2])
+                },
+                'timbre_pair':{
+                    'timbre_id': self.paired_data[timbre_converted_idx2][0],
+                    'content_id': self.paired_data[timbre_converted_idx2][1],
+                    'path': str(self.paired_data[timbre_converted_idx2][2])
                 }
             }
         }
@@ -277,14 +344,15 @@ class EDM_Paired_Dataset(Dataset):
     def collate(batch: List[Dict]) -> Dict:
         """Custom collate function for batching"""
         return {
-            # 'input': AudioSignal.batch([item['input'] for item in batch]),
             'target': AudioSignal.batch([item['target'] for item in batch]),
             'pitch': torch.stack([item['pitch'] for item in batch]),
             'timbre_id': torch.tensor([item['timbre_id'] for item in batch]),
             'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
-            # 'content_pitch': torch.stack([item['content_pitch'] for item in batch]),
             'timbre_converted': AudioSignal.batch([item['timbre_converted'] for item in batch]),
-            # 'timbre_pitch': torch.stack([item['timbre_pitch'] for item in batch]),
+            'timbre_pair': AudioSignal.batch([item['timbre_pair'] for item in batch]),
+            'timbre_brightness': torch.stack([item['timbre_brightness'] for item in batch]),
+            'timbre_modulation': torch.stack([item['timbre_modulation'] for item in batch]),
+            'timbre_fx_tail': torch.stack([item['timbre_fx_tail'] for item in batch]),
             'metadata': [item['metadata'] for item in batch]
         }
 
@@ -560,8 +628,8 @@ class EDM_Simple_Dataset(Dataset):
             return random.choice(possible_matches)
 
 
-    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float) -> torch.Tensor:
-        """Convert MIDI file to pitch sequence tensor"""
+    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float, offset: float = 0.0) -> torch.Tensor:
+        """Convert MIDI file to pitch sequence tensor starting from offset"""
         try:
             pm = pretty_midi.PrettyMIDI(str(midi_path))
             n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
@@ -569,21 +637,38 @@ class EDM_Simple_Dataset(Dataset):
 
             for instrument in pm.instruments:
                 for note in instrument.notes:
-                    start_frame = int(note.start * self.sample_rate / self.hop_length)
-                    end_frame = int(note.end * self.sample_rate / self.hop_length)
+                    # Adjust note timing by subtracting offset
+                    note_start = note.start - offset
+                    note_end = note.end - offset
+
+                    # Skip notes that end before our offset window starts
+                    if note_end <= 0:
+                        continue
+
+                    # Skip notes that start after our duration window ends
+                    if note_start >= duration:
+                        continue
+
+                    # Clamp note timing to our duration window
+                    note_start = max(0, note_start)
+                    note_end = min(duration, note_end)
+
+                    start_frame = int(note_start * self.sample_rate / self.hop_length)
+                    end_frame = int(note_end * self.sample_rate / self.hop_length)
 
                     start_frame = max(0, min(start_frame, n_frames-1))
                     end_frame = max(0, min(end_frame, n_frames-1))
 
                     note_idx = note.pitch - self.min_note
 
-                    if 0 <= note_idx < self.n_notes:
+                    if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
                         pitch_sequence[start_frame:end_frame+1, note_idx] = 1
 
             return torch.FloatTensor(pitch_sequence)
 
         except Exception as e:
             print(f"Error processing MIDI file {midi_path}: {e}")
+            n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
             return torch.zeros((n_frames, self.n_notes))
 
 
@@ -610,7 +695,7 @@ class EDM_Simple_Dataset(Dataset):
 
         # 2. Load input audio with this offset
         target_gt = self._load_audio(wav_path, offset=offset)
-        pitch_info = self._midi_to_pitch_sequence(midi_path, self.duration)
+        pitch_info = self._midi_to_pitch_sequence(midi_path, self.duration, offset)
 
         # 3. Find matches for content and timbre
         content_match_idx = self._get_random_match_content(timbre_id, midi_id)
@@ -929,12 +1014,14 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             _, _, wav_path, _ = self.file_index[idx]
             return self._load_audio(wav_path, offset)
 
-    def _get_fast_pitch(self, midi_path: str) -> torch.Tensor:
+    def _get_fast_pitch(self, midi_path: str, offset: float = 0.0) -> torch.Tensor:
         """Fast pitch sequence retrieval using cache or direct computation"""
-        if self.cache_midi:
+        if self.cache_midi and offset == 0.0:
+            # Use cached pitch sequence only for zero offset
             return self.pitch_cache[midi_path]
         else:
-            return self._midi_to_pitch_sequence(midi_path, self.duration)
+            # Compute dynamically for non-zero offsets or when not cached
+            return self._midi_to_pitch_sequence(midi_path, self.duration, offset)
 
     def _get_fast_matches(self, idx: int):
         """Fast match retrieval using pre-computed matches"""
@@ -970,8 +1057,8 @@ class EDM_Simple_Dataset_Optimized(Dataset):
             ]
             return random.choice(possible_matches)
 
-    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float) -> torch.Tensor:
-        """Convert MIDI file to pitch sequence tensor"""
+    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float, offset: float = 0.0) -> torch.Tensor:
+        """Convert MIDI file to pitch sequence tensor starting from offset"""
         try:
             pm = pretty_midi.PrettyMIDI(str(midi_path))
             n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
@@ -979,15 +1066,31 @@ class EDM_Simple_Dataset_Optimized(Dataset):
 
             for instrument in pm.instruments:
                 for note in instrument.notes:
-                    start_frame = int(note.start * self.sample_rate / self.hop_length)
-                    end_frame = int(note.end * self.sample_rate / self.hop_length)
+                    # Adjust note timing by subtracting offset
+                    note_start = note.start - offset
+                    note_end = note.end - offset
+
+                    # Skip notes that end before our offset window starts
+                    if note_end <= 0:
+                        continue
+
+                    # Skip notes that start after our duration window ends
+                    if note_start >= duration:
+                        continue
+
+                    # Clamp note timing to our duration window
+                    note_start = max(0, note_start)
+                    note_end = min(duration, note_end)
+
+                    start_frame = int(note_start * self.sample_rate / self.hop_length)
+                    end_frame = int(note_end * self.sample_rate / self.hop_length)
 
                     start_frame = max(0, min(start_frame, n_frames-1))
                     end_frame = max(0, min(end_frame, n_frames-1))
 
                     note_idx = note.pitch - self.min_note
 
-                    if 0 <= note_idx < self.n_notes:
+                    if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
                         pitch_sequence[start_frame:end_frame+1, note_idx] = 1
 
             return torch.FloatTensor(pitch_sequence)
@@ -1022,7 +1125,7 @@ class EDM_Simple_Dataset_Optimized(Dataset):
 
         # Fast audio and pitch loading
         target_gt = self._get_fast_audio(idx, offset)
-        pitch_info = self._get_fast_pitch(midi_path)
+        pitch_info = self._get_fast_pitch(midi_path, offset)
 
         # Fast match retrieval
         content_match_idx, timbre_converted_idx = self._get_fast_matches(idx)
@@ -1113,37 +1216,12 @@ if __name__ == "__main__":
         split="train",
     )
 
-    train_unpaired_data = EDM_Unpaired_Dataset(
-        beatport_path=args.beatport_path,
-        data_path=args.data_path,
-        duration=args.duration,
-        total_duration=args.total_duration,
-        sample_rate=args.sample_rate,
-        split="train",
-    )
-    val_paired_data = EDM_Paired_Dataset(
-        root_path=args.root_path,
-        midi_path=args.midi_path,
-        data_path=args.data_path,
-        duration=args.duration,
-        sample_rate=args.sample_rate,
-        hop_length=args.hop_length,
-        min_note=args.min_note,
-        max_note=args.max_note,
-        split="evaluation",
-    )
-
-    val_unpaired_data = EDM_Unpaired_Dataset(
-        beatport_path=args.beatport_path,
-        data_path=args.data_path,
-        duration=args.duration,
-        total_duration=args.total_duration,
-        sample_rate=args.sample_rate,
-        split="evaluation",
-    )
-
-
-
+    dt = train_paired_data[0]
+    print(dt['target'].shape)
+    print(dt['content_match'].shape)
+    print(dt['timbre_converted'].shape)
+    print(dt['timbre_pair'].shape)
+    print(dt['metadata'])
     # os.makedirs("sample_audio", exist_ok=True)
     # for idx in tqdm(range(1000)):
     #     a2 = train_unpaired_data[idx]

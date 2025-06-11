@@ -1,3 +1,5 @@
+# Training Contrastive learning loss on timbre
+
 import sys
 import warnings
 import argparse
@@ -12,6 +14,7 @@ from modules.commons import *
 from losses import *
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
+from torch.cuda.amp import GradScaler, autocast
 
 from dac.nn.loss import MultiScaleSTFTLoss, MelSpectrogramLoss, GANLoss, L1Loss
 from audiotools import AudioSignal
@@ -20,11 +23,36 @@ from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
 from dataset import EDM_Paired_Dataset
-from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
+from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint, print_model_info
 import dac
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def set_mel_loss(full=True):
+    if full:
+        n_mels=[5, 10, 20, 40, 80, 160, 320]
+        window_lengths=[32, 64, 128, 256, 512, 1024, 2048]
+        mel_fmin=[0]*7
+        mel_fmax=[None]*7
+    else:
+        n_mels=[20, 80, 320]
+        window_lengths=[64, 256, 1024]
+        mel_fmin=[0, 0, 0]
+        mel_fmax=[None, None, None]
+
+    mel_loss = MelSpectrogramLoss(
+        n_mels=n_mels,
+        window_lengths=window_lengths,
+        mel_fmin=mel_fmin,
+        mel_fmax=mel_fmax,
+        pow=1.0,
+        mag_weight=0.0,
+    )
+    return mel_loss
+
+
 
 class Wrapper:
     def __init__(
@@ -54,20 +82,13 @@ class Wrapper:
 
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
-        # self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
-        self.mel_loss = MelSpectrogramLoss(
-            n_mels=[5, 10, 20, 40, 80, 160, 320],
-            window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
-            mel_fmin=[0, 0, 0, 0, 0, 0, 0],
-            mel_fmax=[None, None, None, None, None, None, None],
-            pow=1.0,
-            mag_weight=0.0,
-        ).to(accelerator.device)
+        self.mel_loss = set_mel_loss(args.mel_loss_full).to(accelerator.device)
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
 
         # ✅ Switched both to CrossEntropyLoss for balanced classification
-        self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        # self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        self.moco_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.content_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Loss lambda parameters
@@ -77,8 +98,15 @@ class Wrapper:
             "adv/loss_g": 1.0,
             "vq/commitment_loss": 0.25,
             "vq/codebook_loss": 1.0,
-            "pred/timbre_loss": 1.0,
+
             "pred/content_loss": 10.0,
+
+            # TODO: Remove timbre any guidance
+            "pred/moco_loss": 1.0,
+            # "pred/timbre_loss": 1.0,
+            # "pred/brightness_loss": 2.0,
+            # "pred/modulation_loss": 1.0,
+            # "pred/fx_tail_loss": 1.0,
         }
 
         self.val_data = val_data
@@ -136,7 +164,6 @@ def main(args, accelerator):
 
     device = accelerator.device
     util.seed(args.seed)
-    print(f"Using device: {device}")
 
     # Checkpoint direction
     os.makedirs(args.ckpt_path, exist_ok=True)
@@ -178,6 +205,8 @@ def main(args, accelerator):
     )
     wrapper = Wrapper(args, accelerator, val_data)
 
+    # Print model parameter information
+    print_model_info(wrapper)
 
     # Load checkpoint if exists
     if args.resume:
@@ -194,7 +223,6 @@ def main(args, accelerator):
         num_workers=args.num_workers,
         batch_size=args.batch_size,
         collate_fn=train_data.collate,
-        # shuffle=True,  # <---- add this
     )
     train_loader = get_infinite_loader(train_loader)
     val_loader = accelerator.prepare_dataloader(
@@ -270,13 +298,15 @@ def validate_step(args, accelerator, batch, wrapper):
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
     # Timbre prediction loss and accuracy
-    output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
+    # output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
     output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
-    output["pred/timbre_acc"] = wrapper.timbre_acc(out["pred_timbre_id"], batch['timbre_id'])
-    # output["pred/content_acc"] = wrapper.content_acc(out["pred_pitch"], batch['pitch'])
 
+    # output["pred/brightness_loss"] = wrapper.l1_loss(out["pred_brightness"], batch['timbre_brightness'])
+    # output["pred/modulation_loss"] = wrapper.l1_loss(out["pred_modulation"], batch['timbre_modulation'])
+    # output["pred/fx_tail_loss"] = wrapper.l1_loss(out["pred_fx_tail"], batch['timbre_fx_tail'])
 
     return {k: v for k, v in sorted(output.items())}
+
 
 # @timer
 def train_step(args, accelerator, batch, wrapper):
@@ -291,10 +321,11 @@ def train_step(args, accelerator, batch, wrapper):
 
     # DAC Model
     with accelerator.autocast():
-        out = wrapper.generator(
+        out = wrapper.generator.forward_contrastive(
             audio_data=target_audio.audio_data,
             content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_converted'].audio_data,
+            timbre_match_1=batch['timbre_converted'].audio_data,
+            timbre_match_2=batch['timbre_pair'].audio_data,
         )
         output = {}
         recons = AudioSignal(out["audio"], args.sample_rate)
@@ -320,8 +351,16 @@ def train_step(args, accelerator, batch, wrapper):
         output["vq/codebook_loss"] = out["vq/codebook_loss"]
 
         # Added predictor losses
-        output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
+        # 1. Content predictor
         output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
+
+
+        # 2. Timbre predictor
+        output["pred/moco_loss"] = wrapper.moco_loss(out["moco_output"], out["moco_target"])
+        # output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
+        # output["pred/brightness_loss"] = wrapper.l1_loss(out["pred_brightness"], batch['timbre_brightness'])
+        # output["pred/modulation_loss"] = wrapper.l1_loss(out["pred_modulation"], batch['timbre_modulation'])
+        # output["pred/fx_tail_loss"] = wrapper.l1_loss(out["pred_fx_tail"], batch['timbre_fx_tail'])
 
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])

@@ -84,14 +84,35 @@ def load_checkpoint(args, device, iter, wrapper):
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     # Load generator
-    wrapper.generator.load_state_dict(checkpoint['generator_state_dict'])
-    wrapper.optimizer_g.load_state_dict(checkpoint['optimizer_g_state_dict'])
-    wrapper.scheduler_g.load_state_dict(checkpoint['scheduler_g_state_dict'])
+    wrapper.generator.load_state_dict(checkpoint['generator_state_dict'], strict=False)
+
+    # Try to load optimizer states using safe loading
+    if safe_load_optimizer_state(wrapper.optimizer_g, checkpoint['optimizer_g_state_dict']):
+        print("Successfully loaded generator optimizer state")
+    else:
+        print("Continuing with fresh generator optimizer state...")
+
+    try:
+        wrapper.scheduler_g.load_state_dict(checkpoint['scheduler_g_state_dict'])
+        print("Successfully loaded generator scheduler state")
+    except (ValueError, KeyError) as e:
+        print(f"Warning: Could not load generator scheduler state: {e}")
+        print("Continuing with fresh scheduler state...")
 
     # Load discriminator
-    wrapper.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
-    wrapper.optimizer_d.load_state_dict(checkpoint['optimizer_d_state_dict'])
-    wrapper.scheduler_d.load_state_dict(checkpoint['scheduler_d_state_dict'])
+    wrapper.discriminator.load_state_dict(checkpoint['discriminator_state_dict'], strict=False)
+
+    if safe_load_optimizer_state(wrapper.optimizer_d, checkpoint['optimizer_d_state_dict']):
+        print("Successfully loaded discriminator optimizer state")
+    else:
+        print("Continuing with fresh discriminator optimizer state...")
+
+    try:
+        wrapper.scheduler_d.load_state_dict(checkpoint['scheduler_d_state_dict'])
+        print("Successfully loaded discriminator scheduler state")
+    except (ValueError, KeyError) as e:
+        print(f"Warning: Could not load discriminator scheduler state: {e}")
+        print("Continuing with fresh scheduler state...")
 
     print(f"Loaded checkpoint from {checkpoint_path}")
     return checkpoint['iter']
@@ -230,6 +251,77 @@ def process_beatport_file(file_info):
         print(f"Error processing {file_name}: {e}")
         return (file_name, [])
 
+
+def safe_load_optimizer_state(optimizer, state_dict):
+    """
+    Safely load optimizer state dict by matching parameters by name
+    rather than by parameter group structure.
+    """
+    try:
+        # First try the standard loading method
+        optimizer.load_state_dict(state_dict)
+        return True
+    except (ValueError, KeyError) as e:
+        print(f"Standard optimizer loading failed: {e}")
+        print("Attempting parameter-wise loading...")
+
+        # Get current parameter names
+        current_param_names = []
+        current_params = []
+        for group in optimizer.param_groups:
+            for param in group['params']:
+                current_params.append(param)
+
+        # Create mapping from parameter id to parameter
+        if 'state' in state_dict:
+            saved_state = state_dict['state']
+            current_state = optimizer.state
+
+            # Try to match saved states to current parameters
+            # This is a simplified approach - in practice you might want more sophisticated matching
+            print("Attempting to restore optimizer state for matching parameters...")
+            matched_params = 0
+
+            for param_id, param_state in saved_state.items():
+                if param_id < len(current_params):
+                    current_state[current_params[param_id]] = param_state
+                    matched_params += 1
+
+            print(f"Restored state for {matched_params} parameters")
+
+        return False
+
+
+def count_parameters(model):
+    """Count the number of trainable parameters in a model."""
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def format_parameter_count(num_params):
+    """Format parameter count in readable format (e.g., 6M, 300M, 4B)."""
+    if num_params >= 1_000_000_000:
+        return f"{num_params / 1_000_000_000:.1f}B"
+    elif num_params >= 1_000_000:
+        return f"{num_params / 1_000_000:.1f}M"
+    elif num_params >= 1_000:
+        return f"{num_params / 1_000:.1f}K"
+    else:
+        return str(num_params)
+
+
+def print_model_info(wrapper):
+    """Print information about model parameters."""
+    gen_params = count_parameters(wrapper.generator)
+    disc_params = count_parameters(wrapper.discriminator)
+    total_params = gen_params + disc_params
+
+    print(f"\n{'='*50}")
+    print(f"MODEL PARAMETER COUNT")
+    print(f"{'='*50}")
+    print(f"Generator parameters: {format_parameter_count(gen_params)} ({gen_params:,})")
+    print(f"Discriminator parameters: {format_parameter_count(disc_params)} ({disc_params:,})")
+    print(f"Total parameters: {format_parameter_count(total_params)} ({total_params:,})")
+    print(f"{'='*50}\n")
 
 
 if __name__ == "__main__":

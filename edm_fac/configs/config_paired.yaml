@@ -1,8 +1,6 @@
 # path: /mnt/gestalt/home/buffett # NTU
 path: /home/buffett/dataset # Sinica
-postfix: "0609"
-wandb_project: edm-fac
-wandb_name: train only lead + predictors + timbre
+postfix: "0610"
 
 wandb_dir: ${path}/EDM_FAC_LOG/${postfix}
 save_path: ${path}/EDM_FAC_LOG/${postfix}
