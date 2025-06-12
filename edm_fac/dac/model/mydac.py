@@ -334,7 +334,7 @@ class MyDAC(BaseModel, CodecMixin):
         self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
 
         # 2. Timbre predictor
-        # self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
+        self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
         # self.brightness_predictor = CNNLSTM(latent_dim, 1, head=1, global_pred=False)
         # self.modulation_predictor = CNNLSTM(latent_dim, 1, head=1, global_pred=False)
         # self.fx_tail_predictor = AttentionPooling(latent_dim) # This on pooled latent

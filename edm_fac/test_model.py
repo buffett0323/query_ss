@@ -52,26 +52,26 @@ def main(args):
         timbre_classes=args.timbre_classes,
         pitch_nums=args.max_note - args.min_note + 1, # 88
     ).to(device)
-    
-    
+
+
     # Test DAC
     audio_data = torch.randn(2, 1, 44100).to(device)
     content_match = torch.randn(2, 1, 44100).to(device)
     timbre_match_1 = torch.randn(2, 1, 44100).to(device)
     timbre_match_2 = torch.randn(2, 1, 44100).to(device)
-    
+
     output = generator.forward_contrastive(
         audio_data=audio_data,
         content_match=content_match,
         timbre_match_1=timbre_match_1,
         timbre_match_2=timbre_match_2,
     )
-    
+
     print(output)
 
-    
 
-   
+
+
 
 
 if __name__ == "__main__":

@@ -227,8 +227,8 @@ class TransformerEncoder(nn.Module):
         else:
             self.last_ln = nn.LayerNorm(self.encoder_hidden)
 
-        # Attention pooling
-        self.timbre_pooling = AttentionPooling(input_dim=self.encoder_hidden)
+        # # Attention pooling
+        # self.timbre_pooling = AttentionPooling(input_dim=self.encoder_hidden)
 
 
     def forward(self, x, key_padding_mask, condition=None):
@@ -246,9 +246,9 @@ class TransformerEncoder(nn.Module):
         else:
             x = self.last_ln(x)
 
-        # Attention pooling
-        x = x.transpose(1, 2)
-        x = self.timbre_pooling(x) # (B, 256)
+        # # Attention pooling
+        # x = x.transpose(1, 2)
+        # x = self.timbre_pooling(x) # (B, 256)
         return x
 
 

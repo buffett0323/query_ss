@@ -1,15 +1,23 @@
+# python inference_conversion.py \
+#     --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0608/ckpt/checkpoint_latest.pt \
+#     --config configs/config.yaml \
+#     --device cuda:3 \
+#     --input_dir /home/buffett/dataset/EDM_FAC_DATA/evaluation/ \
+#     --output_dir sample_audio/ \
+#     --midi_dir /home/buffett/dataset/EDM_FAC_DATA/single_note_midi/evaluation/midi/ \
+#     --midi_list_path info/midi_names_mixed_evaluation.txt \
+#     --timbre_list_path info/timbre_names_mixed.txt \
+#     --mode batch_convert \
+#     --amount 10 \
+
 python inference_conversion.py \
-    --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0602/ckpt/checkpoint_latest.pt \
+    --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0608/ckpt/checkpoint_latest.pt \
     --config configs/config.yaml \
-    --device cuda:2 \
+    --device cuda:3 \
     --input_dir /home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/ \
     --output_dir testing_audio/ \
     --midi_dir /home/buffett/dataset/EDM_FAC_DATA/single_note_midi/evaluation/midi/ \
+    --midi_list_path info/midi_names_lead_out.txt \
+    --timbre_list_path info/timbre_names_lead_out.txt \
     --mode batch_convert \
     --amount 10 \
-    # --target_audio /home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/Lead\ -\ Atmos\ Bell_194447.wav \
-    # --content_ref /home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/LD\ -\ Vintage\ Slideshow_194447.wav \
-    # --timbre_ref /home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead/Lead\ -\ Atmos\ Bell_74909.wav \
-    # --output sample_audio/Lead\ -\ Atmos\ Bell_194447.wav \
-
-# tensorboard --logdir=/home/buffett/dataset/EDM_FAC_LOG/0602/logs

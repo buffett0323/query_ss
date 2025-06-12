@@ -28,7 +28,7 @@ class MoCo(nn.Module):
     def __init__(
         self,
         base_encoder: nn.Module,
-        dim: int = 256, 
+        dim: int = 256,
         K: int = 512, # queue size
         m: float = 0.999,  # momentum for key encoder
         T: float = 0.2, # 0.07 for MoCo v1
@@ -106,4 +106,3 @@ class MoCo(nn.Module):
         # return loss (可選回傳 logits/labels 方便外部計算)
         # loss = F.cross_entropy(logits, labels)
         return logits, labels
-    

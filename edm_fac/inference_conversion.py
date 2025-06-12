@@ -234,9 +234,8 @@ class EDMFACInference:
 
         # Forward pass
         with torch.no_grad():
-            out = self.generator(
-                audio_data=target_audio.audio_data,
-                content_match=content_ref.audio_data,
+            out = self.generator.conversion(
+                audio_data=content_ref.audio_data,
                 timbre_match=timbre_ref.audio_data,
             )
 
@@ -314,7 +313,7 @@ class EDMFACInference:
 
 
     @torch.no_grad()
-    def batch_convert(self, input_dir, output_dir, midi_dir, amount=2):
+    def batch_convert(self, input_dir, output_dir, midi_dir, midi_list_path, timbre_list_path, amount=2):
         """
         Convert multiple audio files in batch
 
@@ -328,10 +327,10 @@ class EDMFACInference:
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Get validation data
-        with open("info/evaluation_midi_names_lead_out.txt", "r") as f:
+        with open(midi_list_path, "r") as f:
             validation_midi_names = f.read().splitlines()
 
-        with open("info/timbre_names_lead_out.txt", "r") as f:
+        with open(timbre_list_path, "r") as f:
             timbre_names = f.read().splitlines()
 
         # Get both combinations
@@ -400,6 +399,8 @@ def main():
     parser.add_argument("--output_dir", default="sample_audio/", help="Output directory")
     parser.add_argument("--input_dir", help="Input directory for batch mode")
     parser.add_argument("--midi_dir", default="/home/buffett/dataset/EDM_FAC_DATA/single_note_midi/evaluation/midi/", help="MIDI directory for batch mode")
+    parser.add_argument("--midi_list_path", default="info/midi_names_mixed_evaluation.txt", help="MIDI list path for batch mode")
+    parser.add_argument("--timbre_list_path", default="info/timbre_names_mixed.txt", help="Timbre list path for batch mode")
     parser.add_argument("--mode", default="single_convert", help="Mode to run")
     parser.add_argument("--amount", default=2, type=int, help="Amount of files to convert")
 
@@ -427,6 +428,8 @@ def main():
             args.input_dir,
             args.output_dir,
             args.midi_dir,
+            args.midi_list_path,
+            args.timbre_list_path,
             args.amount
         )
 
