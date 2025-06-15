@@ -1,7 +1,4 @@
-import tempfile
 import typing
-import zipfile
-from pathlib import Path
 
 import markdown2 as md
 import matplotlib.pyplot as plt

@@ -101,7 +101,7 @@ def inference(a):
     net_v.eval().dec.remove_weight_norm()
 
     # Synthesis for original audio
-    src_name = os.path.splitext(os.path.basename(a.src_path))[0]
+    os.path.splitext(os.path.basename(a.src_path))[0]
     audio = load_audio(a.src_path)[:64000].unsqueeze(0)#.to(device)
     mel_audio = mel_timbre(audio).to(device)
 
@@ -116,7 +116,7 @@ def inference(a):
     save_audio(y_hat, os.path.join(a.output_dir, f'{a.output_name}_orig_synth.wav'))
 
     # Synthesis for target audio
-    trg_name = os.path.splitext(os.path.basename(a.trg_path))[0]
+    os.path.splitext(os.path.basename(a.trg_path))[0]
     trg_audio = load_audio(a.trg_path)[:64000].unsqueeze(0)#.to(device)
     mel_trg_audio = mel_timbre(trg_audio).to(device)
 

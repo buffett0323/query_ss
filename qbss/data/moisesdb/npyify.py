@@ -707,7 +707,7 @@ def get_query_one(inout):
 
     max_onset_samples = librosa.frames_to_samples(max_onset_frame)
 
-    track_id = os.path.basename(inout.audio_path).split(".")[0]
+    os.path.basename(inout.audio_path).split(".")[0]
 
     segment = audio[:, max_onset_samples : max_onset_samples + chunk_size_samples]
 
@@ -794,8 +794,8 @@ def make_test_indices(
     test_split=5,
 ):
 
-    coarse_stems = set(taxonomy.keys())
-    fine_stems = set(chain(*taxonomy.values()))
+    set(taxonomy.keys())
+    set(chain(*taxonomy.values()))
 
     metadata = pd.read_csv(metadata_path)
     splits = pd.read_csv(splits_path)

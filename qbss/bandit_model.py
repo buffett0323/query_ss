@@ -1,8 +1,6 @@
-import math
 import librosa
 import numpy as np
-from collections import OrderedDict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import torch
 import torchaudio
@@ -463,7 +461,7 @@ class BandSplitMamba(BaseEndToEndModule):
     ):
         self.emb_ks = emb_ks
         self.emb_hs = emb_hs
-        in_channels = emb_dim * emb_ks
+        emb_dim * emb_ks
 
         self.intra_norm = LayerNormalization4D(emb_dim, eps=eps)
         self.intra_mamba = MambaBlock(in_channels=emb_dim, n_layer=n_layer, bidirectional=bidirectional)

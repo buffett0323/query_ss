@@ -1,5 +1,4 @@
 import logging
-import pdb
 import math
 import os
 import sys
@@ -19,7 +18,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from absl import flags, app
-from typing import Union, Optional
+from typing import Optional
 
 try:
     import rave
@@ -151,7 +150,7 @@ class ScriptedRAVE(nn_tilde.Module):
             # scripting fails if cached conv is not initialized
             self.pqmf(torch.zeros(1, 1, x_len))
 
-        encode_shape = (pretrained.n_channels, 2**14)
+        (pretrained.n_channels, 2**14)
 
         self.register_method(
             "encode",

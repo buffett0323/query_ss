@@ -8,7 +8,6 @@ import argparse
 import torch.multiprocessing as mp
 import torch
 import os
-import time
 import datetime
 import numpy as np
 import random

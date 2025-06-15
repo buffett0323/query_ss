@@ -403,7 +403,7 @@ def train_step(args, accelerator, paired_batch, unpaired_batch, wrapper):
 
 # @timer
 def train_step_paired(args, accelerator, batch, wrapper):
-    train_start_time = time.time()
+    time.time()
     wrapper.generator.train()
     wrapper.discriminator.train()
 
@@ -427,7 +427,7 @@ def train_step_paired(args, accelerator, batch, wrapper):
     wrapper.optimizer_d.zero_grad()
     accelerator.backward(output["adv/disc_loss"])
     accelerator.scaler.unscale_(wrapper.optimizer_d)
-    grad_norm_d = torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
+    torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
     accelerator.step(wrapper.optimizer_d)
     wrapper.scheduler_d.step()
 
@@ -452,7 +452,7 @@ def train_step_paired(args, accelerator, batch, wrapper):
     wrapper.optimizer_g.zero_grad()
     accelerator.backward(output["loss_gen_all"])
     accelerator.scaler.unscale_(wrapper.optimizer_g)
-    grad_norm_g = torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
+    torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
     accelerator.step(wrapper.optimizer_g)
     wrapper.scheduler_g.step()
     accelerator.update()
@@ -469,7 +469,7 @@ def train_step_paired(args, accelerator, batch, wrapper):
 # @timer
 def train_step_unpaired(args, accelerator, batch, wrapper):
 
-    train_start_time = time.time()
+    time.time()
     wrapper.generator.train()
     wrapper.discriminator.train()
 
@@ -493,7 +493,7 @@ def train_step_unpaired(args, accelerator, batch, wrapper):
     wrapper.optimizer_d.zero_grad()
     accelerator.backward(output["adv/disc_loss"])
     accelerator.scaler.unscale_(wrapper.optimizer_d)
-    grad_norm_d = torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
+    torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
     accelerator.step(wrapper.optimizer_d)
     wrapper.scheduler_d.step()
 
@@ -519,7 +519,7 @@ def train_step_unpaired(args, accelerator, batch, wrapper):
     wrapper.optimizer_g.zero_grad()
     accelerator.backward(output["loss_gen_all"])
     accelerator.scaler.unscale_(wrapper.optimizer_g)
-    grad_norm_g = torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
+    torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
     accelerator.step(wrapper.optimizer_g)
     wrapper.scheduler_g.step()
     accelerator.update()

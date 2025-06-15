@@ -6,7 +6,6 @@ Adapted to the Audio Task.
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from email.mime import audio
 from typing import Tuple, Union, Callable, Optional
 
 import numpy as np
@@ -589,11 +588,11 @@ class CLAP(nn.Module):
                 nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
                 nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
         if self.text_branch_type == "bert" or self.text_branch_type == "roberta":
-            width = self.text_branch.embeddings.word_embeddings.weight.shape[-1]
+            self.text_branch.embeddings.word_embeddings.weight.shape[-1]
         elif self.text_branch_type == "bart":
-            width = self.text_branch.shared.weight.shape[-1]
+            self.text_branch.shared.weight.shape[-1]
         else:
-            width = self.text_branch.width
+            self.text_branch.width
         nn.init.constant_(self.logit_scale_a, np.log(1 / 0.07))
         nn.init.constant_(self.logit_scale_t, np.log(1 / 0.07))
 
@@ -873,10 +872,10 @@ def build_model_from_openai_state_dict(
     embed_dim = model_cfg["embed_dim"]
     audio_cfg = model_cfg["audio_cfg"]
     text_cfg = model_cfg["text_cfg"]
-    context_length = state_dict["positional_embedding"].shape[0]
-    vocab_size = state_dict["token_embedding.weight"].shape[0]
+    state_dict["positional_embedding"].shape[0]
+    state_dict["token_embedding.weight"].shape[0]
     transformer_width = state_dict["ln_final.weight"].shape[0]
-    transformer_heads = transformer_width // 64
+    transformer_width // 64
     transformer_layers = len(
         set(
             k.split(".")[2]

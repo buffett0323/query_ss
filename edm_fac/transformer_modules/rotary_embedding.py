@@ -1,4 +1,4 @@
-from math import pi, log
+from math import pi
 
 import torch
 from torch import nn, einsum

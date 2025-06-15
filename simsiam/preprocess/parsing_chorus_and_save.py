@@ -2,7 +2,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import json #orjson
-import shutil
 from tqdm import tqdm
 from utils import find_top_2_peak_segments, get_top_2_peak_infos
 from multiprocessing import Pool, cpu_count

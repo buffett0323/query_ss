@@ -38,9 +38,6 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         del self.norm  # remove the original norm
         self.mask_2d = mask_2d
         self.use_custom_patch = use_custom_patch
-        num_heads = 12
-        depth = 12
-        mlp_ratio = 4
 
     def forward_features(self, x):
         B = x.shape[0]

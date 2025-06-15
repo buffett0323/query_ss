@@ -1,5 +1,5 @@
 import copy
-from typing import List, Optional
+from typing import Optional
 
 import fvcore.nn.weight_init as weight_init
 import torch

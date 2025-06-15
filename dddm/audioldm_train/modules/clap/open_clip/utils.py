@@ -317,9 +317,6 @@ def load_json(name):
     return data
 
 
-from multiprocessing import Process, Manager
-from multiprocessing import Process, Value, Array
-from ctypes import c_wchar
 
 
 def load_class_label(path):

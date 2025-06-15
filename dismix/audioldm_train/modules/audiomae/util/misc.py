@@ -450,5 +450,4 @@ def merge_vmae_to_avmae(avmae_state_dict, vmae_ckpt):
             pass
         else:
             print(k)
-            pass
     print(k)

@@ -16,7 +16,7 @@ from dac.nn.quantize import ResidualVectorQuantize
 from .encodec import SConv1d, SConvTranspose1d, SLSTM
 from .transformer import TransformerEncoder, AttentionPooling
 from .moco import MoCo
-from alias_free_torch import *
+from alias_free_torch import Activation1d
 from einops.layers.torch import Rearrange
 
 def init_weights(m):

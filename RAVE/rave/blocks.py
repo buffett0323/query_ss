@@ -1,4 +1,3 @@
-from functools import partial
 from typing import Callable, Optional, Sequence, Union
 
 import cached_conv as cc

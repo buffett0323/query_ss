@@ -6,7 +6,6 @@ from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from torch.cuda.amp import autocast
 
-import typing as tp
 from model.base import BaseModule
 from model.diffusion import Diffusion
 from model.styleencoder import StyleEncoder
@@ -16,7 +15,7 @@ from model.utils import sequence_mask, fix_len_compatibility
 import utils
 import transformers
 import commons
-from modules_sf.modules import *
+from modules_sf.modules import WN
 from commons import init_weights, get_padding
 
 class Wav2vec2(torch.nn.Module):

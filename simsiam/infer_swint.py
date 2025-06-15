@@ -1,10 +1,6 @@
 import argparse
 import builtins
-import math
-import os
 import random
-import shutil
-import time
 import warnings
 import wandb
 
@@ -20,7 +16,6 @@ import torch.multiprocessing as mp
 import torch.utils.data
 import torchvision.models as models
 
-from collections import OrderedDict
 from tqdm import tqdm
 from model import SimSiam
 

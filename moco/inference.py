@@ -159,7 +159,7 @@ def main() -> None:
             x_i = pre_norm(x_i).unsqueeze(1)
 
             # Form a batch and post-normalize it.
-            bs = x_i.shape[0]
+            x_i.shape[0]
             paired_inputs = post_norm(x_i)
 
             # Forward pass
@@ -184,7 +184,7 @@ def main() -> None:
             x_i = pre_norm(x_i).unsqueeze(1)
 
             # Form a batch and post-normalize it.
-            bs = x_i.shape[0]
+            x_i.shape[0]
             paired_inputs = post_norm(x_i)
 
             # Forward pass
@@ -212,7 +212,7 @@ def main() -> None:
                 x_i = pre_norm(x_i).unsqueeze(1)
 
                 # Form a batch and post-normalize it.
-                bs = x_i.shape[0]
+                x_i.shape[0]
                 paired_inputs = post_norm(x_i)
 
                 # Forward pass

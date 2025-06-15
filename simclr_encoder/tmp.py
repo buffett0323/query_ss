@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchlibrosa.stft import Spectrogram, LogmelFilterBank
 from torchlibrosa.augmentation import SpecAugmentation
-from utils import *
+from utils import yaml_config_hook
 from torch_models import ConvBlock
 import argparse
 import torchlibrosa as tl

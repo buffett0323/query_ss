@@ -101,7 +101,7 @@ def load_model_checkpoint(args=None, device=None):
     shared_cfg, audio_cfg, model_cfg = update_config(args, shared_cfg, stage='test')
 
     if args.eval_drum_vocab != None:  # override eval_drum_vocab
-        eval_drum_vocab = drum_vocab_presets[args.eval_drum_vocab]
+        drum_vocab_presets[args.eval_drum_vocab]
 
     # Initialize task manager
     tm = TaskManager(task_name=args.task,

@@ -1,4 +1,4 @@
-from modules_sf.attentions import *
+from modules_sf.attentions import MultiHeadAttention
 from torch import nn
 import torch
 from torch.nn import functional as F

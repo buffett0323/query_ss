@@ -115,7 +115,7 @@ def interpolate_seeds(model, rave, args, seed):
         noise2 = torch.randn(1, rave_dims, z_length).to(device) * args.temperature
 
         rave_model_name = os.path.basename(args.rave_model).split(".")[0]
-        diffusion_model_name = os.path.basename(args.model_path)
+        os.path.basename(args.model_path)
 
         print(f"Generating {z_length} latent codes with Diffusion model:", os.path.basename(args.model_path))
         print("Decoding using RAVE Model:", os.path.basename(args.rave_model))

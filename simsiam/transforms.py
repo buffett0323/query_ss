@@ -1,12 +1,9 @@
 # Using original track, without .dbfss
-import os
 import random
 import math
 import torch
 import torchaudio
-import json
 import librosa
-import argparse
 import scipy.interpolate
 import scipy.stats
 import numpy as np
@@ -420,7 +417,7 @@ class S3TAugmentation(nn.Module):
         if random.random() < p:
             T_full = spectrogram.shape[1]
             W = random.randint(*W_range)
-            center = T_full // 2
+            T_full // 2
             shift = random.choice([-1, 1]) * W
             warped_spectrogram = torch.roll(spectrogram, shifts=shift, dims=1)
             return warped_spectrogram

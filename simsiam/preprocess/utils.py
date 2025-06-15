@@ -1,7 +1,5 @@
 import os
 import yaml
-import random
-import json
 import torch
 import torchaudio
 import librosa
@@ -10,7 +8,6 @@ import scipy.signal
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
-from collections import defaultdict
 from tqdm import tqdm
 
 

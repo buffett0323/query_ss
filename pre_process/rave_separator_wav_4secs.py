@@ -3,7 +3,6 @@ import random
 import json
 import soundfile as sf
 import numpy as np
-from shutil import copy2
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 

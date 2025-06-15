@@ -1633,12 +1633,6 @@ class LeeNet11(nn.Module):
 
         super(LeeNet11, self).__init__()
 
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
 
         self.conv_block1 = LeeNetConvBlock(1, 64, 3, 3)
         self.conv_block2 = LeeNetConvBlock(64, 64, 3, 1)
@@ -1733,12 +1727,6 @@ class LeeNet24(nn.Module):
 
         super(LeeNet24, self).__init__()
 
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
 
         self.conv_block1 = LeeNetConvBlock2(1, 64, 3, 3)
         self.conv_block2 = LeeNetConvBlock2(64, 96, 3, 1)
@@ -1872,12 +1860,6 @@ class DaiNet19(nn.Module):
 
         super(DaiNet19, self).__init__()
 
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
 
         self.conv0 = nn.Conv1d(in_channels=1, out_channels=64, kernel_size=80, stride=4, padding=0, bias=False)
         self.bn0 = nn.BatchNorm1d(64)
@@ -2082,12 +2064,6 @@ class Res1dNet31(nn.Module):
 
         super(Res1dNet31, self).__init__()
 
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
 
         self.conv0 = nn.Conv1d(in_channels=1, out_channels=64, kernel_size=11, stride=5, padding=5, bias=False)
         self.bn0 = nn.BatchNorm1d(64)
@@ -2137,12 +2113,6 @@ class Res1dNet51(nn.Module):
 
         super(Res1dNet51, self).__init__()
 
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
 
         self.conv0 = nn.Conv1d(in_channels=1, out_channels=64, kernel_size=11, stride=5, padding=5, bias=False)
         self.bn0 = nn.BatchNorm1d(64)
@@ -2229,12 +2199,6 @@ class Wavegram_Cnn14(nn.Module):
 
         super(Wavegram_Cnn14, self).__init__()
 
-        window = 'hann'
-        center = True
-        pad_mode = 'reflect'
-        ref = 1.0
-        amin = 1e-10
-        top_db = None
 
         self.pre_conv0 = nn.Conv1d(in_channels=1, out_channels=64, kernel_size=11, stride=5, padding=5, bias=False)
         self.pre_bn0 = nn.BatchNorm1d(64)

@@ -9,7 +9,6 @@ import scipy.signal
 import pretty_midi
 import json
 from multiprocessing import Pool
-from functools import partial
 
 SAMPLE_RATE = 44100
 FILTER_TIME = 4.0
@@ -266,7 +265,6 @@ def safe_load_optimizer_state(optimizer, state_dict):
         print("Attempting parameter-wise loading...")
 
         # Get current parameter names
-        current_param_names = []
         current_params = []
         for group in optimizer.param_groups:
             for param in group['params']:

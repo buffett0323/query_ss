@@ -2,7 +2,6 @@ import sys
 
 sys.path.append("src/clap")
 
-import os
 import torch
 import librosa
 from open_clip import create_model

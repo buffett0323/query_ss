@@ -1,18 +1,15 @@
 # Training Contrastive learning loss on timbre
 
-import sys
 import warnings
 import argparse
 import torch
 import os
-import time
 import torch
 import logging
 warnings.simplefilter('ignore')
 
 from modules.commons import *
 from losses import *
-from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
 
 from dac.nn.loss import MultiScaleSTFTLoss, MelSpectrogramLoss, GANLoss, L1Loss

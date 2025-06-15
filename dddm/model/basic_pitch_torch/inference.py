@@ -20,7 +20,7 @@ import enum
 import json
 import os
 import pathlib
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn

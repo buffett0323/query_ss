@@ -7,7 +7,7 @@ import torch
 import torchaudio
 import torchaudio.functional as audio_F
 import numpy as np
-from alias_free_torch import *
+from alias_free_torch import Activation1d
 from torch.nn.utils import weight_norm
 from torch import nn, sin, pow
 from einops.layers.torch import Rearrange
@@ -508,7 +508,7 @@ class FApredictors(nn.Module):
         prosody_latent = quantized[0]
         content_latent = quantized[1]
         timbre_latent = quantized[2]
-        residual_latent = quantized[3]
+        quantized[3]
         content_pred = self.phone_predictor(content_latent)[0]
 
         if self.norm_f0:

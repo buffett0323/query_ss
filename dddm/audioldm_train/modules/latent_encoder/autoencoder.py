@@ -1,10 +1,8 @@
-from email.policy import strict
 import torch
 import os
 
 import pytorch_lightning as pl
 import torch.nn.functional as F
-from contextlib import contextmanager
 import numpy as np
 from audioldm_train.modules.diffusionmodules.ema import *
 
@@ -432,7 +430,7 @@ class AutoencoderKL(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         inputs_dict = self.get_input(batch)
         inputs = inputs_dict[self.image_key]
-        waveform = inputs_dict["waveform"]
+        inputs_dict["waveform"]
         fnames = inputs_dict["fname"]
 
         reconstructions, posterior = self(inputs)
@@ -442,7 +440,6 @@ class AutoencoderKL(pl.LightningModule):
 
         if self.image_key == "stft":
             wav_prediction = self.decode_to_waveform(reconstructions)
-            wav_original = waveform
             self.save_wave(
                 wav_prediction, fnames, os.path.join(save_path, "stft_wav_prediction")
             )

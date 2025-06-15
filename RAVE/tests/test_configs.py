@@ -64,7 +64,7 @@ def test_config(config, sr, stereo):
     z, _ = model.encode(x, return_mb=True)
     z, _ = model.encoder.reparametrize(z)[:2]
     y = model.decode(z)
-    score = model.discriminator(y)
+    model.discriminator(y)
 
     assert x.shape == y.shape
 

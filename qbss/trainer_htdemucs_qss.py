@@ -12,7 +12,6 @@ from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
-from typing import Optional
 from query_ss.qbss.htdemucs_qss import Query_HTDemucs
 
 from query_ss.qbss.loss import L1SNR_Recons_Loss

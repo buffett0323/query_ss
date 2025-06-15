@@ -1,8 +1,6 @@
 # Using original track, without .dbfss
 import os
 import random
-import math
-import pickle
 import torch
 import torchaudio
 import json
@@ -13,8 +11,6 @@ import scipy.interpolate
 import scipy.stats
 import nnAudio.features
 import lmdb
-import pickle
-import multiprocessing
 
 import numpy as np
 import torch.nn as nn
@@ -26,7 +22,6 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from torchaudio.transforms import MelSpectrogram
 from pytorch_lightning import LightningDataModule
-from typing import Optional
 from tqdm import tqdm
 from scipy.stats import entropy
 

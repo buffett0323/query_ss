@@ -1,6 +1,6 @@
 import os
 from abc import abstractmethod
-from typing import Any, Callable
+from typing import Callable
 
 import numpy as np
 import torch

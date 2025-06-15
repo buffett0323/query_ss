@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.typing as npt
-from typing import Any, Dict, Iterable, Tuple, Union
+from typing import Any, Dict, Iterable, Tuple
 
 from model.basic_pitch.inference import Model
 from model.basic_pitch import ICASSP_2022_MODEL_PATH

@@ -49,7 +49,7 @@ def process_folders(folder_names, input_path, output_path, device_id):
                     keep_byproducts=True
                 )
 
-            except Exception as e:
+            except Exception:
                 error_message = f"Error in folder: {folder_name} on GPU {device_id}\n"
                 error_message += traceback.format_exc()  # Capture full error traceback
                 print(error_message)

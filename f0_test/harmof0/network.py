@@ -1,4 +1,3 @@
-from math import sin
 import torch
 from torch._C import has_openmp
 import torch.nn as nn

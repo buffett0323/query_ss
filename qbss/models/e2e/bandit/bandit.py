@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from models.e2e.bandit.bandsplit import BandSplitModule
 from models.e2e.bandit.maskestim import OverlappingMaskEstimationModule
 from models.e2e.bandit.tfmodel import SeqBandModellingModule

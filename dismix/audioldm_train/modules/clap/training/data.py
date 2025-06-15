@@ -30,7 +30,6 @@ from audioldm_train.modules.clap.open_clip.utils import (
     dataset_split,
 )
 from audioldm_train.modules.clap.open_clip.utils import load_p, load_class_label
-import tempfile
 import copy
 
 try:

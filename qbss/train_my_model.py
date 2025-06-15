@@ -5,7 +5,6 @@ import torch.optim as optim
 import numpy as np
 
 from tqdm import tqdm
-from typing import Optional
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from mir_eval.separation import bss_eval_sources

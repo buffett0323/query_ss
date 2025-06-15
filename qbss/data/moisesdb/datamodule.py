@@ -1,4 +1,3 @@
-import os.path
 from typing import Mapping, Optional
 
 import pytorch_lightning as pl

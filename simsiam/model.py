@@ -1,6 +1,3 @@
-import re
-import math
-import logging
 import argparse
 import torch
 import torch.nn as nn
@@ -10,9 +7,8 @@ import torchaudio.transforms as T
 import torchvision.transforms as transforms
 import nnAudio.features
 
-from pathlib import Path
 from swin_transformer import SwinTransformer
-from utils import *
+from utils import np, yaml_config_hook
 from audio_ntt import AudioNTT2020Task6X
 from torch_models import Cnn14_16k
 from conv_next import ConvNeXt

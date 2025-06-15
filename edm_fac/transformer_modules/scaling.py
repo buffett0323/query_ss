@@ -15,11 +15,9 @@
 # limitations under the License.
 
 
-import collections
 import logging
 import random
 import math
-from functools import reduce
 from itertools import repeat
 from typing import Optional, Tuple, Union
 
@@ -728,7 +726,6 @@ class ActivationBalancer(torch.nn.Module):
         prob = max(self.min_prob, 0.5 ** (1 + (count / 4000.0)))
 
         if random.random() < prob:
-            sign_gain_factor = 0.5
             if self.min_positive != 0.0 or self.max_positive != 1.0:
                 sign_factor = _compute_sign_factor(
                     x,
@@ -1058,7 +1055,6 @@ class MaxEig(torch.nn.Module):
             return _no_op(x)
 
         with torch.cuda.amp.autocast(enabled=False):
-            eps = 1.0e-20
             orig_x = x
             x = x.to(torch.float32)
             with torch.no_grad():
@@ -1093,7 +1089,7 @@ class MaxEig(torch.nn.Module):
                 # The constraint is active.  Note, we should quite rarely
                 # reach here, only near the beginning of training if we are
                 # starting to diverge, should this constraint be active.
-                cur_prob = self.cur_prob
+                self.cur_prob
                 self.cur_prob = (
                     1.0  # next time, do the update with probability 1.0.
                 )
@@ -1170,7 +1166,7 @@ class DoubleSwishFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x: Tensor) -> Tensor:
         requires_grad = x.requires_grad
-        x_dtype = x.dtype
+        x.dtype
         if x.dtype == torch.float16:
             x = x.to(torch.float32)
 
@@ -1272,7 +1268,6 @@ def _test_whiten():
 
         x.requires_grad = True
 
-        num_channels = 128
         m = Whiten(
             1, 5.0, prob=1.0, grad_scale=0.1  # num_groups  # whitening_limit,
         )  # grad_scale
@@ -1371,7 +1366,7 @@ def _test_double_swish_deriv():
     # for self-test.
     x = torch.randn(1000, 1000, dtype=torch.double) * 3.0
     x.requires_grad = True
-    y = m(x)
+    m(x)
 
 
 def _test_softmax():

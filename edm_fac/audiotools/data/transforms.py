@@ -268,7 +268,6 @@ class BaseTransform:
 class Identity(BaseTransform):
     """This transform just returns the original signal."""
 
-    pass
 
 
 class SpectralTransform(BaseTransform):

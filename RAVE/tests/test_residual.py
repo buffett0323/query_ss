@@ -5,7 +5,7 @@ import gin
 import pytest
 import torch
 
-from rave.blocks import *
+from rave.blocks import ResidualLayer, ResidualStack, UpsampleLayer
 
 gin.enter_interactive_mode()
 

@@ -1,7 +1,6 @@
 # monophonic pitch estimator using harmonic_net.
 
 # torch
-from random import shuffle
 import torch
 import torch.cuda
 import torch.nn.functional as F
@@ -10,7 +9,6 @@ from torch.utils.data import DataLoader
 
 # system
 from tqdm import tqdm
-from datetime import datetime
 import os
 from glob import glob
 

@@ -9,7 +9,6 @@ import numpy as np
 import torch.nn.functional as F
 
 from tqdm import tqdm
-from typing import Optional
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from mir_eval.separation import bss_eval_sources

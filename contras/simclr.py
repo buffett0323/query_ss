@@ -1,5 +1,4 @@
 import os
-import argparse
 import torch
 import torchvision
 import torch.nn as nn

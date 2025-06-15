@@ -1,7 +1,6 @@
 import argparse
 from .pitch_tracker import PitchTracker
 import torch
-import os
 
 # @ex.automain
 # def main(

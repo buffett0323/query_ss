@@ -1,6 +1,10 @@
 from absl import app, flags, logging
-import pdb
-import torch, torchaudio, argparse, os, tqdm, re, gin
+import torch
+import torchaudio
+import os
+import tqdm
+import re
+import gin
 import cached_conv as cc
 
 try:
@@ -38,13 +42,11 @@ def main(argv):
     paths = FLAGS.input
     # load model
     logging.info("building rave")
-    is_scripted = False
     if not os.path.exists(model_path):
         logging.error('path %s does not seem to exist.'%model_path)
         exit()
     if os.path.splitext(model_path)[1] == ".ts":
         model = torch.jit.load(model_path)
-        is_scripted = True
     else:
         config_path = rave.core.search_for_config(model_path)
         if config_path is None:

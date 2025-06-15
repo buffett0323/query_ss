@@ -4,7 +4,7 @@ import math
 import os
 import subprocess
 from random import random
-from typing import Dict, Iterable, Optional, Sequence, Union, Callable
+from typing import Iterable, Optional, Sequence, Union, Callable
 
 import gin
 import lmdb
@@ -19,8 +19,6 @@ from tqdm import tqdm
 from . import transforms
 from udls import AudioExample as AudioExampleWrapper
 from udls.generated import AudioExample
-from functools import partial
-from multiprocessing import Pool, cpu_count
 
 
 

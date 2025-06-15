@@ -55,7 +55,7 @@ class WaveformToLogSpecgram(nn.Module):
         super().__init__()
 
         e = freq_bins/bins_per_octave
-        fmax = fmin * (2 ** e)
+        fmin * (2 ** e)
 
         self.logspecgram_type = logspecgram_type
         self.n_fft = n_fft
@@ -85,7 +85,7 @@ class WaveformToLogSpecgram(nn.Module):
         self.waveform_to_specgram = torchaudio.transforms.Spectrogram(n_fft, hop_length=hop_length)#.to(device)
 
         assert(bins_per_octave % 12 == 0)
-        bins_per_semitone = bins_per_octave // 12
+        bins_per_octave // 12
 
         self.amplitude_to_db = torchaudio.transforms.AmplitudeToDB(top_db=80)
 

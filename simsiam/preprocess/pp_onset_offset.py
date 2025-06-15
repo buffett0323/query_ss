@@ -3,8 +3,6 @@ import torchaudio
 import os
 import numpy as np
 import soundfile as sf
-import subprocess
-from collections import Counter
 from yourmt3_utils import (
     load_model_checkpoint,
     transcribe_get_notes,

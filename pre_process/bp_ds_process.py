@@ -4,7 +4,6 @@ import librosa
 import torchaudio
 import numpy as np
 from tqdm import tqdm
-from multiprocessing import Pool, cpu_count
 
 # Init settings
 # path = "/home/buffett/NAS_NTU" #

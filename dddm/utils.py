@@ -1,7 +1,6 @@
 import os
 import glob
 import sys
-import argparse
 import logging
 import json
 import subprocess

@@ -162,7 +162,7 @@ def interpolate_pos_embed_audio(model, checkpoint_model, orig_size, new_size):
         pos_embed_checkpoint = checkpoint_model["pos_embed"]
         embedding_size = pos_embed_checkpoint.shape[-1]
         num_patches = model.patch_embed.num_patches
-        num_extra_tokens = model.pos_embed.shape[-2] - num_patches
+        model.pos_embed.shape[-2] - num_patches
         if orig_size != new_size:
             print(
                 "Position interpolate from %dx%d to %dx%d"

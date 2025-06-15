@@ -4,7 +4,7 @@ import numpy as np
 from torch.nn import functional as F
 
 from model.base import BaseModule
-from model.diffusion_module import *
+from model.diffusion_module import Block, Downsample, LinearAttention, Mish, Residual, ResnetBlock, Rezero, SinusoidalPosEmb, Upsample
 COND_ADD_DIM = 256 #2048 #256
 
 class GradLogPEstimator(BaseModule):

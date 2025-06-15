@@ -1,5 +1,4 @@
 import random
-from typing import Union
 import numpy as np
 from numpy.typing import NDArray
 from audiomentations.core.transforms_interface import BaseWaveformTransform

@@ -3,7 +3,6 @@ import json
 from tqdm import tqdm
 from audiotools.core import AudioSignal
 import multiprocessing as mp
-from functools import partial
 
 # chorus_path = "/mnt/gestalt/home/buffett/beatport_original/chorus" # 136800
 htdemucs_path = "/mnt/gestalt/home/buffett/beatport_original/htdemucs" # 74979

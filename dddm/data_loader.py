@@ -1,4 +1,3 @@
-import random
 import torch
 import os
 import librosa
@@ -14,8 +13,6 @@ from torchvision import transforms
 from torchaudio.transforms import MelSpectrogram
 from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning import LightningDataModule
-from typing import Optional
-from functools import partial
 from tqdm import tqdm
 
 import utils

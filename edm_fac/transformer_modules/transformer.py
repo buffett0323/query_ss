@@ -558,10 +558,9 @@ class TransformerEncoder(nn.Module):
         use_rope: bool = False,
     ):
         if past_kv is None:
-            past_length = 0
             past_kv = tuple([None] * self.num_layers)
         else:
-            past_length = past_kv[0][0].size(-2)
+            past_kv[0][0].size(-2)
         new_kv = () if use_cache else None
         output = src
         for mod, past_layer_kv in zip(self.layers, past_kv):

@@ -4,7 +4,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from munch import Munch
-import json
 
 class AttrDict(dict):
   def __init__(self, *args, **kwargs):
@@ -143,7 +142,7 @@ def generate_path(duration, mask):
   duration: [b, 1, t_x]
   mask: [b, 1, t_y, t_x]
   """
-  device = duration.device
+  duration.device
 
   b, _, t_y, t_x = mask.shape
   cum_duration = torch.cumsum(duration, -1)

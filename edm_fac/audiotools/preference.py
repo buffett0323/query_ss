@@ -4,11 +4,9 @@
 import copy
 import csv
 import random
-import sys
 import traceback
 from collections import defaultdict
 from pathlib import Path
-from typing import List
 
 import gradio as gr
 
