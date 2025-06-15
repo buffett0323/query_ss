@@ -8,7 +8,6 @@ This code is customized to enable:
 """
 
 import copy
-import random
 from functools import wraps
 
 import torch
@@ -119,7 +118,7 @@ class NetWrapper(nn.Module):
     def _register_hook(self):
         layer = self._find_layer()
         assert layer is not None, f'hidden layer ({self.layer}) not found'
-        handle = layer.register_forward_hook(self._hook)
+        layer.register_forward_hook(self._hook)
         self.hook_registered = True
 
     @singleton('projector')
@@ -192,7 +191,7 @@ class BYOL(nn.Module):
         with torch.no_grad():
             self.forward(torch.randn(2, channels, image_size[0], image_size[1]).to(device),
                          torch.randn(2, channels, image_size[0], image_size[1]).to(device))
-            
+
 
     @singleton('target_encoder')
     def _get_target_encoder(self):

@@ -8,21 +8,19 @@ import pytorch_lightning as pl
 import fire
 import logging
 import nnAudio.features
-from tqdm import tqdm
 import warnings
 import torch.multiprocessing as tmp
+import wandb
+from tqdm import tqdm
+from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.progress import TQDMProgressBar
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.strategies.ddp import DDPStrategy
 
 # Filter out NVML warning
 warnings.filterwarnings("ignore", message="Can't initialize NVML")
+torch.set_float32_matmul_precision('high')
 
-def process_batch(batch, to_spec, device):
-    wav1, wav2 = batch
-    wav1 = wav1.to(device)
-    wav2 = wav2.to(device)
-    lms1 = (to_spec(wav1) + torch.finfo().eps).log().unsqueeze(1)
-    lms2 = (to_spec(wav2) + torch.finfo().eps).log().unsqueeze(1)
-    lms_batch = torch.cat([lms1, lms2], dim=0)
-    return lms_batch.detach().cpu().numpy()
 
 class BYOLALearner(pl.LightningModule):
     """BYOL-A learner. Shows batch statistics for each epochs."""
@@ -122,13 +120,13 @@ def complete_cfg(cfg):
 
 def main(config_path='config_v2.yaml') -> None:
     cfg = load_yaml_config(config_path)
-    device = torch.device(f"cuda:{cfg.device}" if torch.cuda.is_available() else "cpu")
 
-    # Verify GPU availability
-    if 'cuda' in str(device):
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA device requested but not available")
-        logging.info(f"Using GPU: {torch.cuda.get_device_name(device)}")
+    # Set CUDA device
+    if torch.cuda.is_available():
+        torch.cuda.set_device(cfg.device_id[0])
+        logging.info(f"Using GPU: {torch.cuda.get_device_name(cfg.device_id[0])}")
+    else:
+        raise RuntimeError("CUDA device requested but not available")
 
     cfg.unit_samples = int(cfg.sample_rate * cfg.unit_sec)
     complete_cfg(cfg)
@@ -161,7 +159,7 @@ def main(config_path='config_v2.yaml') -> None:
     model = AudioNTT2022(
         n_mels=cfg.n_mels,
         d=cfg.feature_d
-    ).to(device)
+    )
     if cfg.resume is not None:
         load_pretrained_weights(model, cfg.resume)
 
@@ -173,25 +171,56 @@ def main(config_path='config_v2.yaml') -> None:
         projection_size=cfg.proj_size,
         projection_hidden_size=cfg.proj_dim,
         moving_average_decay=cfg.ema_decay,
-    ).to(device)
-    learner.calc_norm_stats(dl, device=device)
+    )
+    learner.calc_norm_stats(dl, n_stats=1000)
 
-    # # Trainer
-    # trainer = pl.Trainer(
-    #     gpus=cfg.gpus,
-    #     max_epochs=cfg.epochs,
-    #     weights_summary=None,
-    #     accelerator="ddp"
-    # )
-    # trainer.fit(learner, dl)
-    # if trainer.interrupted:
-    #     logging.info('Terminated.')
-    #     exit(0)
-    # # Saving trained weight.
-    # to_file = Path(cfg.checkpoint_folder)/(cfg.id+'.pth')
-    # to_file.parent.mkdir(exist_ok=True, parents=True)
-    # torch.save(model.state_dict(), to_file)
-    # logging.info(f'Saved weight as {to_file}')
+    # Initialize wandb
+    if cfg.log_wandb:
+        project = "byol-a-adsr-v2"
+        name = cfg.wandb_name
+        save_dir = cfg.save_dir
+        wandb_logger = WandbLogger(
+            project=project,
+            name=name,
+            save_dir=save_dir,
+            log_model=False,  # Avoid logging full model files to WandB
+        )
+    else:
+        wandb_logger = None
+
+    # Setup checkpoint callback
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=Path(cfg.checkpoint_folder),
+        filename=f'{cfg.id}-{{epoch:02d}}',
+        every_n_epochs=2,
+        save_top_k=-1,  # Save all checkpoints
+        save_last=True
+    )
+
+    # Trainer
+    cb = [TQDMProgressBar(refresh_rate=10)]
+    cb.append(checkpoint_callback)
+    trainer = pl.Trainer(
+        devices=[cfg.device_id[0]],  # Use only GPU 1
+        max_epochs=cfg.epochs,
+        accelerator="gpu",
+        strategy="auto",  # Use auto strategy for single GPU
+        logger=wandb_logger,
+        callbacks=cb
+    )
+    trainer.fit(learner, dl)
+    if trainer.interrupted:
+        logging.info('Terminated.')
+        exit(0)
+
+    # Saving final weight.
+    to_file = Path(cfg.checkpoint_folder)/(cfg.id+'.pth')
+    to_file.parent.mkdir(exist_ok=True, parents=True)
+    torch.save(model.state_dict(), to_file)
+    logging.info(f'Saved weight as {to_file}')
+
+    if wandb_logger is not None:
+        wandb_logger.finalize("success")
 
 
 if __name__ == '__main__':

@@ -1,8 +1,13 @@
 # Unit duration in seconds for one audio segment.
 data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset
-unit_sec: 2.97
-bs: 16 # 256
-device: 1
+checkpoint_folder: /mnt/gestalt/home/buffett/adsr_ckpt
+save_dir: /mnt/gestalt/home/buffett/adsr_training_configs
+bs: 256 # 256
+
+# Wandb parameters.
+log_wandb: False #True
+wandb_name: byol-a_jun_15
+device_id: [1]
 
 # FFT parameters.
 sample_rate: 44100
@@ -23,12 +28,12 @@ seed: 42
 num_workers: 24
 prefetch_factor: 8
 
+unit_sec: 2.97
 lr: 0.0001
 epochs: 2 # 100
-gpus: 1
+
 # Weight pathname for resuming training.
 resume:
+
 # Shape of log-mel spectrogram [F, T].
 shape: [128, 256] #[64, 96]
-# Folder to store trained weight files.
-checkpoint_folder: checkpoints
