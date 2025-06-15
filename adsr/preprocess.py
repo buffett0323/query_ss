@@ -20,7 +20,7 @@ def process_single_file(path, folder):
         f_max=SAMPLE_RATE/2,
         window_fn=torch.hann_window
     )
-    
+
     try:
         # Load audio with faster backend
         audio, _ = torchaudio.load(
@@ -29,22 +29,22 @@ def process_single_file(path, folder):
             channels_first=True
         )
         audio = audio.mean(dim=0)  # Convert to mono if stereo
-        
+
         # Pad or truncate
         if audio.shape[0] > MAX_AUDIO_LENGTH:
             audio = audio[:MAX_AUDIO_LENGTH]
         else:
             audio = torch.nn.functional.pad(audio, (0, MAX_AUDIO_LENGTH - audio.shape[0]))
-        
+
         # Convert to mel spectrogram
         mel_spec = transform(audio)
-        
+
         # Normalize
         mel_spec = (mel_spec - mel_spec.mean()) / (mel_spec.std() + 1e-8)
-        
+
         # Get environment ID
         env_id = int(path.split("_")[1])
-        
+
         return {
             'mel_spec': mel_spec.numpy(),
             'env_id': env_id,
@@ -66,23 +66,23 @@ def process_chunk(chunk_paths, folder):
 def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
     if num_workers is None:
         num_workers = mp.cpu_count()
-    
+
     print(f"Using {num_workers} workers for preprocessing")
-    
+
     # Load metadata
     with open(os.path.join(folder, "metadata.json"), "r") as f:
         metadata = json.load(f)
-    
+
     # Get all file paths
     paths = [chunk["file"] for chunk in metadata] #[:1800]
-    
+
     # Split paths into chunks
     chunks = [paths[i:i + chunk_size] for i in range(0, len(paths), chunk_size)]
     print(f"Split {len(paths)} files into {len(chunks)} chunks")
-    
+
     # Create process pool
     pool = mp.Pool(num_workers)
-    
+
     # Process chunks in parallel
     all_results = []
     for chunk_results in tqdm(
@@ -91,18 +91,18 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
         desc="Processing chunks"
     ):
         all_results.extend(chunk_results)
-    
+
     pool.close()
     pool.join()
-    
+
     # Sort results by path to maintain consistent order
     all_results.sort(key=lambda x: x['path'])
     print(f"Total processed files: {len(all_results)}")
-    
+
     # Calculate appropriate chunk sizes
     mel_chunk_size = min(50, len(all_results))  # Smaller chunks for mel spectrograms
     data_chunk_size = min(100, len(all_results))  # Larger chunks for other data
-    
+
     # Create h5 file with chunked storage
     with h5py.File(output_path, 'w') as f:
         # Create datasets with chunked storage and compression
@@ -115,7 +115,7 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
             chunks=(mel_chunk_size, 1, N_MELS, 256),  # Adjusted chunk size
             shuffle=True  # Enable shuffle filter for better compression
         )
-        
+
         env_ids = f.create_dataset(
             'env_ids',
             shape=(len(all_results),),
@@ -125,7 +125,7 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
             chunks=(data_chunk_size,),  # Adjusted chunk size
             shuffle=True
         )
-        
+
         file_paths = f.create_dataset(
             'file_paths',
             shape=(len(all_results),),
@@ -135,7 +135,7 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
             chunks=(data_chunk_size,),  # Adjusted chunk size
             shuffle=True
         )
-        
+
         # Store results in chunks
         write_chunk_size = min(50, len(all_results))  # Smaller chunks for writing
         for i in range(0, len(all_results), write_chunk_size):
@@ -145,7 +145,7 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
                 mel_specs[idx] = result['mel_spec']
                 env_ids[idx] = result['env_id']
                 file_paths[idx] = result['path']
-    
+
     print(f"Successfully processed {len(all_results)} files")
     print(f"Failed to process {len(paths) - len(all_results)} files")
 
@@ -161,15 +161,13 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_size', type=int, default=1000,
                        help='number of files to process in each chunk')
     args = parser.parse_args()
-    
+
     # Set multiprocessing start method
     mp.set_start_method('spawn', force=True)
-    
+
     preprocess_and_save(
         args.input_folder,
         args.output_path,
         args.num_workers,
         args.chunk_size
-    ) 
-    
-    
+    )

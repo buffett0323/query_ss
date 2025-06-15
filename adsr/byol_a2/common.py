@@ -1,12 +1,9 @@
 """BYOL for Audio: Common definitions and utilities."""
 
 import os
-import sys
-import shutil
 import random
 import numpy as np
 import pandas as pd
-import re
 import logging
 import yaml
 import datetime
@@ -16,7 +13,7 @@ from easydict import EasyDict
 try:
     import pickle5 as pickle
 except:
-    import pickle
+    pass
 
 import torch
 from torch import nn
@@ -28,7 +25,7 @@ import torchaudio.transforms as AT
 import pytorch_lightning as pl
 
 
-torchaudio.set_audio_backend("sox_io")
+# Removed deprecated torchaudio.set_audio_backend() call since it's now a no-op with dispatcher enabled
 
 
 def seed_everything(seed=42):

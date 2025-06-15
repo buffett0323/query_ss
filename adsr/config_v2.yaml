@@ -1,6 +1,9 @@
 # Unit duration in seconds for one audio segment.
+data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset
 unit_sec: 2.97
 bs: 16 # 256
+device: 1
+
 # FFT parameters.
 sample_rate: 44100
 n_fft: 2048
@@ -17,14 +20,15 @@ proj_dim: 4096
 ema_decay: 0.99
 # Training parameters.
 seed: 42
+num_workers: 24
+prefetch_factor: 8
 
 lr: 0.0001
-epochs: 100
+epochs: 2 # 100
 gpus: 1
-num_workers: 8
 # Weight pathname for resuming training.
-resume: 
+resume:
 # Shape of log-mel spectrogram [F, T].
-shape: [128, 256]
+shape: [128, 256] #[64, 96]
 # Folder to store trained weight files.
 checkpoint_folder: checkpoints

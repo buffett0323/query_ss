@@ -1,7 +1,5 @@
-import os
 import argparse
 
-from pathlib import Path
 import torch
 import torchaudio
 import torch.nn as nn
@@ -9,7 +7,7 @@ from torch.utils.data import DataLoader, Dataset
 from byol_pytorch import BYOL
 import pytorch_lightning as pl
 from util import N_MELS, BATCH_SIZE, NUM_WORKERS, NUM_GPUS, EPOCHS, LR
-from dataset import ADSRDataset
+from byol_a2.dataset import ADSRDataset, ADSR_h5_Dataset
 
 
 
@@ -30,7 +28,7 @@ class AudioBYOL(nn.Module):
 
     def forward(self, x):
         return self.learner(x)
-    
+
 
 # PyTorch Lightning module
 class SelfSupervisedLearner(pl.LightningModule):

@@ -1,3 +1,12 @@
+"""BYOL for Audio
+
+Kudos to Phil Wang, this implementation is based on https://github.com/lucidrains/byol-pytorch/
+
+This code is customized to enable:
+- Decoupling augmentations.
+- Feeding two augmented input batches independently.
+"""
+
 import copy
 import random
 from functools import wraps
@@ -5,9 +14,9 @@ from functools import wraps
 import torch
 from torch import nn
 import torch.nn.functional as F
-import torch.distributed as dist
 
-from torchvision import transforms as T
+import numpy as np
+
 
 # helper functions
 
@@ -38,28 +47,12 @@ def set_requires_grad(model, val):
     for p in model.parameters():
         p.requires_grad = val
 
-def MaybeSyncBatchnorm(is_distributed = None):
-    is_distributed = default(is_distributed, dist.is_initialized() and dist.get_world_size() > 1)
-    return nn.SyncBatchNorm if is_distributed else nn.BatchNorm1d
-
 # loss fn
 
 def loss_fn(x, y):
     x = F.normalize(x, dim=-1, p=2)
     y = F.normalize(y, dim=-1, p=2)
     return 2 - 2 * (x * y).sum(dim=-1)
-
-# augmentation utils
-
-class RandomApply(nn.Module):
-    def __init__(self, fn, p):
-        super().__init__()
-        self.fn = fn
-        self.p = p
-    def forward(self, x):
-        if random.random() > self.p:
-            return x
-        return self.fn(x)
 
 # exponential moving average
 
@@ -80,32 +73,25 @@ def update_moving_average(ema_updater, ma_model, current_model):
 
 # MLP class for projector and predictor
 
-def MLP(dim, projection_size, hidden_size=4096, sync_batchnorm=None):
-    return nn.Sequential(
-        nn.Linear(dim, hidden_size),
-        MaybeSyncBatchnorm(sync_batchnorm)(hidden_size),
-        nn.ReLU(inplace=True),
-        nn.Linear(hidden_size, projection_size)
-    )
+class MLP(nn.Module):
+    def __init__(self, dim, projection_size, hidden_size = 4096):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, hidden_size),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_size, projection_size)
+        )
 
-def SimSiamMLP(dim, projection_size, hidden_size=4096, sync_batchnorm=None):
-    return nn.Sequential(
-        nn.Linear(dim, hidden_size, bias=False),
-        MaybeSyncBatchnorm(sync_batchnorm)(hidden_size),
-        nn.ReLU(inplace=True),
-        nn.Linear(hidden_size, hidden_size, bias=False),
-        MaybeSyncBatchnorm(sync_batchnorm)(hidden_size),
-        nn.ReLU(inplace=True),
-        nn.Linear(hidden_size, projection_size, bias=False),
-        MaybeSyncBatchnorm(sync_batchnorm)(projection_size, affine=False)
-    )
+    def forward(self, x):
+        return self.net(x)
 
 # a wrapper class for the base neural network
 # will manage the interception of the hidden layer output
 # and pipe it into the projecter and predictor nets
 
 class NetWrapper(nn.Module):
-    def __init__(self, net, projection_size, projection_hidden_size, layer = -2, use_simsiam_mlp = False, sync_batchnorm = None):
+    def __init__(self, net, projection_size, projection_hidden_size, layer = -2):
         super().__init__()
         self.net = net
         self.layer = layer
@@ -113,9 +99,6 @@ class NetWrapper(nn.Module):
         self.projector = None
         self.projection_size = projection_size
         self.projection_hidden_size = projection_hidden_size
-
-        self.use_simsiam_mlp = use_simsiam_mlp
-        self.sync_batchnorm = sync_batchnorm
 
         self.hidden = {}
         self.hook_registered = False
@@ -142,8 +125,7 @@ class NetWrapper(nn.Module):
     @singleton('projector')
     def _get_projector(self, hidden):
         _, dim = hidden.shape
-        create_mlp_fn = MLP if not self.use_simsiam_mlp else SimSiamMLP
-        projector = create_mlp_fn(dim, self.projection_size, self.projection_hidden_size, sync_batchnorm = self.sync_batchnorm)
+        projector = MLP(dim, self.projection_size, self.projection_hidden_size)
         return projector.to(hidden)
 
     def get_representation(self, x):
@@ -171,55 +153,30 @@ class NetWrapper(nn.Module):
         projection = projector(representation)
         return projection, representation
 
-# main class
+
+
 
 class BYOL(nn.Module):
+    """BYOL training module that is:
+    - Decoupled augmentations.
+    - Accepts two augmented inputs independently.
+    """
+
     def __init__(
         self,
         net,
         image_size,
-        hidden_layer = -2,
-        projection_size = 256,
-        projection_hidden_size = 4096,
-        augment_fn = None,
-        augment_fn2 = None,
-        moving_average_decay = 0.99,
-        use_momentum = True,
-        sync_batchnorm = None
+        hidden_layer=-1,
+        projection_size=256,
+        projection_hidden_size=4096,
+        moving_average_decay=0.99,
+        use_momentum=True,
+        channels=1,
     ):
         super().__init__()
         self.net = net
 
-        # default SimCLR augmentation
-
-        DEFAULT_AUG = torch.nn.Sequential(
-            RandomApply(
-                T.ColorJitter(0.8, 0.8, 0.8, 0.2),
-                p = 0.3
-            ),
-            T.RandomGrayscale(p=0.2),
-            T.RandomHorizontalFlip(),
-            RandomApply(
-                T.GaussianBlur((3, 3), (1.0, 2.0)),
-                p = 0.2
-            ),
-            T.RandomResizedCrop((image_size, image_size)),
-            T.Normalize(
-                mean=torch.tensor([0.485, 0.456, 0.406]),
-                std=torch.tensor([0.229, 0.224, 0.225])),
-        )
-
-        self.augment1 = default(augment_fn, DEFAULT_AUG)
-        self.augment2 = default(augment_fn2, self.augment1)
-
-        self.online_encoder = NetWrapper(
-            net,
-            projection_size,
-            projection_hidden_size,
-            layer = hidden_layer,
-            use_simsiam_mlp = not use_momentum,
-            sync_batchnorm = sync_batchnorm
-        )
+        self.online_encoder = NetWrapper(net, projection_size, projection_hidden_size, layer=hidden_layer)
 
         self.use_momentum = use_momentum
         self.target_encoder = None
@@ -232,7 +189,10 @@ class BYOL(nn.Module):
         self.to(device)
 
         # send a mock image tensor to instantiate singleton parameters
-        self.forward(torch.randn(2, 3, image_size, image_size, device=device))
+        with torch.no_grad():
+            self.forward(torch.randn(2, channels, image_size[0], image_size[1]).to(device),
+                         torch.randn(2, channels, image_size[0], image_size[1]).to(device))
+            
 
     @singleton('target_encoder')
     def _get_target_encoder(self):
@@ -249,33 +209,25 @@ class BYOL(nn.Module):
         assert self.target_encoder is not None, 'target encoder has not been created yet'
         update_moving_average(self.target_ema_updater, self.target_encoder, self.online_encoder)
 
-    def forward(
-        self,
-        x,
+    def forward(self, image_one, image_two,
         return_embedding = False,
         return_projection = True
     ):
-        assert not (self.training and x.shape[0] == 1), 'you must have greater than 1 sample when training, due to the batchnorm in the projection layer'
-
         if return_embedding:
-            return self.online_encoder(x, return_projection = return_projection)
+            return self.online_encoder(image_one, return_projection=return_projection)
 
-        image_one, image_two = self.augment1(x), self.augment2(x)
+        online_proj_one, _ = self.online_encoder(image_one)
+        online_proj_two, _ = self.online_encoder(image_two)
 
-        images = torch.cat((image_one, image_two), dim = 0)
-
-        online_projections, _ = self.online_encoder(images)
-        online_predictions = self.online_predictor(online_projections)
-
-        online_pred_one, online_pred_two = online_predictions.chunk(2, dim = 0)
+        online_pred_one = self.online_predictor(online_proj_one)
+        online_pred_two = self.online_predictor(online_proj_two)
 
         with torch.no_grad():
             target_encoder = self._get_target_encoder() if self.use_momentum else self.online_encoder
-
-            target_projections, _ = target_encoder(images)
-            target_projections = target_projections.detach()
-
-            target_proj_one, target_proj_two = target_projections.chunk(2, dim = 0)
+            target_proj_one, _ = target_encoder(image_one)
+            target_proj_two, _ = target_encoder(image_two)
+            target_proj_one.detach_()
+            target_proj_two.detach_()
 
         loss_one = loss_fn(online_pred_one, target_proj_two.detach())
         loss_two = loss_fn(online_pred_two, target_proj_one.detach())
