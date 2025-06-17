@@ -3,6 +3,7 @@ import json
 import h5py
 import torch
 import torchaudio
+import librosa
 import numpy as np
 from tqdm import tqdm
 import multiprocessing as mp
@@ -10,34 +11,28 @@ from functools import partial
 from util import MAX_AUDIO_LENGTH, N_MELS, SAMPLE_RATE, HOP_LENGTH
 
 def process_single_file(path, folder):
-    # Initialize mel transform (create once per process)
-    transform = torchaudio.transforms.MelSpectrogram(
-        sample_rate=SAMPLE_RATE,
-        n_mels=N_MELS,
-        hop_length=HOP_LENGTH,
-        n_fft=2048,
-        f_min=20,
-        f_max=SAMPLE_RATE/2,
-        window_fn=torch.hann_window
-    )
-
     try:
-        # Load audio with faster backend
-        audio, _ = torchaudio.load(
-            os.path.join(folder, path),
-            normalize=True,  # Normalize during loading
-            channels_first=True
+        # Load audio
+        audio = np.load(os.path.join(folder, path))
+
+        # Convert to mel spectrogram using librosa (more efficient)
+        mel_spec = librosa.feature.melspectrogram(
+            y=audio,
+            sr=SAMPLE_RATE,
+            n_mels=N_MELS,
+            hop_length=HOP_LENGTH,
+            n_fft=2048,
+            fmin=20,
+            fmax=SAMPLE_RATE/2,
+            window='hann',
+            center=True,
+            power=2.0,
+            htk=True,  # Use HTK formula for mel scale (matches torchaudio)
+            norm='slaney'  # Use Slaney normalization (matches torchaudio)
         )
-        audio = audio.mean(dim=0)  # Convert to mono if stereo
 
-        # Pad or truncate
-        if audio.shape[0] > MAX_AUDIO_LENGTH:
-            audio = audio[:MAX_AUDIO_LENGTH]
-        else:
-            audio = torch.nn.functional.pad(audio, (0, MAX_AUDIO_LENGTH - audio.shape[0]))
-
-        # Convert to mel spectrogram
-        mel_spec = transform(audio)
+        # Convert to torch tensor for normalization
+        mel_spec = torch.from_numpy(mel_spec).float()
 
         # Normalize
         mel_spec = (mel_spec - mel_spec.mean()) / (mel_spec.std() + 1e-8)
@@ -63,18 +58,18 @@ def process_chunk(chunk_paths, folder):
             results.append(result)
     return results
 
-def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
+def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000, json_path=None):
     if num_workers is None:
         num_workers = mp.cpu_count()
 
     print(f"Using {num_workers} workers for preprocessing")
 
     # Load metadata
-    with open(os.path.join(folder, "metadata.json"), "r") as f:
+    with open(json_path, "r") as f:
         metadata = json.load(f)
 
     # Get all file paths
-    paths = [chunk["file"] for chunk in metadata] #[:1800]
+    paths = [chunk["file"].replace(".wav", ".npy") for chunk in metadata]#[:1800]
 
     # Split paths into chunks
     chunks = [paths[i:i + chunk_size] for i in range(0, len(paths), chunk_size)]
@@ -104,6 +99,7 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
     data_chunk_size = min(100, len(all_results))  # Larger chunks for other data
 
     # Create h5 file with chunked storage
+    print(f"Creating h5 file at {output_path}")
     with h5py.File(output_path, 'w') as f:
         # Create datasets with chunked storage and compression
         mel_specs = f.create_dataset(
@@ -137,29 +133,45 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000):
         )
 
         # Store results in chunks
-        write_chunk_size = min(50, len(all_results))  # Smaller chunks for writing
-        for i in range(0, len(all_results), write_chunk_size):
+        print("Finished processing, storing results in chunks")
+        write_chunk_size = min(500, len(all_results))  # Increased chunk size for better performance
+        total_chunks = (len(all_results) + write_chunk_size - 1) // write_chunk_size
+
+        for i in tqdm(range(0, len(all_results), write_chunk_size),
+                     total=total_chunks,
+                     desc="Storing results"):
             chunk = all_results[i:i + write_chunk_size]
-            for j, result in enumerate(chunk):
-                idx = i + j
-                mel_specs[idx] = result['mel_spec']
-                env_ids[idx] = result['env_id']
-                file_paths[idx] = result['path']
+            # Prepare batch data
+            batch_mel_specs = np.stack([result['mel_spec'] for result in chunk])
+            batch_env_ids = np.array([result['env_id'] for result in chunk])
+            batch_paths = np.array([result['path'] for result in chunk], dtype=object)
+
+            # Write batch at once
+            mel_specs[i:i + len(chunk)] = batch_mel_specs
+            env_ids[i:i + len(chunk)] = batch_env_ids
+            file_paths[i:i + len(chunk)] = batch_paths
 
     print(f"Successfully processed {len(all_results)} files")
     print(f"Failed to process {len(paths) - len(all_results)} files")
 
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Preprocess audio files to h5 format')
-    parser.add_argument('--input_folder', type=str, required=True,
+    parser.add_argument('--input_folder', type=str,
+                        default="/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy",
                        help='path to folder containing audio files and metadata.json')
-    parser.add_argument('--output_path', type=str, required=True,
+    parser.add_argument('--output_path', type=str,
+                        default="/mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5",
                        help='path to save the h5 file')
     parser.add_argument('--num_workers', type=int, default=24,
                        help='number of worker processes (default: number of CPU cores)')
-    parser.add_argument('--chunk_size', type=int, default=1000,
+    parser.add_argument('--chunk_size', type=int, default=500,
                        help='number of files to process in each chunk')
+    parser.add_argument('--json_path', type=str,
+                        default="/mnt/gestalt/home/buffett/rendered_adsr_dataset/metadata.json",
+                       help='path to metadata.json')
     args = parser.parse_args()
 
     # Set multiprocessing start method
@@ -169,5 +181,6 @@ if __name__ == "__main__":
         args.input_folder,
         args.output_path,
         args.num_workers,
-        args.chunk_size
+        args.chunk_size,
+        args.json_path
     )

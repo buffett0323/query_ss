@@ -1,5 +1,5 @@
 # Unit duration in seconds for one audio segment.
-data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset
+data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset_npy
 checkpoint_folder: /mnt/gestalt/home/buffett/adsr_ckpt
 save_dir: /mnt/gestalt/home/buffett/adsr_training_configs
 bs: 256 # 256

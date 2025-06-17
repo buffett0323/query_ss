@@ -9,7 +9,7 @@ import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
-from .common import (np, torch, F, torchaudio)
+# from .common import (np, torch, F, torchaudio)
 
 
 class BaseRawAudioDataset(torch.utils.data.Dataset):
@@ -185,7 +185,7 @@ class ADSRDataset(Dataset):
         with open(os.path.join(data_dir, "metadata.json"), "r") as f:
             metadata = json.load(f)
 
-        paths = [chunk["file"] for chunk in metadata]
+        paths = [chunk["file"].replace(".wav", ".npy") for chunk in metadata]
         random.shuffle(paths)
         self.paths = paths
 
@@ -207,15 +207,17 @@ class ADSRDataset(Dataset):
 
 
     def _get_audio(self, path):
-        wav, _ = torchaudio.load(os.path.join(self.data_dir, path))
-        wav = wav.mean(dim=0)
-
-        if wav.shape[-1] > self.unit_samples:
-            start = np.random.randint(wav.shape[-1] - self.unit_samples)
-            wav = wav[:, start:start + self.unit_samples]
-        elif wav.shape[-1] < self.unit_samples:
-            wav = F.pad(wav, (0, self.unit_samples - wav.shape[-1]), mode='constant', value=0)
+        wav = np.load(os.path.join(self.data_dir, path))
         return wav
+        # wav, _ = torchaudio.load(os.path.join(self.data_dir, path))
+        # wav = wav.mean(dim=0)
+
+        # if wav.shape[-1] > self.unit_samples:
+        #     start = np.random.randint(wav.shape[-1] - self.unit_samples)
+        #     wav = wav[:, start:start + self.unit_samples]
+        # elif wav.shape[-1] < self.unit_samples:
+        #     wav = F.pad(wav, (0, self.unit_samples - wav.shape[-1]), mode='constant', value=0)
+        # return wav
 
 
     def __getitem__(self, index):
@@ -247,10 +249,8 @@ if __name__ == "__main__":
     # dataset = ADSR_h5_Dataset(h5_path=path)
     # print(dataset.get_env_stats())
 
-    path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset"
+    path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy"
     dataset = ADSRDataset(data_dir=path)
-    ds0 = dataset[0]
-    print(ds0["wav1"].shape)
-    print(ds0["wav2"].shape)
-    print(ds0["path1"])
-    print(ds0["path2"])
+    wav1, wav2 = dataset[0]
+    print(wav1.shape)
+    print(wav2.shape)

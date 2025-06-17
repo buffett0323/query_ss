@@ -15,7 +15,6 @@ import warnings
 
 from audiotools import AudioSignal
 from audiotools.core import util
-from pathlib import Path
 from utils import yaml_config_hook
 from tqdm import tqdm
 from dac.nn.loss import MultiScaleSTFTLoss, MelSpectrogramLoss, GANLoss, L1Loss
@@ -178,20 +177,20 @@ class EDMFACInference:
     def build_knn_database(self, audio_dir, midi_dir, max_samples=1000):
         """
         Build a database of latent representations for KNN search
-        
+
         Args:
             audio_dir: Directory containing audio files
             midi_dir: Directory containing MIDI files
             max_samples: Maximum number of samples to include in database
         """
         print("Building KNN database...")
-        
+
         # Get validation data
         with open("info/evaluation_midi_names_lead_out.txt", "r") as f:
             validation_midi_names = f.read().splitlines()
         with open("info/timbre_names_lead_out.txt", "r") as f:
             timbre_names = f.read().splitlines()
-        
+
         # Collect all audio files
         all_files = []
         for timbre_name in timbre_names:
@@ -200,22 +199,22 @@ class EDMFACInference:
                 midi_path = os.path.join(midi_dir, f"{midi_name}.mid")
                 if os.path.exists(audio_path) and os.path.exists(midi_path):
                     all_files.append((audio_path, midi_path, timbre_name, midi_name))
-        
+
         # Randomly sample if too many files
         if len(all_files) > max_samples:
             all_files = random.sample(all_files, max_samples)
-        
+
         print(f"Processing {len(all_files)} files for KNN database...")
-        
+
         timbre_features = []
         content_features = []
         timbre_labels = []
         content_labels = []
-        
+
         # Map timbre names to indices
         self.timbre_to_idx = {name: idx for idx, name in enumerate(timbre_names)}
         self.idx_to_timbre = {idx: name for name, idx in self.timbre_to_idx.items()}
-        
+
         with torch.no_grad():
             for audio_path, midi_path, timbre_name, midi_name in tqdm(all_files, desc="Extracting features"):
                 try:
@@ -223,24 +222,24 @@ class EDMFACInference:
                     target_length = int(self.audio_length * self.args.sample_rate) if self.audio_length > 0 else None
                     audio_signal = self.load_audio(audio_path, target_length)
                     audio_data = audio_signal.to(self.device).audio_data
-                    
+
                     # Extract latent features
                     z = self.generator.encoder(audio_data)
-                    
+
                     # Content features (for pitch prediction)
                     content_z, _, _, _, _ = self.generator.quantizer(z)
                     content_features.append(content_z.cpu().flatten())
-                    
+
                     # Timbre features (processed through transformer)
                     timbre_z = z.transpose(1, 2)
                     timbre_z = self.generator.transformer(timbre_z, None, None)
                     timbre_z = timbre_z.transpose(1, 2)
                     timbre_z_global = torch.mean(timbre_z, dim=2)  # Global mean pooling
                     timbre_features.append(timbre_z_global.cpu().flatten())
-                    
+
                     # Labels
                     timbre_labels.append(self.timbre_to_idx[timbre_name])
-                    
+
                     # Get MIDI content labels (simplified: use first note onset frame)
                     duration = audio_data.shape[-1] / self.args.sample_rate
                     midi_seq = self.get_midi_to_pitch_sequence(midi_path, duration)
@@ -248,80 +247,80 @@ class EDMFACInference:
                     active_pitches = torch.sum(midi_seq, dim=0)
                     content_label = torch.argmax(active_pitches).item()
                     content_labels.append(content_label)
-                    
+
                 except Exception as e:
                     print(f"Error processing {audio_path}: {e}")
                     continue
-        
+
         # Convert to tensors
         self.timbre_db = torch.stack(timbre_features)
         self.content_db = torch.stack(content_features)
         self.timbre_labels_db = torch.tensor(timbre_labels)
         self.content_labels_db = torch.tensor(content_labels)
-        
+
         print(f"KNN database built with {len(self.timbre_db)} samples")
         print(f"Timbre features shape: {self.timbre_db.shape}")
         print(f"Content features shape: {self.content_db.shape}")
-        
+
     def knn_predict(self, query_audio_path, k=3, metric='cosine'):
         """
         Perform KNN prediction for top-k results
-        
+
         Args:
             query_audio_path: Path to query audio file
             k: Number of nearest neighbors (default: 3)
             metric: Distance metric ('cosine' or 'euclidean')
-            
+
         Returns:
             Dictionary with top-k predictions for timbre and content
         """
         if not hasattr(self, 'timbre_db'):
             raise ValueError("KNN database not built. Call build_knn_database() first.")
-        
+
         print(f"Performing KNN prediction for {query_audio_path}")
-        
+
         with torch.no_grad():
             # Load and process query audio
             target_length = int(self.audio_length * self.args.sample_rate) if self.audio_length > 0 else None
             audio_signal = self.load_audio(query_audio_path, target_length)
             audio_data = audio_signal.to(self.device).audio_data
-            
+
             # Extract query features
             z = self.generator.encoder(audio_data)
-            
+
             # Query content features
             content_z, _, _, _, _ = self.generator.quantizer(z)
             query_content = content_z.cpu().flatten().unsqueeze(0)
-            
+
             # Query timbre features
             timbre_z = z.transpose(1, 2)
             timbre_z = self.generator.transformer(timbre_z, None, None)
             timbre_z = timbre_z.transpose(1, 2)
             timbre_z_global = torch.mean(timbre_z, dim=2)
             query_timbre = timbre_z_global.cpu().flatten().unsqueeze(0)
-            
+
             # Compute distances
             if metric == 'cosine':
                 # Cosine similarity
                 timbre_sim = torch.nn.functional.cosine_similarity(query_timbre, self.timbre_db, dim=1)
                 content_sim = torch.nn.functional.cosine_similarity(query_content, self.content_db, dim=1)
-                
+
                 # Convert to distances (higher similarity = lower distance)
                 timbre_distances = 1 - timbre_sim
                 content_distances = 1 - content_sim
-                
+
             elif metric == 'euclidean':
                 # Euclidean distance
                 timbre_distances = torch.norm(self.timbre_db - query_timbre, dim=1)
                 content_distances = torch.norm(self.content_db - query_content, dim=1)
-            
+
             else:
                 raise ValueError(f"Unsupported metric: {metric}")
-            
+
             # Find top-k nearest neighbors
             timbre_top_k = torch.topk(timbre_distances, k, largest=False)
             content_top_k = torch.topk(content_distances, k, largest=False)
-            
+
             # Get predictions
             timbre_predictions = []
             for i in range(k):
@@ -330,7 +329,7 @@ class EDMFACInference:
                 label = self.timbre_labels_db[idx].item()
                 timbre_name = self.idx_to_timbre[label]
                 confidence = 1 / (1 + distance)  # Simple confidence score
-                
+
                 timbre_predictions.append({
                     'rank': i + 1,
                     'timbre_id': label,
@@ -338,7 +337,7 @@ class EDMFACInference:
                     'distance': distance,
                     'confidence': confidence
                 })
-            
+
             content_predictions = []
             for i in range(k):
                 idx = content_top_k.indices[i].item()
@@ -346,7 +345,7 @@ class EDMFACInference:
                 label = self.content_labels_db[idx].item()
                 pitch_note = label + self.min_note  # Convert back to MIDI note
                 confidence = 1 / (1 + distance)
-                
+
                 content_predictions.append({
                     'rank': i + 1,
                     'pitch_id': label,
@@ -354,17 +353,17 @@ class EDMFACInference:
                     'distance': distance,
                     'confidence': confidence
                 })
-            
+
             return {
                 'timbre_predictions': timbre_predictions,
                 'content_predictions': content_predictions,
                 'query_file': query_audio_path
             }
-    
+
     def knn_batch_predict(self, test_audio_dir, output_file, k=3, metric='cosine'):
         """
         Perform KNN prediction on a batch of test files
-        
+
         Args:
             test_audio_dir: Directory containing test audio files
             output_file: Path to save results JSON
@@ -373,13 +372,13 @@ class EDMFACInference:
         """
         if not hasattr(self, 'timbre_db'):
             raise ValueError("KNN database not built. Call build_knn_database() first.")
-            
+
         # Get test files
         test_files = [f for f in os.listdir(test_audio_dir) if f.endswith('.wav')]
         results = {}
-        
+
         print(f"Running KNN prediction on {len(test_files)} test files...")
-        
+
         for test_file in tqdm(test_files, desc="KNN prediction"):
             test_path = os.path.join(test_audio_dir, test_file)
             try:
@@ -388,12 +387,12 @@ class EDMFACInference:
             except Exception as e:
                 print(f"Error processing {test_file}: {e}")
                 continue
-        
+
         # Save results
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=4)
-        
+
         print(f"KNN results saved to {output_file}")
         return results
 
@@ -437,29 +436,29 @@ def main():
         args.db_midi_dir,
         args.max_samples
     )
-    
+
     return
 
     # Perform predictions
     if args.mode == "single":
         if not args.query_audio:
             raise ValueError("--query_audio is required for single mode")
-        
+
         result = model.knn_predict(args.query_audio, k=args.k, metric=args.metric)
-        
+
         print("\n=== KNN Prediction Results ===")
         print(f"Query: {result['query_file']}")
-        
+
         print(f"\nTop-{args.k} Timbre Predictions:")
         for pred in result['timbre_predictions']:
             print(f"  {pred['rank']}. {pred['timbre_name']} (ID: {pred['timbre_id']}) - "
                   f"Distance: {pred['distance']:.4f}, Confidence: {pred['confidence']:.4f}")
-        
+
         print(f"\nTop-{args.k} Content Predictions:")
         for pred in result['content_predictions']:
             print(f"  {pred['rank']}. MIDI Note {pred['midi_note']} (ID: {pred['pitch_id']}) - "
                   f"Distance: {pred['distance']:.4f}, Confidence: {pred['confidence']:.4f}")
-        
+
         # Save single result
         with open(args.output_file, 'w') as f:
             json.dump(result, f, indent=4)
@@ -468,18 +467,17 @@ def main():
     elif args.mode == "batch":
         if not args.test_audio_dir:
             raise ValueError("--test_audio_dir is required for batch mode")
-        
+
         results = model.knn_batch_predict(
             args.test_audio_dir,
             args.output_file,
             k=args.k,
             metric=args.metric
         )
-        
+
         print(f"\nBatch prediction completed on {len(results)} files.")
         print(f"Results saved to {args.output_file}")
 
 
 if __name__ == "__main__":
     main()
-    

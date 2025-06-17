@@ -5,4 +5,3 @@ python knn_infer.py \
     --mode single \
     --query_audio path/to/query.wav \
     --k 3
-    
