@@ -2,12 +2,12 @@
 data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset_npy
 checkpoint_folder: /mnt/gestalt/home/buffett/adsr_ckpt
 save_dir: /mnt/gestalt/home/buffett/adsr_training_configs
-bs: 256 # 256
+bs: 16 # 256
 
 # Wandb parameters.
-log_wandb: False #True
+log_wandb: True #True
 wandb_name: byol-a_jun_15
-device_id: [1]
+device_id: [0]
 
 # FFT parameters.
 sample_rate: 44100
