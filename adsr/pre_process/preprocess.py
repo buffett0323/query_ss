@@ -1,47 +1,30 @@
 import os
 import json
 import h5py
-import torch
-import torchaudio
-import librosa
 import numpy as np
 from tqdm import tqdm
 import multiprocessing as mp
 from functools import partial
-from util import MAX_AUDIO_LENGTH, N_MELS, SAMPLE_RATE, HOP_LENGTH
+N_MELS = 128
 
 def process_single_file(path, folder):
     try:
         # Load audio
-        audio = np.load(os.path.join(folder, path))
+        mel_spec = np.load(os.path.join(folder, path))
 
-        # Convert to mel spectrogram using librosa (more efficient)
-        mel_spec = librosa.feature.melspectrogram(
-            y=audio,
-            sr=SAMPLE_RATE,
-            n_mels=N_MELS,
-            hop_length=HOP_LENGTH,
-            n_fft=2048,
-            fmin=20,
-            fmax=SAMPLE_RATE/2,
-            window='hann',
-            center=True,
-            power=2.0,
-            htk=True,  # Use HTK formula for mel scale (matches torchaudio)
-            norm='slaney'  # Use Slaney normalization (matches torchaudio)
-        )
+        # Add channel dimension if it doesn't exist
+        if mel_spec.ndim == 2:
+            mel_spec = mel_spec[np.newaxis, :, :]  # Add channel dimension: (128, 256) -> (1, 128, 256)
 
-        # Convert to torch tensor for normalization
-        mel_spec = torch.from_numpy(mel_spec).float()
-
-        # Normalize
-        mel_spec = (mel_spec - mel_spec.mean()) / (mel_spec.std() + 1e-8)
+        # Debug: print shape for first few files
+        if path in ["0_0_mel.npy", "0_1_mel.npy", "0_2_mel.npy"]:
+            print(f"Debug - {path} shape: {mel_spec.shape}")
 
         # Get environment ID
         env_id = int(path.split("_")[1])
 
         return {
-            'mel_spec': mel_spec.numpy(),
+            'mel_spec': mel_spec,
             'env_id': env_id,
             'path': path
         }
@@ -69,7 +52,7 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000, 
         metadata = json.load(f)
 
     # Get all file paths
-    paths = [chunk["file"].replace(".wav", ".npy") for chunk in metadata]#[:1800]
+    paths = [chunk["file"].replace(".wav", "_mel.npy") for chunk in metadata]#[:1800]
 
     # Split paths into chunks
     chunks = [paths[i:i + chunk_size] for i in range(0, len(paths), chunk_size)]
@@ -146,6 +129,13 @@ def preprocess_and_save(folder, output_path, num_workers=None, chunk_size=1000, 
             batch_env_ids = np.array([result['env_id'] for result in chunk])
             batch_paths = np.array([result['path'] for result in chunk], dtype=object)
 
+            # Validate shapes before writing
+            expected_shape = (len(chunk), 1, N_MELS, 256)
+            if batch_mel_specs.shape != expected_shape:
+                print(f"Shape mismatch! Expected {expected_shape}, got {batch_mel_specs.shape}")
+                print(f"First mel_spec shape: {chunk[0]['mel_spec'].shape}")
+                raise ValueError(f"Mel spectrogram shape mismatch: {batch_mel_specs.shape} vs {expected_shape}")
+
             # Write batch at once
             mel_specs[i:i + len(chunk)] = batch_mel_specs
             env_ids[i:i + len(chunk)] = batch_env_ids
@@ -160,10 +150,10 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Preprocess audio files to h5 format')
     parser.add_argument('--input_folder', type=str,
-                        default="/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy",
+                        default="/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_new_mel",
                        help='path to folder containing audio files and metadata.json')
     parser.add_argument('--output_path', type=str,
-                        default="/mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5",
+                        default="/mnt/gestalt/home/buffett/adsr_h5/adsr_new_mel.h5",
                        help='path to save the h5 file')
     parser.add_argument('--num_workers', type=int, default=24,
                        help='number of worker processes (default: number of CPU cores)')

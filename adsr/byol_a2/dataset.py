@@ -8,65 +8,7 @@ import torchaudio
 import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import Dataset
-
-# from .common import (np, torch, F, torchaudio)
-
-
-class BaseRawAudioDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg, tfms=None, random_crop=False):
-        self.cfg = cfg
-        self.tfms = tfms
-        self.random_crop = random_crop
-
-    def __len__(self):
-        raise NotImplementedError('implement me')
-
-    def get_audio(self, index):
-        raise NotImplementedError('implement me')
-
-    def get_label(self, index):
-        return None # implement me
-
-    def __getitem__(self, index):
-        wav = self.get_audio(index) # shape is expected to be (cfg.unit_samples,)
-
-        # Trim or stuff padding
-        l = len(wav)
-        unit_samples = self.cfg.unit_samples
-        if l > unit_samples:
-            start = np.random.randint(l - unit_samples) if self.random_crop else 0
-            wav = wav[start:start + unit_samples]
-        elif l < unit_samples:
-            wav = F.pad(wav, (0, unit_samples - l), mode='constant', value=0)
-        wav = wav.to(torch.float)
-
-        # Apply transforms
-        if self.tfms is not None:
-            wav = self.tfms(wav)
-
-        # Return item
-        label = self.get_label(index)
-        return wav if label is None else (wav, label)
-
-
-class WavDataset(BaseRawAudioDataset):
-    def __init__(self, cfg, audio_files, labels, tfms=None, random_crop=False):
-        super().__init__(cfg, tfms=tfms, random_crop=random_crop)
-        self.files = audio_files
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.files)
-
-    def get_audio(self, index):
-        filename = self.files[index]
-        wav, sr = torchaudio.load(filename)
-        assert sr == self.cfg.sample_rate, f'Convert .wav files to {self.cfg.sample_rate} Hz. {filename} has {sr} Hz.'
-        return wav[0]
-
-    def get_label(self, index):
-        return None if self.labels is None else torch.tensor(self.labels[index])
-
+import librosa
 
 class ADSR_h5_Dataset(Dataset):
     def __init__(
@@ -125,29 +67,16 @@ class ADSR_h5_Dataset(Dataset):
 
 
     def __getitem__(self, index):
-        try:
-            # Get first mel spectrogram
-            mel1 = torch.from_numpy(self.mel_specs[index]).float()  # Ensure float type
-            env_id = int(self.env_ids[index])  # Ensure int type
 
-            # Get random pair from same environment
-            pair_idx = self.__get_random_pair(env_id)
-            mel2 = torch.from_numpy(self.mel_specs[pair_idx]).float()  # Ensure float type
+        # Get first mel spectrogram
+        mel1 = torch.from_numpy(self.mel_specs[index]).float()#.squeeze(0)
+        env_id = int(self.env_ids[index])  # Ensure int type
 
-            result = {
-                "env_id": env_id,
-                "mel1": mel1,
-                "mel2": mel2,
-                "path1": self.file_paths[index].decode('utf-8'),  # Convert bytes to string
-                "path2": self.file_paths[pair_idx].decode('utf-8')  # Convert bytes to string
-            }
+        # Get random pair from same environment
+        pair_idx = self.__get_random_pair(env_id)
+        mel2 = torch.from_numpy(self.mel_specs[pair_idx]).float()#.squeeze(0)
 
-            return result
-
-        except Exception as e:
-            print(f"Error loading sample at index {index}: {str(e)}")
-            # Return a valid sample as fallback
-            return self.__getitem__((index + 1) % len(self))
+        return mel1, mel2
 
 
     def __del__(self):
@@ -231,26 +160,39 @@ class ADSRDataset(Dataset):
         wav2 = self._get_audio(path2)
 
         return wav1, wav2
-        # result = {
-        #     "env_id": env_id,
-        #     "wav1": wav1,
-        #     "wav2": wav2,
-        #     "path1": path1,
-        #     "path2": path2,
-        # }
-
-        # return result
 
 
 
 
 if __name__ == "__main__":
-    # path = "/mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5"
-    # dataset = ADSR_h5_Dataset(h5_path=path)
+    path = "/mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5"
+    dataset = ADSR_h5_Dataset(h5_path=path)
     # print(dataset.get_env_stats())
+    a1, a2 = dataset[0]
+    print("a1.shape, a2.shape", a1.shape, a2.shape)
 
     path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy"
     dataset = ADSRDataset(data_dir=path)
     wav1, wav2 = dataset[0]
-    print(wav1.shape)
-    print(wav2.shape)
+
+    mel1 = librosa.feature.melspectrogram(
+        y=wav1,
+        sr=44100,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        fmin=20,
+        fmax=22050,
+    )
+    mel2 = librosa.feature.melspectrogram(
+        y=wav2,
+        sr=44100,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        fmin=20,
+        fmax=22050,
+    )
+
+    print("wav1.shape, wav2.shape", wav1.shape, wav2.shape)
+    print("mel1.shape, mel2.shape", mel1.shape, mel2.shape)

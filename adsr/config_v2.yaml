@@ -2,11 +2,13 @@
 data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset_npy
 checkpoint_folder: /mnt/gestalt/home/buffett/adsr_ckpt
 save_dir: /mnt/gestalt/home/buffett/adsr_training_configs
+h5_path: /mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5
 bs: 16 # 256
+n_stats: 1000 # 10000
 
 # Wandb parameters.
-log_wandb: True #True
-wandb_name: byol-a_jun_15
+log_wandb: False #True
+wandb_name: byol-a_jun_19_w_h5
 device_id: [0]
 
 # FFT parameters.

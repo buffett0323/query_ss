@@ -102,13 +102,17 @@ class BYOLALearner(pl.LightningModule):
             spec2 = spec2.to(device)
             lms1 = (spec1 + torch.finfo().eps).log()#.unsqueeze(1)
             lms2 = (spec2 + torch.finfo().eps).log()#.unsqueeze(1)
+            # print(lms1, lms2)
             lms_batch = torch.cat([lms1, lms2], dim=0)
             X.extend([x for x in lms_batch.detach().cpu().numpy()])
             if len(X) >= n_stats: break
         X = np.stack(X)
+        print(X)
         norm_stats = np.array([X.mean(), X.std()])
         logging.info(f'  ==> mean/std: {norm_stats}, {norm_stats.shape} <- {X.shape}')
         self.pre_norm = PrecomputedNorm(norm_stats)
+        print(f"Created PrecomputedNorm with stats: {norm_stats}")
+        print(f"Mean: {norm_stats[0]:.6f}, Std: {norm_stats[1]:.6f}")
         return norm_stats
 
 
@@ -177,53 +181,6 @@ def main(config_path='config_v2.yaml') -> None:
     learner.calc_norm_stats(dl, n_stats=cfg.n_stats)
     print("Finished calculating norm stats")
 
-    # Initialize wandb
-    if cfg.log_wandb:
-        project = "byol-a-adsr-v2"
-        name = cfg.wandb_name
-        save_dir = cfg.save_dir
-        wandb_logger = WandbLogger(
-            project=project,
-            name=name,
-            save_dir=save_dir,
-            log_model=False,  # Avoid logging full model files to WandB
-        )
-    else:
-        wandb_logger = None
-
-    # Setup checkpoint callback
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=Path(cfg.checkpoint_folder),
-        filename=f'{cfg.id}-{{epoch:02d}}',
-        every_n_epochs=2,
-        save_top_k=-1,  # Save all checkpoints
-        save_last=True
-    )
-
-    # Trainer
-    cb = [TQDMProgressBar(refresh_rate=10)]
-    cb.append(checkpoint_callback)
-    trainer = pl.Trainer(
-        devices=[cfg.device_id[0]],  # Use only GPU 1
-        max_epochs=cfg.epochs,
-        accelerator="gpu",
-        strategy="auto",  # Use auto strategy for single GPU
-        logger=wandb_logger,
-        callbacks=cb
-    )
-    trainer.fit(learner, dl)
-    if trainer.interrupted:
-        logging.info('Terminated.')
-        exit(0)
-
-    # Saving final weight.
-    to_file = Path(cfg.checkpoint_folder)/(cfg.id+'.pth')
-    to_file.parent.mkdir(exist_ok=True, parents=True)
-    torch.save(model.state_dict(), to_file)
-    logging.info(f'Saved weight as {to_file}')
-
-    if wandb_logger is not None:
-        wandb_logger.finalize("success")
 
 
 if __name__ == '__main__':

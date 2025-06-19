@@ -1,76 +1,93 @@
 import os
 import numpy as np
-import librosa
+import torch
 from tqdm import tqdm
-import multiprocessing as mp
-from functools import partial
+import nnAudio.features
+import glob
 
-def process_single_file(file, input_path, output_path):
-    try:
-        if file.endswith(".npy"):
-            wav = np.load(os.path.join(input_path, file))
-            mel = librosa.feature.melspectrogram(
-                y=wav,
-                sr=44100,
-                n_mels=128,
-                fmin=20,
-                fmax=22050,
-                hop_length=512,
-                n_fft=2048,
-                window='hann',
-                center=True,
-                power=2.0,
-                htk=True,  # Use HTK formula for mel scale (matches torchaudio)
-                norm='slaney'  # Use Slaney normalization (matches torchaudio)
-            )
-            np.save(os.path.join(output_path, file.replace(".npy", ".npy")), mel)
-            return True
-    except Exception as e:
-        print(f"Error processing {file}: {str(e)}")
-        return False
+def process_batch(files, input_path, output_path, batch_size=64):
+    """Process files in batches for better efficiency"""
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def process_chunk(chunk_files, input_path, output_path):
-    """Process a chunk of files"""
-    results = []
-    for file in chunk_files:
-        result = process_single_file(file, input_path, output_path)
-        results.append(result)
-    return results
+    # Initialize mel spectrogram converter once
+    to_spec = nnAudio.features.MelSpectrogram(
+        sr=44100,
+        n_mels=128,
+        fmin=20,
+        fmax=22050,
+        hop_length=512,
+        n_fft=2048,
+        window='hann',
+        center=True,
+        power=2.0,
+    ).to(device)
+
+    # Calculate total batches for progress bar
+    (len(files) + batch_size - 1) // batch_size
+
+    successful = 0
+    with tqdm(total=len(files), desc="Processing files") as pbar:
+        for i in range(0, len(files), batch_size):
+            batch_files = files[i:i + batch_size]
+
+            # Load all audio files in batch
+            wavs = []
+            valid_files = []
+
+            for file in batch_files:
+                try:
+                    wav = np.load(os.path.join(input_path, file))
+                    wavs.append(wav)
+                    valid_files.append(file)
+                except Exception as e:
+                    print(f"Error loading {file}: {str(e)}")
+                    pbar.update(1)
+                    continue
+
+            if not wavs:
+                pbar.update(len(batch_files))
+                continue
+
+            # Stack into batch tensor
+            try:
+                wav_batch = torch.from_numpy(np.stack(wavs)).to(device)
+
+                # Convert to mel spectrograms in batch
+                with torch.no_grad():  # Disable gradients for inference
+                    mel_batch = to_spec(wav_batch)
+
+                # Save each mel spectrogram
+                for j, file in enumerate(valid_files):
+                    mel = mel_batch[j].cpu().numpy()
+                    output_file = os.path.join(output_path, file.replace(".npy", "_mel.npy"))
+                    np.save(output_file, mel)
+                    successful += 1
+
+                pbar.update(len(batch_files))
+
+            except Exception as e:
+                print(f"Error processing batch starting with {batch_files[0]}: {str(e)}")
+                pbar.update(len(batch_files))
+                continue
+
+    return successful
 
 if __name__ == "__main__":
     input_path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy"
-    output_path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_mel"
+    output_path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_new_mel"
 
     # Create output directory if it doesn't exist
     os.makedirs(output_path, exist_ok=True)
 
-    # Get all files
-    files = [f for f in os.listdir(input_path) if f.endswith(".npy")]
+    # Get all files using glob (faster than os.listdir)
+    files = glob.glob(os.path.join(input_path, "*.npy"))
+    files = [os.path.basename(f) for f in files]  # Get just filenames
 
-    # Set up multiprocessing
-    num_workers = mp.cpu_count()
-    chunk_size = 100  # Process 100 files per chunk
+    print(f"Found {len(files)} files to process")
 
-    # Split files into chunks
-    chunks = [files[i:i + chunk_size] for i in range(0, len(files), chunk_size)]
-    print(f"Split {len(files)} files into {len(chunks)} chunks")
+    # Process in batches
+    batch_size = 64  # Larger batch size for better GPU utilization
+    successful = process_batch(files, input_path, output_path, batch_size)
 
-    # Create process pool
-    pool = mp.Pool(num_workers)
-
-    # Process chunks in parallel
-    all_results = []
-    for chunk_results in tqdm(
-        pool.imap(partial(process_chunk, input_path=input_path, output_path=output_path), chunks),
-        total=len(chunks),
-        desc="Processing chunks"
-    ):
-        all_results.extend(chunk_results)
-
-    pool.close()
-    pool.join()
-
-    # Print summary
-    successful = sum(all_results)
     print(f"Successfully processed {successful} files")
     print(f"Failed to process {len(files) - successful} files")
