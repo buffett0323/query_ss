@@ -105,9 +105,9 @@ class BYOLALearner(pl.LightningModule):
             # print(lms1, lms2)
             lms_batch = torch.cat([lms1, lms2], dim=0)
             X.extend([x for x in lms_batch.detach().cpu().numpy()])
-            if len(X) >= n_stats: break
+            # if len(X) >= n_stats: break
         X = np.stack(X)
-        print(X)
+
         norm_stats = np.array([X.mean(), X.std()])
         logging.info(f'  ==> mean/std: {norm_stats}, {norm_stats.shape} <- {X.shape}')
         self.pre_norm = PrecomputedNorm(norm_stats)
@@ -146,7 +146,7 @@ def main(config_path='config_v2.yaml') -> None:
     #     data_dir=cfg.data_dir,
     #     unit_sec=cfg.unit_sec
     # )
-    ds = ADSR_h5_Dataset(h5_path=cfg.h5_path)
+    ds = ADSRDataset(metadata_dir=cfg.metadata_dir, data_dir=cfg.data_dir)
     dl = torch.utils.data.DataLoader(
         ds,
         batch_size=cfg.bs,

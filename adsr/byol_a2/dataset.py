@@ -99,6 +99,7 @@ class ADSR_h5_Dataset(Dataset):
 class ADSRDataset(Dataset):
     def __init__(
         self,
+        metadata_dir,
         data_dir,
         unit_sec=2.97,
         env_amount=600,
@@ -111,10 +112,13 @@ class ADSRDataset(Dataset):
         self.env_amount = env_amount
         self.pair_amount = pair_amount
 
-        with open(os.path.join(data_dir, "metadata.json"), "r") as f:
+        with open(os.path.join(metadata_dir, "metadata.json"), "r") as f:
             metadata = json.load(f)
 
-        paths = [chunk["file"].replace(".wav", ".npy") for chunk in metadata]
+        paths = [chunk["file"] for chunk in metadata]
+        paths = [path.replace(".wav", "_mel.npy").replace(
+            "rendered_adsr_dataset_npy", "rendered_adsr_dataset_npy_new_mel"
+            ) for path in paths]
         random.shuffle(paths)
         self.paths = paths
 
@@ -138,16 +142,11 @@ class ADSRDataset(Dataset):
     def _get_audio(self, path):
         wav = np.load(os.path.join(self.data_dir, path))
         return wav
-        # wav, _ = torchaudio.load(os.path.join(self.data_dir, path))
-        # wav = wav.mean(dim=0)
 
-        # if wav.shape[-1] > self.unit_samples:
-        #     start = np.random.randint(wav.shape[-1] - self.unit_samples)
-        #     wav = wav[:, start:start + self.unit_samples]
-        # elif wav.shape[-1] < self.unit_samples:
-        #     wav = F.pad(wav, (0, self.unit_samples - wav.shape[-1]), mode='constant', value=0)
-        # return wav
 
+    def _get_mel(self, path):
+        mel = np.load(os.path.join(self.data_dir, path))
+        return mel
 
     def __getitem__(self, index):
         path1 = self.paths[index]
@@ -156,10 +155,14 @@ class ADSRDataset(Dataset):
         env_id = int(path1.split("_")[1])
         path2 = self._get_random_pair(env_id)
 
-        wav1 = self._get_audio(path1)
-        wav2 = self._get_audio(path2)
+        mel1 = self._get_mel(path1)
+        mel2 = self._get_mel(path2)
+        return mel1, mel2
 
-        return wav1, wav2
+        # wav1 = self._get_audio(path1)
+        # wav2 = self._get_audio(path2)
+
+        # return wav1, wav2
 
 
 
@@ -171,28 +174,9 @@ if __name__ == "__main__":
     a1, a2 = dataset[0]
     print("a1.shape, a2.shape", a1.shape, a2.shape)
 
-    path = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy"
-    dataset = ADSRDataset(data_dir=path)
-    wav1, wav2 = dataset[0]
+    metadata_dir = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy"
+    mel_dir = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_new_mel"
+    dataset = ADSRDataset(metadata_dir=metadata_dir, data_dir=mel_dir)
+    mel1, mel2 = dataset[0]
 
-    mel1 = librosa.feature.melspectrogram(
-        y=wav1,
-        sr=44100,
-        n_fft=2048,
-        hop_length=512,
-        n_mels=128,
-        fmin=20,
-        fmax=22050,
-    )
-    mel2 = librosa.feature.melspectrogram(
-        y=wav2,
-        sr=44100,
-        n_fft=2048,
-        hop_length=512,
-        n_mels=128,
-        fmin=20,
-        fmax=22050,
-    )
-
-    print("wav1.shape, wav2.shape", wav1.shape, wav2.shape)
     print("mel1.shape, mel2.shape", mel1.shape, mel2.shape)
