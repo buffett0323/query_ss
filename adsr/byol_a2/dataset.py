@@ -170,7 +170,7 @@ class ADSRDataset(Dataset):
 if __name__ == "__main__":
     path = "/mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5"
     dataset = ADSR_h5_Dataset(h5_path=path)
-    # print(dataset.get_env_stats())
+    print(dataset.get_env_stats())
     a1, a2 = dataset[0]
     print("a1.shape, a2.shape", a1.shape, a2.shape)
 
