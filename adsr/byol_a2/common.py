@@ -43,11 +43,37 @@ def get_timestamp():
 
 
 def load_yaml_config(path_to_config):
-    """Loads yaml configuration settings as an EasyDict object."""
+    """Loads yaml configuration settings as an EasyDict object with variable substitution."""
     path_to_config = Path(path_to_config)
     assert path_to_config.is_file()
+    
     with open(path_to_config) as f:
         yaml_contents = yaml.safe_load(f)
+    
+    # Handle variable substitution (e.g., ${path}/subdirectory)
+    def substitute_variables(obj, variables):
+        if isinstance(obj, dict):
+            return {k: substitute_variables(v, variables) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [substitute_variables(item, variables) for item in obj]
+        elif isinstance(obj, str):
+            # Replace ${variable} with actual values
+            for var_name, var_value in variables.items():
+                obj = obj.replace(f"${{{var_name}}}", str(var_value))
+            return obj
+        else:
+            return obj
+    
+    # First pass: collect all variables
+    variables = {}
+    if isinstance(yaml_contents, dict):
+        for key, value in yaml_contents.items():
+            if isinstance(value, str) and not value.startswith('${'):
+                variables[key] = value
+    
+    # Second pass: substitute variables
+    yaml_contents = substitute_variables(yaml_contents, variables)
+    
     cfg = EasyDict(yaml_contents)
     return cfg
 

@@ -1,11 +1,17 @@
 # Unit duration in seconds for one audio segment.
-metadata_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset_npy
-data_dir: /mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_new_mel
-checkpoint_folder: /mnt/gestalt/home/buffett/adsr_ckpt
-save_dir: /mnt/gestalt/home/buffett/adsr_training_configs
-h5_path: /mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5
+# path: /home/buffett/dataset
+path: /mnt/gestalt/home/buffett
+postfix: "0621"
+metadata_dir: ${path}/rendered_adsr_dataset_npy
+data_dir: ${path}/rendered_adsr_dataset_npy_new_mel
+checkpoint_folder: ${path}/adsr_ckpt
+save_dir: ${path}/adsr_training_configs
+h5_path: ${path}/adsr_h5/adsr_new_mel.h5
+
 bs: 256 # 256
 n_stats: 1000 # 10000
+env_amount: 600
+pair_amount: 1547
 
 # Wandb parameters.
 log_wandb: False #True
