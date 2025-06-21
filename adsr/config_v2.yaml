@@ -8,15 +8,20 @@ checkpoint_folder: ${path}/adsr_ckpt
 save_dir: ${path}/adsr_training_configs
 h5_path: ${path}/adsr_h5/adsr_new_mel.h5
 
+# Training parameters.
+seed: 42
 bs: 256 # 256
-n_stats: 1000 # 10000
+n_stats: 10000
 env_amount: 600
 pair_amount: 1547
+num_workers: 16
+prefetch_factor: 8
+cache_size: 1000  # Dataset cache size for faster loading
 
 # Wandb parameters.
-log_wandb: False #True
-wandb_name: byol-a_jun_19_w_h5
-device_id: [0]
+log_wandb: True #True
+wandb_name: byol-a_jun_21_w_h5
+device_id: [2]
 
 # FFT parameters.
 sample_rate: 44100
@@ -26,20 +31,18 @@ hop_length: 512
 n_mels: 128
 f_min: 20
 f_max: 22050
+mel_mean: -12.621428
+mel_std: 5.243587
+
 # Dimensions of feature representations.
 feature_d: 3072
 # BYOL parameters.
 proj_size: 256
 proj_dim: 4096
 ema_decay: 0.99
-# Training parameters.
-seed: 42
-num_workers: 24
-prefetch_factor: 8
-
 unit_sec: 2.97
 lr: 0.0001
-epochs: 2 # 100
+epochs: 200
 
 # Weight pathname for resuming training.
 resume:

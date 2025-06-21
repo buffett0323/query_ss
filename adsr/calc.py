@@ -182,6 +182,7 @@ def main(config_path='config_v2.yaml') -> None:
         projection_hidden_size=cfg.proj_dim,
         moving_average_decay=cfg.ema_decay,
     )
+    print("Starting to calculate norm stats")
     learner.calc_norm_stats(dl, n_stats=cfg.n_stats)
     print("Finished calculating norm stats")
 

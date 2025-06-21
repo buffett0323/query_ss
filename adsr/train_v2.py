@@ -20,6 +20,8 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 # Filter out NVML warning
 warnings.filterwarnings("ignore", message="Can't initialize NVML")
 torch.set_float32_matmul_precision('high')
+torch.backends.cudnn.benchmark = True  # Enable cuDNN auto-tuner
+torch.backends.cudnn.deterministic = False  # Disable for speed
 
 
 class BYOLALearner(pl.LightningModule):
@@ -53,32 +55,36 @@ class BYOLALearner(pl.LightningModule):
 
     def training_step(self, specs, batch_idx):
         def to_np(A): return [a.cpu().numpy() for a in A]
-        # Convert raw audio into a log-mel spectrogram and pre-normalize it.
+
+        # Move both specs to device at once and combine operations
         device = self.device
-        # self.to_spec = self.to_spec.to(device)
-        self.learner = self.learner.to(device)
-
         spec1, spec2 = specs
-        spec1 = spec1.to(device)
-        spec2 = spec2.to(device)
-        lms1 = (spec1 + torch.finfo().eps).log()#.unsqueeze(1) # (B, 1, T, F)
-        lms2 = (spec2 + torch.finfo().eps).log()#.unsqueeze(1) # (B, 1, T, F)
+        spec1, spec2 = spec1.to(device), spec2.to(device)
 
+        # Combine log operations and avoid redundant concatenations
+        eps = torch.finfo(spec1.dtype).eps
+        lms1 = (spec1 + eps).log()
+        lms2 = (spec2 + eps).log()
+
+        # Combine normalization in one operation
         lms_batch = torch.cat([lms1, lms2], dim=0)
         lms_batch = self.pre_norm(lms_batch)
-        lms1 = lms_batch[:lms_batch.shape[0]//2]
-        lms2 = lms_batch[lms_batch.shape[0]//2:]
-        paired_inputs = (lms1, lms2)
 
-        # Form a batch and post-normalize it.
-        bs = paired_inputs[0].shape[0]
-        paired_inputs = torch.cat(paired_inputs) # [(B,1,T,F), (B,1,T,F)] -> (2*B,1,T,F)
+        # Split back efficiently
+        bs = lms1.shape[0]
+        lms1_norm = lms_batch[:bs]
+        lms2_norm = lms_batch[bs:]
+
+        # Post-normalize in one operation
+        paired_inputs = torch.cat([lms1_norm, lms2_norm], dim=0)
         mb, sb = to_np((paired_inputs.mean(), paired_inputs.std()))
         paired_inputs = self.post_norm(paired_inputs)
         ma, sa = to_np((paired_inputs.mean(), paired_inputs.std()))
 
-        # Forward to get a loss.
+        # Forward pass
         loss = self.forward(paired_inputs[:bs], paired_inputs[bs:])
+
+        # Log statistics
         for k, v in {'mb': mb, 'sb': sb, 'ma': ma, 'sa': sa}.items():
             self.log(k, float(v), prog_bar=True, on_step=False, on_epoch=True)
         return loss
@@ -89,25 +95,25 @@ class BYOLALearner(pl.LightningModule):
     def on_before_zero_grad(self, _):
         self.learner.update_moving_average()
 
-    def calc_norm_stats(self, data_loader, n_stats=10000, device='cuda'):
-        # Calculate normalization statistics from the training dataset.
-        n_stats = min(n_stats, len(data_loader.dataset))
-        logging.info(f'Calculating mean/std using random {n_stats} samples from population {len(data_loader.dataset)} samples...')
-        device = self.device
-        # self.to_spec = self.to_spec.to(device)
-        X = []
-        for specs in tqdm(data_loader):
-            spec1, spec2 = specs
-            spec1 = spec1.to(device)
-            spec2 = spec2.to(device)
-            lms1 = (spec1 + torch.finfo().eps).log()#.unsqueeze(1)
-            lms2 = (spec2 + torch.finfo().eps).log()#.unsqueeze(1)
-            lms_batch = torch.cat([lms1, lms2], dim=0)
-            X.extend([x for x in lms_batch.detach().cpu().numpy()])
-            if len(X) >= n_stats: break
-        X = np.stack(X)
-        norm_stats = np.array([X.mean(), X.std()])
-        logging.info(f'  ==> mean/std: {norm_stats}, {norm_stats.shape} <- {X.shape}')
+    def calc_norm_stats(self, mel_mean, mel_std):
+        # # Calculate normalization statistics from the training dataset.
+        # n_stats = min(n_stats, len(data_loader.dataset))
+        # logging.info(f'Calculating mean/std using random {n_stats} samples from population {len(data_loader.dataset)} samples...')
+        # device = self.device
+        # # self.to_spec = self.to_spec.to(device)
+        # X = []
+        # for specs in tqdm(data_loader):
+        #     spec1, spec2 = specs
+        #     spec1 = spec1.to(device)
+        #     spec2 = spec2.to(device)
+        #     lms1 = (spec1 + torch.finfo().eps).log()#.unsqueeze(1)
+        #     lms2 = (spec2 + torch.finfo().eps).log()#.unsqueeze(1)
+        #     lms_batch = torch.cat([lms1, lms2], dim=0)
+        #     X.extend([x for x in lms_batch.detach().cpu().numpy()])
+        #     if len(X) >= n_stats: break
+        # X = np.stack(X)
+        # norm_stats = np.array([X.mean(), X.std()])
+        norm_stats = np.array([mel_mean, mel_std])
         self.pre_norm = PrecomputedNorm(norm_stats)
         return norm_stats
 
@@ -139,10 +145,10 @@ def main(config_path='config_v2.yaml') -> None:
 
     # Data preparation
     # ds = ADSRDataset(
+    #     metadata_dir=cfg.metadata_dir,
     #     data_dir=cfg.data_dir,
-    #     unit_sec=cfg.unit_sec
     # )
-    ds = ADSR_h5_Dataset(h5_path=cfg.h5_path)
+    ds = ADSR_h5_Dataset(h5_path=cfg.h5_path, cache_size=getattr(cfg, 'cache_size', 1000))
     dl = torch.utils.data.DataLoader(
         ds,
         batch_size=cfg.bs,
@@ -152,6 +158,7 @@ def main(config_path='config_v2.yaml') -> None:
         drop_last=True,
         persistent_workers=True,
         prefetch_factor=cfg.prefetch_factor,
+        # generator=torch.Generator().manual_seed(cfg.seed),  # Add deterministic shuffling
     )
 
     # Training preparation
@@ -174,8 +181,7 @@ def main(config_path='config_v2.yaml') -> None:
         projection_hidden_size=cfg.proj_dim,
         moving_average_decay=cfg.ema_decay,
     )
-    learner.calc_norm_stats(dl, n_stats=cfg.n_stats)
-    print("Finished calculating norm stats")
+    learner.calc_norm_stats(cfg.mel_mean, cfg.mel_std)
 
     # Initialize wandb
     if cfg.log_wandb:
@@ -195,7 +201,7 @@ def main(config_path='config_v2.yaml') -> None:
     checkpoint_callback = ModelCheckpoint(
         dirpath=Path(cfg.checkpoint_folder),
         filename=f'{cfg.id}-{{epoch:02d}}',
-        every_n_epochs=2,
+        every_n_epochs=5,  # Reduced from 2 to 5 for less I/O overhead
         save_top_k=-1,  # Save all checkpoints
         save_last=True
     )
