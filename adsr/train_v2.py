@@ -84,6 +84,9 @@ class BYOLALearner(pl.LightningModule):
         # Forward pass
         loss = self.forward(paired_inputs[:bs], paired_inputs[bs:])
 
+        # Log loss explicitly
+        self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=True)
+
         # Log statistics
         for k, v in {'mb': mb, 'sb': sb, 'ma': ma, 'sa': sa}.items():
             self.log(k, float(v), prog_bar=True, on_step=False, on_epoch=True)
