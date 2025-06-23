@@ -1,4 +1,3 @@
-from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
@@ -11,8 +10,7 @@ class TrainConfig:
     device: str = "cuda:3" if torch.cuda.is_available() else "cpu"
 
     # Paths
-    metadata_dir: Path = Path("/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy")
-    data_dir: Path = Path("/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_new_mel")
+    data_dir: Path = Path("/home/buffett/dataset/rendered_adsr_unpaired")
 
     # Wandb
     wandb_use: bool = False # True
@@ -32,8 +30,17 @@ class TrainConfig:
 
     # Optim
     lr: float = 1e-4
-    epochs: int = 100 #50
-
+    epochs: int = 400 #50
+    save_interval: int = 20
+    
     # Loss weights
     param_weight: float = 1.0
     spectral_weight: float = 0.5  # set 0 to disable spectral loss
+    
+    # Data settings
+    sr: int = 44100
+    n_fft: int = 2048
+    n_mels: int = 128
+    fmin: int = 20
+    fmax: int = 22050
+    
