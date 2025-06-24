@@ -32,15 +32,14 @@ class TrainConfig:
     lr: float = 1e-4
     epochs: int = 400 #50
     save_interval: int = 20
-    
+
     # Loss weights
     param_weight: float = 1.0
     spectral_weight: float = 0.5  # set 0 to disable spectral loss
-    
+
     # Data settings
     sr: int = 44100
     n_fft: int = 2048
     n_mels: int = 128
     fmin: int = 20
     fmax: int = 22050
-    

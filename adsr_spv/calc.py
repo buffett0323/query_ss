@@ -29,24 +29,24 @@ def calc_norm_stats(data_loader, n_stats=10000, device='cuda:3'):
         center=True,
         power=2.0,
     ).to(device)
-    
-    
+
+
     X = []
-    for wav, _ in tqdm(data_loader): 
+    for wav, _ in tqdm(data_loader):
         mel = to_spec(wav.to(device))
         mel = mel.unsqueeze(1) # [BS, 1, 128, 256]
         eps = torch.finfo(mel.dtype).eps
         mel = (mel + eps).log()
-        
+
         if mel.isnan().any():
             print("mel is nan")
             print(mel)
             break
-            
+
         X.extend([x for x in mel.detach().cpu().numpy()])
         if len(X) >= n_stats:
             break
-        
+
     X = np.stack(X)
     norm_stats = np.array([X.mean(), X.std()])
     print(f"Created PrecomputedNorm with stats: {norm_stats}")

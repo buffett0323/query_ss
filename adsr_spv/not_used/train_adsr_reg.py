@@ -1,4 +1,3 @@
-import os
 import torch
 import torch.nn.functional as F
 import wandb
@@ -15,7 +14,7 @@ def train(cfg: TrainConfig):
     # Create checkpoint directory
     checkpoint_dir = Path(cfg.wandb_dir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Initialize wandb
     if cfg.wandb_use:
         wandb.init(
@@ -33,7 +32,7 @@ def train(cfg: TrainConfig):
         data_dir=cfg.data_dir,
         split="val",
     )
-    
+
     train_dl = DataLoader(
         train_ds,
         batch_size=cfg.batch_size,
@@ -79,7 +78,7 @@ def train(cfg: TrainConfig):
     # Training
     global_step = 0
     best_val_loss = float('inf')
-    
+
     for epoch in range(cfg.epochs):
         # Training phase
         model.train()
@@ -89,9 +88,9 @@ def train(cfg: TrainConfig):
         for wav, adsr_gt in tqdm(train_dl, desc=f"Training Epoch {epoch}"):
             wav = wav.to(cfg.device)
             adsr_gt = adsr_gt.to(cfg.device)
-                        
+
             mel = to_spec(wav).unsqueeze(1) # [BS, 1, 128, 256]
-            
+
             # Forward pass
             adsr_pred = model(mel)
 
@@ -103,7 +102,7 @@ def train(cfg: TrainConfig):
             opt.step()
 
             running["param"] += loss.item()
-            
+
             # Calculate individual ADSR losses
             for i, param_name in enumerate(["attack", "decay", "sustain", "release"]):
                 param_loss = F.mse_loss(adsr_pred[:, i], adsr_gt[:, i])
@@ -129,19 +128,19 @@ def train(cfg: TrainConfig):
         model.eval()
         val_running = {"param": 0.0}
         val_running_adsr = {"attack": 0.0, "decay": 0.0, "sustain": 0.0, "release": 0.0}
-        
+
         with torch.no_grad():
             for wav, adsr_gt in tqdm(val_dl, desc=f"Validation Epoch {epoch}"):
                 wav = wav.to(cfg.device)
                 adsr_gt = adsr_gt.to(cfg.device)
-                
+
                 mel = to_spec(wav).unsqueeze(1)
                 adsr_pred = model(mel)
-                
+
                 # Validation loss
                 val_loss = F.mse_loss(adsr_pred, adsr_gt)
                 val_running["param"] += val_loss.item()
-                
+
                 # Calculate individual ADSR validation losses
                 for i, param_name in enumerate(["attack", "decay", "sustain", "release"]):
                     param_loss = F.mse_loss(adsr_pred[:, i], adsr_gt[:, i])
@@ -179,7 +178,7 @@ def train(cfg: TrainConfig):
                 'config': cfg.__dict__
             }, checkpoint_path)
             print(f"Checkpoint saved: {checkpoint_path}")
-        
+
         # Save best model based on validation loss
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss

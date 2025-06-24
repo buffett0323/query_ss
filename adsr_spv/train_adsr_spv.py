@@ -1,4 +1,3 @@
-import os
 import yaml
 import torch
 import pytorch_lightning as pl
@@ -19,20 +18,20 @@ def load_config(config_path: str) -> dict:
 
 def main(config):
     torch.set_float32_matmul_precision('high')
-    
+
     # Create main experiment directory
     experiment_dir = Path(config['wandb_dir']) / "experiments" / config['wandb_name']
     experiment_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create subdirectories for different types of logs
     logs_dir = experiment_dir / "lightning_logs"
     checkpoints_dir = experiment_dir / "checkpoints"
     tensorboard_dir = experiment_dir / "tensorboard"
-    
+
     logs_dir.mkdir(exist_ok=True)
     checkpoints_dir.mkdir(exist_ok=True)
     tensorboard_dir.mkdir(exist_ok=True)
-    
+
     # Initialize wandb if enabled
     if config.get('wandb_use', False):
         wandb_logger = WandbLogger(
@@ -45,14 +44,14 @@ def main(config):
         wandb_logger.experiment.config.update(config)
     else:
         wandb_logger = None
-    
+
     # Initialize Lightning module and data module
     model = ADSRLightningModule(config)
     data_module = ADSRDataModule(config)
-    
+
     # Setup callbacks
     callbacks = []
-    
+
     # Model checkpoint callback - save every save_interval epochs
     checkpoint_callback = ModelCheckpoint(
         dirpath=checkpoints_dir,
@@ -64,11 +63,11 @@ def main(config):
         save_last=True
     )
     callbacks.append(checkpoint_callback)
-    
+
     # Learning rate monitor
     lr_monitor = LearningRateMonitor(logging_interval='step')
     callbacks.append(lr_monitor)
-    
+
     # Initialize trainer with custom logging directory
     trainer = pl.Trainer(
         max_epochs=config['epochs'],
@@ -90,13 +89,13 @@ def main(config):
         # Logging directory control
         default_root_dir=str(logs_dir),  # Lightning logs go here
     )
-    
+
     # Train the model
     trainer.fit(model, data_module)
-    
+
     # Test the model
     trainer.test(model, data_module)
-    
+
     print(f"Training completed!")
     print(f"Experiment directory: {experiment_dir}")
     print(f"Lightning logs: {logs_dir}")
@@ -107,4 +106,4 @@ def main(config):
 if __name__ == "__main__":
     # Load configuration
     config = load_config('config.yaml')
-    main(config) 
+    main(config)

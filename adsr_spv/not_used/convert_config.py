@@ -4,7 +4,7 @@ from adsr_spv.not_used.config import TrainConfig
 def convert_config_to_yaml():
     """Convert the old Python config class to YAML format."""
     config = TrainConfig()
-    
+
     # Convert config to dictionary
     config_dict = {
         'batch_size': config.batch_size,
@@ -41,12 +41,12 @@ def convert_config_to_yaml():
         'accumulate_grad_batches': 1,
         'log_every_n_steps': 50,
     }
-    
+
     # Save to YAML file
     with open('config.yaml', 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False, indent=2)
-    
+
     print("Config converted to config.yaml")
 
 if __name__ == "__main__":
-    convert_config_to_yaml() 
+    convert_config_to_yaml()
