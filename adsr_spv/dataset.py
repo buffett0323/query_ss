@@ -154,7 +154,7 @@ class Mel_ADSRDataset(Dataset):
 
         self.metadata = [
             [
-                str(self.npy_path / self.split / chunk["npy_file"]),
+                str(self.npy_path / self.split / chunk["file"]), #chunk["npy_file"]),
                 torch.tensor([chunk["attack"],
                             chunk["decay"],
                             chunk["sustain"], # *1000,  # Scale sustain to 0-1000
@@ -165,10 +165,10 @@ class Mel_ADSRDataset(Dataset):
         ]
         random.shuffle(self.metadata)
 
-        # Load parameters
-        params_path = self.npy_path / self.split / "params.json"
-        with open(params_path, "r") as f:
-            self.params = json.load(f)
+        # # Load parameters
+        # params_path = self.npy_path / self.split / "params.json"
+        # with open(params_path, "r") as f:
+        #     self.params = json.load(f)
 
 
     def __len__(self):

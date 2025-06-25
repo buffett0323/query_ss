@@ -98,7 +98,7 @@ class ADSRLightningModule(pl.LightningModule):
         mel = (mel + eps).log()
         mel = self.pre_norm(mel).unsqueeze(1)
         mel = self.post_norm(mel)
-        
+
         if mel.isnan().any():
             print("mel being nan detected")
             return None
@@ -167,7 +167,7 @@ class ADSRLightningModule(pl.LightningModule):
         mel = self.mel_norm(mel)
 
         assert len(mel.size()) == 4, "mel should be 4D"
-        
+
         # Forward pass
         adsr_pred = self.forward(mel)
 
