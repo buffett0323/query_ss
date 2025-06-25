@@ -62,7 +62,9 @@ class ADSRLightningModule(pl.LightningModule):
 
         # Initialize efficient loss function
         self.loss_fn = EfficientADSRLoss()
-        self.pre_norm = PrecomputedNorm(np.array([config['mel_mean'], config['mel_std']]))
+        self.pre_norm = PrecomputedNorm(
+            np.array([config['mel_mean'], config['mel_std']])
+        )
         self.post_norm = NormalizeBatch()
 
         # ADSR parameter names for logging - pre-compute keys for efficiency
@@ -94,8 +96,12 @@ class ADSRLightningModule(pl.LightningModule):
     def mel_norm(self, mel):
         eps = torch.finfo(mel.dtype).eps
         mel = (mel + eps).log()
-        mel = self.pre_norm(mel)
+        mel = self.pre_norm(mel).unsqueeze(1)
         mel = self.post_norm(mel)
+        
+        if mel.isnan().any():
+            print("mel being nan detected")
+            return None
         return mel
 
 
@@ -125,17 +131,16 @@ class ADSRLightningModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # wav, adsr_gt = batch
         mel, adsr_gt = batch
-        mel = self.mel_norm(mel)
 
         # Ensure wav is on the correct device
         # wav = wav.to(self.device)
         adsr_gt = adsr_gt.to(self.device, non_blocking=True)
         mel = mel.to(self.device, non_blocking=True)
 
-        if len(mel.size()) == 3:
-            mel = mel.unsqueeze(1)
+        mel = self.mel_norm(mel)
 
         # Forward pass
+        assert len(mel.size()) == 4, "mel should be 4D"
         adsr_pred = self.forward(mel)
 
         # Ultra-efficient loss calculation
@@ -154,16 +159,15 @@ class ADSRLightningModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         # wav, adsr_gt = batch
         mel, adsr_gt = batch
-        mel = self.mel_norm(mel)
 
         # Ensure wav is on the correct device
         # wav = wav.to(self.device)
         adsr_gt = adsr_gt.to(self.device, non_blocking=True)
         mel = mel.to(self.device, non_blocking=True)
+        mel = self.mel_norm(mel)
 
-        if len(mel.size()) == 3:
-            mel = mel.unsqueeze(1)
-
+        assert len(mel.size()) == 4, "mel should be 4D"
+        
         # Forward pass
         adsr_pred = self.forward(mel)
 

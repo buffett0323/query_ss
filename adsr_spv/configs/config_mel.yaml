@@ -1,19 +1,18 @@
 # Training Configuration
-batch_size: 32
+batch_size: 128
 num_workers: 16
 
 # Data loading optimizations
-prefetch_factor: 4  # Number of batches to prefetch per worker
-cache_size: 1000    # Number of audio files to cache in memory
+prefetch_factor: 16  # Number of batches to prefetch per worker
 use_memory_mapping: true  # Use memory mapping for large files
-drop_last_train: true     # Drop incomplete batches during training
+drop_last_train: false     # Drop incomplete batches during training
 
 # Paths
 data_dir: "/home/buffett/dataset/rendered_adsr_unpaired_mel_npy"
 h5_path: "/home/buffett/dataset/rendered_adsr_unpaired_mel_h5/adsr_mel.h5"
 
 # Wandb
-wandb_use: false #true
+wandb_use: true #true
 wandb_dir: "/home/buffett/dataset/adsr_reg_logs"
 wandb_project: "adsr-reg"
 wandb_name: "adsr_mel_625"
