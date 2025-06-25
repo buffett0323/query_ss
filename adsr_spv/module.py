@@ -8,7 +8,7 @@ from typing import Dict, Any
 import wandb
 
 from model import ASTWithProjectionHead
-from norm import NormalizeBatch, PrecomputedNorm
+from util import NormalizeBatch, PrecomputedNorm
 
 class EfficientADSRLoss(nn.Module):
     """Ultra-efficient ADSR loss computation."""
@@ -60,43 +60,42 @@ class ADSRLightningModule(pl.LightningModule):
             spec_shape=tuple(config['spec_shape'])
         )
 
-        # Initialize mel spectrogram converter
-        self.to_spec = nnAudio.features.MelSpectrogram(
-            sr=config['sr'], #44100,
-            n_mels=config['n_mels'], #128,
-            fmin=config['fmin'],
-            fmax=config['fmax'],
-            hop_length=config['hop_length'],
-            n_fft=config['n_fft'],
-            window='hann',
-            center=True,
-            power=2.0,
-        ).to(self.device)
-
         # Initialize efficient loss function
         self.loss_fn = EfficientADSRLoss()
         self.pre_norm = PrecomputedNorm(np.array([config['mel_mean'], config['mel_std']]))
         self.post_norm = NormalizeBatch()
 
-        # ADSR parameter names for logging
+        # ADSR parameter names for logging - pre-compute keys for efficiency
         self.adsr_params = ["attack", "decay", "sustain", "release"]
+        self._train_keys = [f'train_{param}_loss' for param in self.adsr_params]
+        self._val_keys = [f'val_{param}_loss' for param in self.adsr_params]
 
         # Pre-allocate logging dictionaries to avoid repeated dict creation
-        self._train_log_dict = {}
-        self._val_log_dict = {}
+        self._train_log_dict = {'train_loss': None}
+        self._val_log_dict = {'val_loss': None}
+
+        # Pre-populate with ADSR keys
+        for key in self._train_keys:
+            self._train_log_dict[key] = None
+        for key in self._val_keys:
+            self._val_log_dict[key] = None
+
+    # def wav2mel(self, wav):
+    #     with torch.no_grad():
+    #         mel = self.to_spec(wav).unsqueeze(1) # [BS, 1, 128, 256]
+    #     mel = self.mel_norm(mel)
+
+    #     if mel.isnan().any():
+    #         print("mel being nan detected")
+    #         return None
+    #     return mel
 
 
-    def wav2mel(self, wav):
-        with torch.no_grad():
-            mel = self.to_spec(wav).unsqueeze(1) # [BS, 1, 128, 256]
+    def mel_norm(self, mel):
         eps = torch.finfo(mel.dtype).eps
         mel = (mel + eps).log()
         mel = self.pre_norm(mel)
         mel = self.post_norm(mel)
-
-        if mel.isnan().any():
-            print("mel being nan detected")
-            return None
         return mel
 
 
@@ -106,26 +105,35 @@ class ADSRLightningModule(pl.LightningModule):
 
 
     def _prepare_log_dict(self, prefix, total_loss, individual_losses):
-        """Pre-allocate and fill logging dictionary efficiently."""
-        log_dict = getattr(self, f'_{prefix}_log_dict')
-        log_dict.clear()  # Reuse the same dict
+        """Ultra-efficient logging dictionary preparation."""
+        if prefix == 'train':
+            log_dict = self._train_log_dict
+            keys = self._train_keys
+        else:  # val
+            log_dict = self._val_log_dict
+            keys = self._val_keys
 
+        # Direct assignment without clearing
         log_dict[f'{prefix}_loss'] = total_loss
-        for i, param_name in enumerate(self.adsr_params):
-            log_dict[f'{prefix}_{param_name}_loss'] = individual_losses[i]
+        for i, key in enumerate(keys):
+            log_dict[key] = individual_losses[i]
 
         return log_dict
 
 
 
     def training_step(self, batch, batch_idx):
-        wav, adsr_gt = batch
+        # wav, adsr_gt = batch
+        mel, adsr_gt = batch
+        mel = self.mel_norm(mel)
 
         # Ensure wav is on the correct device
-        wav = wav.to(self.device)
-        adsr_gt = adsr_gt.to(self.device)
+        # wav = wav.to(self.device)
+        adsr_gt = adsr_gt.to(self.device, non_blocking=True)
+        mel = mel.to(self.device, non_blocking=True)
 
-        mel = self.wav2mel(wav)
+        if len(mel.size()) == 3:
+            mel = mel.unsqueeze(1)
 
         # Forward pass
         adsr_pred = self.forward(mel)
@@ -136,21 +144,25 @@ class ADSRLightningModule(pl.LightningModule):
         # Efficient logging
         log_dict = self._prepare_log_dict('train', total_loss, individual_losses)
 
-        # Batch log all metrics at once
-        self.log_dict(log_dict, on_step=True, on_epoch=True, prog_bar=True)
+        # Reduced logging frequency for better performance
+        self.log_dict(log_dict, on_step=False, on_epoch=True, prog_bar=False)
 
         return total_loss
 
 
 
     def validation_step(self, batch, batch_idx):
-        wav, adsr_gt = batch
+        # wav, adsr_gt = batch
+        mel, adsr_gt = batch
+        mel = self.mel_norm(mel)
 
         # Ensure wav is on the correct device
-        wav = wav.to(self.device)
-        adsr_gt = adsr_gt.to(self.device)
+        # wav = wav.to(self.device)
+        adsr_gt = adsr_gt.to(self.device, non_blocking=True)
+        mel = mel.to(self.device, non_blocking=True)
 
-        mel = self.wav2mel(wav)
+        if len(mel.size()) == 3:
+            mel = mel.unsqueeze(1)
 
         # Forward pass
         adsr_pred = self.forward(mel)
@@ -161,8 +173,8 @@ class ADSRLightningModule(pl.LightningModule):
         # Efficient logging
         log_dict = self._prepare_log_dict('val', total_loss, individual_losses)
 
-        # Batch log all metrics at once
-        self.log_dict(log_dict, on_step=True, on_epoch=True, prog_bar=True)
+        # Reduced logging frequency for better performance
+        self.log_dict(log_dict, on_step=False, on_epoch=True, prog_bar=False)
 
         return total_loss
 

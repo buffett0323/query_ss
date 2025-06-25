@@ -6,7 +6,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pathlib import Path
 
 from module import ADSRLightningModule
-from dataset import ADSRDataModule
+from dataset import Mel_ADSRDataModule
 
 
 def load_config(config_path: str) -> dict:
@@ -47,7 +47,7 @@ def main(config):
 
     # Initialize Lightning module and data module
     model = ADSRLightningModule(config)
-    data_module = ADSRDataModule(config)
+    data_module = Mel_ADSRDataModule(config)
 
     # Setup callbacks
     callbacks = []
@@ -105,5 +105,5 @@ def main(config):
 
 if __name__ == "__main__":
     # Load configuration
-    config = load_config('configs/config_spv.yaml')
+    config = load_config('configs/config_mel.yaml')
     main(config)
