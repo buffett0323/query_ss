@@ -53,12 +53,19 @@ class BYOLALearner(pl.LightningModule):
     def forward(self, images1, images2):
         return self.learner(images1, images2)
 
-    def training_step(self, specs, batch_idx):
+    def training_step(self, batch, batch_idx):
         def to_np(A): return [a.cpu().numpy() for a in A]
+
+        # Unpack batch - now includes file paths
+        if len(batch) == 4:
+            spec1, spec2, file_path1, file_path2 = batch
+        else:
+            # Fallback for backward compatibility
+            spec1, spec2 = batch
+            file_path1, file_path2 = None, None
 
         # Move both specs to device at once and combine operations
         device = self.device
-        spec1, spec2 = specs
         spec1, spec2 = spec1.to(device), spec2.to(device)
 
         # Combine log operations and avoid redundant concatenations
@@ -90,6 +97,12 @@ class BYOLALearner(pl.LightningModule):
         # Log statistics
         for k, v in {'mb': mb, 'sb': sb, 'ma': ma, 'sa': sa}.items():
             self.log(k, float(v), prog_bar=True, on_step=False, on_epoch=True)
+        
+        # Optionally log file paths for debugging (only for first batch)
+        if batch_idx == 0 and file_path1 is not None:
+            self.log('sample_file1', file_path1[0] if isinstance(file_path1, list) else file_path1, prog_bar=False, on_step=True, on_epoch=False)
+            self.log('sample_file2', file_path2[0] if isinstance(file_path2, list) else file_path2, prog_bar=False, on_step=True, on_epoch=False)
+        
         return loss
 
     def configure_optimizers(self):

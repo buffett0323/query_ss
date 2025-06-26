@@ -7,6 +7,7 @@ data_dir: ${path}/rendered_adsr_dataset_npy_new_mel
 checkpoint_folder: ${path}/adsr_ckpt
 save_dir: ${path}/adsr_training_configs
 h5_path: ${path}/adsr_h5/adsr_new_mel.h5
+ckpt_path: ${path}/adsr_ckpt/last.ckpt
 
 # Training parameters.
 seed: 42

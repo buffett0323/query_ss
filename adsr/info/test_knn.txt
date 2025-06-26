@@ -1,0 +1,137 @@
+=== KNN Evaluation Results ===
+
+=== Sample 1 ===
+Query file: b'ENV_0_T101_C1_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T101_C1_lead_mel.npy' (similarity: 2.7186)
+  2. b'ENV_123_T101_C1_keys_mel.npy' (similarity: 2.7136)
+  3. b'ENV_165_T101_C1_keys_mel.npy' (similarity: 2.7136)
+  4. b'ENV_170_T101_C1_keys_mel.npy' (similarity: 2.7134)
+  5. b'ENV_134_T101_C1_keys_mel.npy' (similarity: 2.7128)
+
+=== Sample 2 ===
+Query file: b'ENV_0_T101_C2_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T101_C2_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_170_T101_C2_keys_mel.npy' (similarity: 2.7122)
+  3. b'ENV_123_T101_C2_keys_mel.npy' (similarity: 2.7120)
+  4. b'ENV_134_T101_C2_keys_mel.npy' (similarity: 2.7116)
+  5. b'ENV_165_T101_C2_keys_mel.npy' (similarity: 2.7112)
+
+=== Sample 3 ===
+Query file: b'ENV_0_T101_C3_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T101_C3_lead_mel.npy' (similarity: 2.7182)
+  2. b'ENV_170_T101_C3_keys_mel.npy' (similarity: 2.7137)
+  3. b'ENV_165_T101_C3_keys_mel.npy' (similarity: 2.7124)
+  4. b'ENV_134_T101_C3_keys_mel.npy' (similarity: 2.7118)
+  5. b'ENV_123_T101_C3_keys_mel.npy' (similarity: 2.7117)
+
+=== Sample 4 ===
+Query file: b'ENV_0_T101_C4_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T101_C4_lead_mel.npy' (similarity: 2.7184)
+  2. b'ENV_123_T101_C4_keys_mel.npy' (similarity: 2.7141)
+  3. b'ENV_170_T101_C4_keys_mel.npy' (similarity: 2.7134)
+  4. b'ENV_120_T101_C4_keys_mel.npy' (similarity: 2.7128)
+  5. b'ENV_134_T101_C4_keys_mel.npy' (similarity: 2.7126)
+
+=== Sample 5 ===
+Query file: b'ENV_0_T101_C5_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T101_C5_lead_mel.npy' (similarity: 2.7182)
+  2. b'ENV_170_T101_C5_keys_mel.npy' (similarity: 2.7154)
+  3. b'ENV_12_T101_C5_lead_mel.npy' (similarity: 2.7144)
+  4. b'ENV_123_T101_C5_keys_mel.npy' (similarity: 2.7141)
+  5. b'ENV_165_T101_C5_keys_mel.npy' (similarity: 2.7141)
+
+=== Sample 6 ===
+Query file: b'ENV_0_T101_C6_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T101_C6_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_170_T101_C6_keys_mel.npy' (similarity: 2.7165)
+  3. b'ENV_123_T101_C6_keys_mel.npy' (similarity: 2.7159)
+  4. b'ENV_12_T101_C6_lead_mel.npy' (similarity: 2.7156)
+  5. b'ENV_115_T101_C6_keys_mel.npy' (similarity: 2.7153)
+
+=== Sample 7 ===
+Query file: b'ENV_0_T105_C1_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T105_C1_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_170_T105_C1_keys_mel.npy' (similarity: 2.7165)
+  3. b'ENV_123_T105_C1_keys_mel.npy' (similarity: 2.7155)
+  4. b'ENV_115_T105_C1_keys_mel.npy' (similarity: 2.7152)
+  5. b'ENV_134_T105_C1_keys_mel.npy' (similarity: 2.7151)
+
+=== Sample 8 ===
+Query file: b'ENV_0_T105_C2_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T105_C2_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_170_T105_C2_keys_mel.npy' (similarity: 2.7148)
+  3. b'ENV_123_T105_C2_keys_mel.npy' (similarity: 2.7143)
+  4. b'ENV_115_T105_C2_keys_mel.npy' (similarity: 2.7140)
+  5. b'ENV_120_T105_C2_keys_mel.npy' (similarity: 2.7139)
+
+=== Sample 9 ===
+Query file: b'ENV_0_T105_C3_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T105_C3_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_123_T105_C3_keys_mel.npy' (similarity: 2.7145)
+  3. b'ENV_170_T105_C3_keys_mel.npy' (similarity: 2.7141)
+  4. b'ENV_115_T105_C3_keys_mel.npy' (similarity: 2.7140)
+  5. b'ENV_120_T105_C3_keys_mel.npy' (similarity: 2.7128)
+
+=== Sample 10 ===
+Query file: b'ENV_0_T105_C4_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T105_C4_lead_mel.npy' (similarity: 2.7182)
+  2. b'ENV_170_T105_C4_keys_mel.npy' (similarity: 2.7138)
+  3. b'ENV_115_T105_C4_keys_mel.npy' (similarity: 2.7135)
+  4. b'ENV_120_T105_C4_keys_mel.npy' (similarity: 2.7123)
+  5. b'ENV_123_T105_C4_keys_mel.npy' (similarity: 2.7121)
+
+=== Sample 65 ===
+Query file: b'ENV_0_T120_C5_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T120_C5_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_171_T120_C5_keys_mel.npy' (similarity: 2.7139)
+  3. b'ENV_115_T120_C5_keys_mel.npy' (similarity: 2.7134)
+  4. b'ENV_120_T120_C5_keys_mel.npy' (similarity: 2.7119)
+  5. b'ENV_133_T120_C5_keys_mel.npy' (similarity: 2.7117)
+
+=== Sample 129 ===
+Query file: b'ENV_0_T148_C1_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T148_C1_lead_mel.npy' (similarity: 2.7182)
+  2. b'ENV_115_T148_C1_keys_mel.npy' (similarity: 2.7152)
+  3. b'ENV_120_T148_C1_keys_mel.npy' (similarity: 2.7146)
+  4. b'ENV_137_T148_C1_keys_mel.npy' (similarity: 2.7132)
+  5. b'ENV_113_T148_C1_keys_mel.npy' (similarity: 2.7099)
+
+=== Sample 193 ===
+Query file: b'ENV_0_T169_C6_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T169_C6_lead_mel.npy' (similarity: 2.7181)
+  2. b'ENV_12_T169_C6_lead_mel.npy' (similarity: 2.7135)
+  3. b'ENV_171_T169_C6_keys_mel.npy' (similarity: 2.7131)
+  4. b'ENV_166_T169_C6_keys_mel.npy' (similarity: 2.7113)
+  5. b'ENV_160_T169_C6_keys_mel.npy' (similarity: 2.7108)
+
+=== Sample 257 ===
+Query file: b'ENV_0_T187_C5_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T187_C5_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_171_T187_C5_keys_mel.npy' (similarity: 2.7165)
+  3. b'ENV_134_T187_C5_keys_mel.npy' (similarity: 2.7149)
+  4. b'ENV_115_T187_C5_keys_mel.npy' (similarity: 2.7133)
+  5. b'ENV_137_T187_C5_keys_mel.npy' (similarity: 2.7127)
+
+=== Sample 321 ===
+Query file: b'ENV_0_T20_C4_lead_mel.npy'
+Top 5 nearest neighbors:
+  1. b'ENV_0_T20_C4_lead_mel.npy' (similarity: 2.7183)
+  2. b'ENV_12_T20_C4_lead_mel.npy' (similarity: 2.7133)
+  3. b'ENV_133_T20_C4_keys_mel.npy' (similarity: 2.7118)
+  4. b'ENV_171_T20_C4_keys_mel.npy' (similarity: 2.7118)
+  5. b'ENV_123_T20_C4_keys_mel.npy' (similarity: 2.7106)
+

@@ -9,6 +9,7 @@ import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 import librosa
+from tqdm import tqdm
 
 class ADSR_h5_Dataset(Dataset):
     def __init__(
@@ -66,7 +67,7 @@ class ADSR_h5_Dataset(Dataset):
     def _precompute_pairs(self):
         """Pre-compute random pairs for faster access"""
         self.pair_indices = []
-        for i in range(len(self.mel_specs)):
+        for i in tqdm(range(len(self.mel_specs))):
             env_id = int(self.env_ids[i])
             indices = self.env_id_to_indices[env_id]
             if len(indices) > 1:
@@ -105,12 +106,14 @@ class ADSR_h5_Dataset(Dataset):
     def __getitem__(self, index):
         # Get first mel spectrogram
         mel1 = self._get_cached_sample(index)
+        file_path1 = self.file_paths[index]
 
         # Get pre-computed pair
         pair_idx = self.pair_indices[index]
         mel2 = self._get_cached_sample(pair_idx)
+        file_path2 = self.file_paths[pair_idx]
 
-        return mel1, mel2
+        return mel1, mel2, file_path1, file_path2
 
     def __del__(self):
         if hasattr(self, 'h5_file'):
@@ -199,15 +202,9 @@ class ADSRDataset(Dataset):
 
 
 if __name__ == "__main__":
-    path = "/mnt/gestalt/home/buffett/adsr_h5/adsr_mel.h5"
+    path = "/mnt/gestalt/home/buffett/adsr_h5/adsr_new_mel.h5"
     dataset = ADSR_h5_Dataset(h5_path=path)
     print(dataset.get_env_stats())
-    a1, a2 = dataset[0]
-    print("a1.shape, a2.shape", a1.shape, a2.shape)
+    a1, a2, f1, f2 = dataset[0]
+    print("a1.shape, a2.shape, f1, f2", a1.shape, a2.shape, f1, f2)
 
-    metadata_dir = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy"
-    mel_dir = "/mnt/gestalt/home/buffett/rendered_adsr_dataset_npy_new_mel"
-    dataset = ADSRDataset(metadata_dir=metadata_dir, data_dir=mel_dir)
-    mel1, mel2 = dataset[0]
-
-    print("mel1.shape, mel2.shape", mel1.shape, mel2.shape)
