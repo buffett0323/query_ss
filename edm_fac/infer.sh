@@ -11,9 +11,9 @@
 #     --amount 10 \
 
 python inference_conversion.py \
-    --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0608/ckpt/checkpoint_latest.pt \
+    --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0608/ckpt/checkpoint_655000.pt \
     --config configs/config.yaml \
-    --device cuda:3 \
+    --device cuda:0 \
     --input_dir /home/buffett/dataset/EDM_FAC_DATA/rendered_audio_new/lead_out/ \
     --output_dir testing_audio/ \
     --midi_dir /home/buffett/dataset/EDM_FAC_DATA/single_note_midi/evaluation/midi/ \
