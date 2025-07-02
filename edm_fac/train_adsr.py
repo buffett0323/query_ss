@@ -19,7 +19,7 @@ from audiotools import ml
 from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
-from dataset import EDM_ADSR_Paired_Dataset #, EDM_Unpaired_Dataset
+from dataset import EDM_ADSR_Paired_Dataset, EDM_ADSR_Val_Paired_Dataset
 from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
 import dac
 
@@ -33,9 +33,9 @@ class Wrapper:
         args,
         accelerator,
         val_paired_data,
-        val_unpaired_data
     ):
         assert args.max_note - args.min_note + 1 == 88, "Pitch numbers must be 88"
+        self.disentanglement = ["timbre", "content", "adsr"]
         self.generator = dac.model.MyDAC(
             encoder_dim=args.encoder_dim,
             encoder_rates=args.encoder_rates,
@@ -44,6 +44,7 @@ class Wrapper:
             decoder_rates=args.decoder_rates,
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
+            adsr_classes=args.adsr_classes,
             pitch_nums=args.max_note - args.min_note + 1, # 88
         ).to(accelerator.device)
 
@@ -56,21 +57,22 @@ class Wrapper:
 
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
-        # self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
-        self.mel_loss = MelSpectrogramLoss(
-            n_mels=[5, 10, 20, 40, 80, 160, 320],
-            window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
-            mel_fmin=[0, 0, 0, 0, 0, 0, 0],
-            mel_fmax=[None, None, None, None, None, None, None],
-            pow=1.0,
-            mag_weight=0.0,
-        ).to(accelerator.device)
+        self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
+        # self.mel_loss = MelSpectrogramLoss(
+        #     n_mels=[5, 10, 20, 40, 80, 160, 320],
+        #     window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
+        #     mel_fmin=[0, 0, 0, 0, 0, 0, 0],
+        #     mel_fmax=[None, None, None, None, None, None, None],
+        #     pow=1.0,
+        #     mag_weight=0.0,
+        # ).to(accelerator.device)
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
 
         # ✅ Switched both to appropriate loss functions for classification
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # Multi-label for pitch
+        self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Loss lambda parameters
         self.params = {
@@ -81,13 +83,13 @@ class Wrapper:
             "vq/codebook_loss": 1.0,
             "pred/timbre_loss": 1.0,
             "pred/content_loss": 10.0,
+            "pred/adsr_loss": 5.0, # 1.0,
         }
-
         self.val_paired_data = val_paired_data
-        self.val_unpaired_data = val_unpaired_data
+
 
     @staticmethod
-    def timbre_acc(pred_logits, target_labels):
+    def supervised_acc(pred_logits, target_labels):
         """
         pred_logits: [B, num_classes]
         target_labels: [B]
@@ -106,65 +108,42 @@ def save_samples(args, accelerator, tracker_step, wrapper):
     batch = wrapper.val_paired_data.collate(samples)
     batch = util.prepare_batch(batch, accelerator.device)
 
-    out = wrapper.generator.conversion(
-        audio_data=batch['content_match'].audio_data,
-        timbre_match=batch['timbre_converted'].audio_data,
-    )
-
-    recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
-    recons_gt = AudioSignal(batch['target'].audio_data.cpu(), args.sample_rate)
-    ref_content = AudioSignal(batch['content_match'].audio_data.cpu(), args.sample_rate)
-    ref_timbre = AudioSignal(batch['timbre_converted'].audio_data.cpu(), args.sample_rate)
+    # Get original & reference audio
+    orig_audio = AudioSignal(batch['orig_audio'].audio_data.cpu(), args.sample_rate)
+    ref_audio = AudioSignal(batch['ref_audio'].audio_data.cpu(), args.sample_rate)
 
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}'), exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'conv'), exist_ok=True)
 
 
-    # Conversion
-    for i, sample_idx in enumerate(args.val_idx):
-        single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
-        single_recon_gt = AudioSignal(recons_gt.audio_data[i], args.sample_rate)
-        single_ref_content = AudioSignal(ref_content.audio_data[i], args.sample_rate)
-        single_ref_timbre = AudioSignal(ref_timbre.audio_data[i], args.sample_rate)
+    for disentanglement in wrapper.disentanglement:
+        os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv'), exist_ok=True)
+        out = wrapper.generator.conversion(
+            orig_audio=batch['orig_audio'].audio_data,
+            ref_audio=batch['ref_audio'].audio_data,
+            convert_type=[disentanglement],
+        )
 
-        recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'conv', f'{sample_idx}_recon.wav')
-        recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'conv', f'{sample_idx}_gt.wav')
-        ref_content_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'conv', f'{sample_idx}_ref_content.wav')
-        ref_timbre_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'conv', f'{sample_idx}_ref_timbre.wav')
-
-        single_recon.write(recon_path)
-        single_recon_gt.write(recon_gt_path)
-        single_ref_content.write(ref_content_path)
-        single_ref_timbre.write(ref_timbre_path)
+        recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
+        recons_gt = AudioSignal(batch[f'target_{disentanglement}'].audio_data.cpu(), args.sample_rate)
 
 
-    """ Unpaired data validation """
-    samples = [wrapper.val_unpaired_data[idx] for idx in args.val_idx]
-    batch = wrapper.val_unpaired_data.collate(samples)
-    batch = util.prepare_batch(batch, accelerator.device)
-
-    out = wrapper.generator.conversion(
-        audio_data=batch['content_match'].audio_data,
-        timbre_match=batch['timbre_converted'].audio_data,
-    )
-
-    recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
-    recons_gt = AudioSignal(batch['target'].audio_data.cpu(), args.sample_rate)
-
-    os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'recon'), exist_ok=True)
-
-    # Reconstruction
-    for i, sample_idx in enumerate(args.val_idx):
-        single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
-        single_recon_gt = AudioSignal(recons_gt.audio_data[i], args.sample_rate)
-
-        recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'recon', f'{sample_idx}_recon.wav')
-        recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', 'recon', f'{sample_idx}_gt.wav')
-
-        single_recon.write(recon_path)
-        single_recon_gt.write(recon_gt_path)
+        # Conversion & Save
+        for i, sample_idx in enumerate(args.val_idx):
+            single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
+            single_recon_gt = AudioSignal(recons_gt.audio_data[i], args.sample_rate)
+            single_orig = AudioSignal(orig_audio.audio_data[i], args.sample_rate)
+            single_ref = AudioSignal(ref_audio.audio_data[i], args.sample_rate)
 
 
+            recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_recon.wav')
+            recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_gt.wav')
+            orig_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_orig.wav')
+            ref_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_{disentanglement}_ref.wav')
+
+            single_recon.write(recon_path)
+            single_recon_gt.write(recon_gt_path)
+            single_orig.write(orig_path)
+            single_ref.write(ref_path)
 
 
 
@@ -190,7 +169,7 @@ def main(args, accelerator):
     )
 
     # Build datasets and dataloaders
-    train_paired_data = EDM_Paired_Dataset(
+    train_paired_data = EDM_ADSR_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -202,16 +181,7 @@ def main(args, accelerator):
         split="train",
     )
 
-    train_unpaired_data = EDM_Unpaired_Dataset(
-        beatport_path=args.beatport_path,
-        data_path=args.data_path,
-        duration=args.duration,
-        total_duration=args.total_duration,
-        sample_rate=args.sample_rate,
-        split="train",
-    )
-
-    val_paired_data = EDM_Paired_Dataset(
+    val_paired_data = EDM_ADSR_Val_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -223,15 +193,7 @@ def main(args, accelerator):
         split="evaluation",
     )
 
-    val_unpaired_data = EDM_Unpaired_Dataset(
-        beatport_path=args.beatport_path,
-        data_path=args.data_path,
-        duration=args.duration,
-        total_duration=args.total_duration,
-        sample_rate=args.sample_rate,
-        split="evaluation",
-    )
-    wrapper = Wrapper(args, accelerator, val_paired_data, val_unpaired_data)
+    wrapper = Wrapper(args, accelerator, val_paired_data)
 
 
     # Load checkpoint if exists
@@ -250,15 +212,7 @@ def main(args, accelerator):
         batch_size=args.batch_size,
         collate_fn=train_paired_data.collate,
     )
-    train_unpaired_loader = accelerator.prepare_dataloader(
-        train_unpaired_data,
-        start_idx=tracker.step * args.batch_size,
-        num_workers=args.num_workers,
-        batch_size=args.batch_size,
-        collate_fn=train_unpaired_data.collate,
-    )
     train_paired_loader = get_infinite_loader(train_paired_loader)
-    train_unpaired_loader = get_infinite_loader(train_unpaired_loader)
 
     val_paired_loader = accelerator.prepare_dataloader(
         val_paired_data,
@@ -267,13 +221,6 @@ def main(args, accelerator):
         batch_size=args.batch_size,
         collate_fn=val_paired_data.collate,
     )
-    val_unpaired_loader = accelerator.prepare_dataloader(
-        val_unpaired_data,
-        start_idx=0,
-        num_workers=args.num_workers,
-        batch_size=args.batch_size,
-        collate_fn=val_unpaired_data.collate,
-    )
 
 
     # Trackers settings
@@ -281,12 +228,6 @@ def main(args, accelerator):
     train_step = tracker.log("Train", "value", history=False)(
         tracker.track("Train", args.num_iters, completed=tracker.step)(train_step)
     )
-    # train_step_paired = tracker.log("Train/Paired", "value", history=False)(
-    #     tracker.track("Train/Paired", args.num_iters, completed=tracker.step)(train_step_paired)
-    # )
-    # train_step_unpaired = tracker.log("Train/Unpaired", "value", history=False)(
-    #     tracker.track("Train/Unpaired", args.num_iters, completed=tracker.step)(train_step_unpaired)
-    # )
     validate = tracker.track("Validation", int(args.num_iters / args.validate_interval))(validate)
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
     save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
@@ -295,8 +236,7 @@ def main(args, accelerator):
     # Loop
     with tracker.live:
         for tracker.step, paired_batch in enumerate(train_paired_loader, start=tracker.step):
-            unpaired_batch = next(train_unpaired_loader)
-            train_step(args, accelerator, paired_batch, unpaired_batch, wrapper)
+            train_step(args, accelerator, paired_batch, wrapper)
 
             # Save Checkpoint
             if tracker.step % args.save_interval == 0:
@@ -304,7 +244,7 @@ def main(args, accelerator):
 
             # Validation
             if tracker.step % args.validate_interval == 0:
-                validate(args, accelerator, val_paired_loader, val_unpaired_loader, wrapper)
+                validate(args, accelerator, val_paired_loader, wrapper)
 
             # Save validation samples
             if tracker.step % args.sample_freq == 0:
@@ -316,18 +256,14 @@ def main(args, accelerator):
 
 # @timer
 @torch.no_grad()
-def validate(args, accelerator, val_paired_loader, val_unpaired_loader, wrapper):
+def validate(args, accelerator, val_paired_loader, wrapper):
     output = {}
+
     for i, paired_batch in enumerate(val_paired_loader):
-        output = validate_step_paired(args, accelerator, paired_batch, wrapper)
+        for disentanglement in wrapper.disentanglement:
+            output = validate_step(args, accelerator, paired_batch, wrapper, disentanglement)
         if i >= args.validate_steps:
             break
-
-    for i, unpaired_batch in enumerate(val_unpaired_loader):
-        output = validate_step_unpaired(args, accelerator, unpaired_batch, wrapper)
-        if i >= args.validate_steps:
-            break
-
 
     if hasattr(wrapper.optimizer_g, "consolidate_state_dict"):
         wrapper.optimizer_g.consolidate_state_dict()
@@ -338,16 +274,17 @@ def validate(args, accelerator, val_paired_loader, val_unpaired_loader, wrapper)
 
 # @timer
 @torch.no_grad()
-def validate_step_paired(args, accelerator, batch, wrapper):
+def validate_step(args, accelerator, batch, wrapper, disentanglement):
     wrapper.generator.eval()
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
 
-    target_audio = batch['target']
+    target_audio = batch[f'target_{disentanglement}']
     with torch.no_grad():
         out = wrapper.generator.conversion(
-            audio_data=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_converted'].audio_data,
+            orig_audio=batch['orig_audio'].audio_data,
+            ref_audio=batch['ref_audio'].audio_data,
+            convert_type=[disentanglement],
         )
     output = {}
     recons = AudioSignal(out["audio"], args.sample_rate)
@@ -356,48 +293,21 @@ def validate_step_paired(args, accelerator, batch, wrapper):
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
     # Timbre prediction loss and accuracy
-    # output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
-    # output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
-    # output["pred/timbre_acc"] = wrapper.timbre_acc(out["pred_timbre_id"], batch['timbre_id'])
-    # output["pred/content_acc"] = wrapper.content_acc(out["pred_pitch"], batch['pitch'])
+    pitch_gt = batch['ref_pitch'] if disentanglement == "content" else batch['orig_pitch']
+    timbre_gt = batch['ref_timbre'] if disentanglement == "timbre" else batch['orig_timbre']
+    adsr_gt = batch['ref_adsr'] if disentanglement == "adsr" else batch['orig_adsr']
+    output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch_gt)
+    output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_gt)
+    output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_gt)
 
     return {k: v for k, v in sorted(output.items())}
 
 
-# @timer
-@torch.no_grad()
-def validate_step_unpaired(args, accelerator, batch, wrapper):
-    wrapper.generator.eval()
-    wrapper.discriminator.eval()
-    batch = util.prepare_batch(batch, accelerator.device)
-
-    target_audio = batch['target']
-
-    with torch.no_grad():
-        out = wrapper.generator.conversion(
-            audio_data=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_converted'].audio_data,
-        )
-    output = {}
-    recons = AudioSignal(out["audio"], args.sample_rate)
-    output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
-    output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
-    output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-
-    # Timbre prediction loss and accuracy
-    # output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
-    # output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
-    # output["pred/timbre_acc"] = wrapper.timbre_acc(out["pred_timbre_id"], batch['timbre_id'])
-    # output["pred/content_acc"] = wrapper.content_acc(out["pred_pitch"], batch['pitch'])
-
-    return {k: v for k, v in sorted(output.items())}
-
 
 # @timer
-def train_step(args, accelerator, paired_batch, unpaired_batch, wrapper):
+def train_step(args, accelerator, paired_batch, wrapper):
     output = {}
     output.update(train_step_paired(args, accelerator, paired_batch, wrapper))
-    output.update(train_step_unpaired(args, accelerator, unpaired_batch, wrapper))
     return output
 
 
@@ -416,7 +326,8 @@ def train_step_paired(args, accelerator, batch, wrapper):
         out = wrapper.generator(
             audio_data=target_audio.audio_data,
             content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_converted'].audio_data,
+            timbre_match=batch['timbre_match'].audio_data,
+            adsr_match=batch['adsr_match'].audio_data,
         )
         output = {}
         recons = AudioSignal(out["audio"], args.sample_rate)
@@ -438,79 +349,15 @@ def train_step_paired(args, accelerator, batch, wrapper):
         output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
         output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
-        output["vq/commitment_loss"] = out["vq/commitment_loss"]
-        output["vq/codebook_loss"] = out["vq/codebook_loss"]
+        output["vq/cont_commitment_loss"] = out["vq/cont_commitment_loss"]
+        output["vq/cont_codebook_loss"] = out["vq/cont_codebook_loss"]
+        output["vq/adsr_commitment_loss"] = out["vq/adsr_commitment_loss"]
+        output["vq/adsr_codebook_loss"] = out["vq/adsr_codebook_loss"]
 
-        # # Added predictor losses
-        # output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
-        # output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
-
-        # Total Loss
-        output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
-
-    # Optimizer
-    wrapper.optimizer_g.zero_grad()
-    accelerator.backward(output["loss_gen_all"])
-    accelerator.scaler.unscale_(wrapper.optimizer_g)
-    torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
-    accelerator.step(wrapper.optimizer_g)
-    wrapper.scheduler_g.step()
-    accelerator.update()
-
-    # Logging
-    # output["other/learning_rate"] = wrapper.optimizer_g.param_groups[0]["lr"]
-    # output["other/grad_norm_g"] = grad_norm_g
-    # output["other/grad_norm_d"] = grad_norm_d
-    # output["other/time_per_step"] = time.time() - train_start_time
-
-    return {k: v for k, v in sorted(output.items())}
-
-
-# @timer
-def train_step_unpaired(args, accelerator, batch, wrapper):
-
-    time.time()
-    wrapper.generator.train()
-    wrapper.discriminator.train()
-
-    # Load Batch Items
-    batch = util.prepare_batch(batch, accelerator.device)
-    target_audio = batch['target']
-
-    # DAC Model
-    with accelerator.autocast():
-        out = wrapper.generator(
-            audio_data=target_audio.audio_data,
-            content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_converted'].audio_data,
-        )
-        output = {}
-        recons = AudioSignal(out["audio"], args.sample_rate)
-
-        # Discriminator Losses
-        output["adv/disc_loss"] = wrapper.gan_loss.discriminator_loss(recons, target_audio)
-
-    wrapper.optimizer_d.zero_grad()
-    accelerator.backward(output["adv/disc_loss"])
-    accelerator.scaler.unscale_(wrapper.optimizer_d)
-    torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
-    accelerator.step(wrapper.optimizer_d)
-    wrapper.scheduler_d.step()
-
-
-    # Generator Losses
-    with accelerator.autocast():
-        output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
-        output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
-        output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-
-        output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
-        output["vq/commitment_loss"] = out["vq/commitment_loss"]
-        output["vq/codebook_loss"] = out["vq/codebook_loss"]
-
-        # # Added predictor losses
-        # output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
-        # output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
+        # Added predictor losses
+        output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
+        output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
+        output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], batch['adsr_id'])
 
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
@@ -531,13 +378,14 @@ def train_step_unpaired(args, accelerator, batch, wrapper):
     # output["other/time_per_step"] = time.time() - train_start_time
 
     return {k: v for k, v in sorted(output.items())}
+
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config.yaml")
+    config = yaml_config_hook("configs/config_adsr.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()

@@ -1,6 +1,6 @@
 path: /mnt/gestalt/home/buffett # NTU
 # path: /home/buffett/dataset # Sinica
-postfix: "0610"
+postfix: "0702_adsr"
 
 wandb_dir: ${path}/EDM_FAC_LOG/${postfix}
 save_path: ${path}/EDM_FAC_LOG/${postfix}
@@ -8,10 +8,10 @@ ckpt_path: ${path}/EDM_FAC_LOG/${postfix}/ckpt
 data_path: ${path}/adsr/rendered_t_adsr_c #${path}/EDM_FAC_DATA
 root_path: ${path}/adsr/rendered_t_adsr_c #${path}/EDM_FAC_DATA
 midi_path: ${path}/EDM_FAC_DATA/single_note_midi
-beatport_path: ${path}/EDM_FAC_DATA/beatport
+# beatport_path: ${path}/EDM_FAC_DATA/beatport
 
 
-batch_size: 4 #4
+batch_size: 1 #4
 save_interval: 5000
 sample_freq: 1000
 validate_interval: 1000
@@ -19,7 +19,9 @@ validate_steps: 100
 num_iters: 1000000 #250000
 seed: 42
 val_idx: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-timbre_classes: 510
+timbre_classes: 428
+adsr_classes: 100
+# content_classes: 200
 resume: False
 
 
@@ -30,7 +32,6 @@ total_duration: 5
 sample_rate: 44100
 min_note: 21
 max_note: 108
-stems: ["lead"] #["lead", "pad", "bass", "keys", "pluck"]
 
 
 

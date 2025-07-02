@@ -97,12 +97,12 @@ class BYOLALearner(pl.LightningModule):
         # Log statistics
         for k, v in {'mb': mb, 'sb': sb, 'ma': ma, 'sa': sa}.items():
             self.log(k, float(v), prog_bar=True, on_step=False, on_epoch=True)
-        
+
         # Optionally log file paths for debugging (only for first batch)
         if batch_idx == 0 and file_path1 is not None:
             self.log('sample_file1', file_path1[0] if isinstance(file_path1, list) else file_path1, prog_bar=False, on_step=True, on_epoch=False)
             self.log('sample_file2', file_path2[0] if isinstance(file_path2, list) else file_path2, prog_bar=False, on_step=True, on_epoch=False)
-        
+
         return loss
 
     def configure_optimizers(self):

@@ -207,4 +207,3 @@ if __name__ == "__main__":
     print(dataset.get_env_stats())
     a1, a2, f1, f2 = dataset[0]
     print("a1.shape, a2.shape, f1, f2", a1.shape, a2.shape, f1, f2)
-
