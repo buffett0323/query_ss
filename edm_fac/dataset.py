@@ -57,7 +57,7 @@ class EDM_ADSR_Paired_Dataset(Dataset):
         self.paired_data = []  # Rendered data
         self._build_paired_index()
         print("Paired data:", len(self.paired_data))
-        print(self.metadata[0])
+        # print(self.metadata[0])
 
 
     def _preload_metadata(self):
@@ -252,11 +252,14 @@ class EDM_ADSR_Paired_Dataset(Dataset):
         return {
             'target': target_gt,
             'pitch': pitch_info,
+
             'timbre_id': timbre_id,
             'adsr_id': adsr_id,
+
             'content_match': content_match,
             'timbre_match': timbre_match,
             'adsr_match': adsr_match,
+
             'metadata': {
                 'target': {
                     'timbre_id': timbre_id,
@@ -339,7 +342,6 @@ class EDM_ADSR_Val_Paired_Dataset(Dataset):
         self.paired_data = []  # Rendered data
         self._build_paired_index()
         print("Paired data:", len(self.paired_data))
-        print(self.metadata[0])
 
 
     def _preload_metadata(self):
@@ -509,12 +511,14 @@ class EDM_ADSR_Val_Paired_Dataset(Dataset):
         return {
             'orig_audio': orig_audio,
             'ref_audio': ref_audio,
+
             'orig_pitch': orig_pitch,
             'ref_pitch': ref_pitch,
             'orig_timbre': timbre_id,
             'ref_timbre': ref_timbre_id,
             'orig_adsr': adsr_id,
             'ref_adsr': ref_adsr_id,
+
             'target_content': target_content,
             'target_timbre': target_timbre,
             'target_adsr': target_adsr,
@@ -1756,26 +1760,7 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    # train_paired_data = EDM_ADSR_Paired_Dataset(
-    #     root_path=args.root_path,
-    #     midi_path=args.midi_path,
-    #     data_path=args.data_path,
-    #     duration=args.duration,
-    #     sample_rate=args.sample_rate,
-    #     hop_length=args.hop_length,
-    #     min_note=args.min_note,
-    #     max_note=args.max_note,
-    #     split="train",
-    # )
-
-    # dt = train_paired_data[0]
-    # print(dt['target'].shape)
-    # print(dt['content_match'].shape)
-    # print(dt['timbre_match'].shape)
-    # print(dt['adsr_match'].shape)
-    # print(dt['metadata'])
-
-    val_paired_data = EDM_ADSR_Val_Paired_Dataset(
+    train_paired_data = EDM_ADSR_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
         data_path=args.data_path,
@@ -1784,24 +1769,40 @@ if __name__ == "__main__":
         hop_length=args.hop_length,
         min_note=args.min_note,
         max_note=args.max_note,
+        split="train",
+    )
+
+    dt = train_paired_data[0]
+    # print(dt['target'].shape)
+    # print(dt['content_match'].shape)
+    # print(dt['timbre_match'].shape)
+    # print(dt['adsr_match'].shape)
+    print(dt['metadata'])
+
+    val_paired_data = EDM_ADSR_Val_Paired_Dataset(
+        root_path=args.root_path,
+        midi_path=args.midi_path,
+        data_path=args.val_data_path,
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        hop_length=args.hop_length,
+        min_note=args.min_note,
+        max_note=args.max_note,
         split="evaluation",
     )
-    val_loader = build_dataloader(val_paired_data, batch_size=4, num_workers=8, split="evaluation")
 
-    for batch in tqdm(val_loader):
-        pass
 
-    # dt = val_paired_data[0]
+    dt1 = val_paired_data[0]
 
-    # print(dt['orig_audio'].shape)
-    # print(dt['ref_audio'].shape)
-    # print(dt['orig_pitch'].shape)
-    # print(dt['ref_pitch'].shape)
-    # print(dt['orig_timbre'])
-    # print(dt['ref_timbre'])
-    # print(dt['orig_adsr'])
-    # print(dt['ref_adsr'])
-    # print(dt['target_content'].shape)
-    # print(dt['target_timbre'].shape)
-    # print(dt['target_adsr'].shape)
-    # print(dt['metadata'])
+    # print(dt1['orig_audio'].shape)
+    # print(dt1['ref_audio'].shape)
+    # print(dt1['orig_pitch'].shape)
+    # print(dt1['ref_pitch'].shape)
+    # print(dt1['orig_timbre'])
+    # print(dt1['ref_timbre'])
+    # print(dt1['orig_adsr'])
+    # print(dt1['ref_adsr'])
+    # print(dt1['target_content'].shape)
+    # print(dt1['target_timbre'].shape)
+    # print(dt1['target_adsr'].shape)
+    print(dt1['metadata'])

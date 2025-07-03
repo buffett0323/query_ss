@@ -57,15 +57,15 @@ class Wrapper:
 
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
-        self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
-        # self.mel_loss = MelSpectrogramLoss(
-        #     n_mels=[5, 10, 20, 40, 80, 160, 320],
-        #     window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
-        #     mel_fmin=[0, 0, 0, 0, 0, 0, 0],
-        #     mel_fmax=[None, None, None, None, None, None, None],
-        #     pow=1.0,
-        #     mag_weight=0.0,
-        # ).to(accelerator.device)
+        # self.mel_loss = MelSpectrogramLoss().to(accelerator.device) # Change it to original state
+        self.mel_loss = MelSpectrogramLoss(
+            n_mels=[5, 10, 20, 40, 80, 160, 320],
+            window_lengths=[32, 64, 128, 256, 512, 1024, 2048],
+            mel_fmin=[0, 0, 0, 0, 0, 0, 0],
+            mel_fmax=[None, None, None, None, None, None, None],
+            pow=1.0,
+            mag_weight=0.0,
+        ).to(accelerator.device)
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
 
@@ -79,11 +79,13 @@ class Wrapper:
             "gen/mel-loss": 15.0,
             "adv/loss_feature": 2.0,
             "adv/loss_g": 1.0,
-            "vq/commitment_loss": 0.25,
-            "vq/codebook_loss": 1.0,
-            "pred/timbre_loss": 1.0,
-            "pred/content_loss": 10.0,
-            "pred/adsr_loss": 5.0, # 1.0,
+            "vq/cont_commitment_loss": 0.25,
+            "vq/cont_codebook_loss": 1.0,
+            "vq/adsr_commitment_loss": 0.25,
+            "vq/adsr_codebook_loss": 1.0,
+            # "pred/timbre_loss": 5.0,
+            # "pred/content_loss": 10.0,
+            # "pred/adsr_loss": 5.0, # 1.0,
         }
         self.val_paired_data = val_paired_data
 
@@ -184,7 +186,7 @@ def main(args, accelerator):
     val_paired_data = EDM_ADSR_Val_Paired_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
-        data_path=args.data_path,
+        data_path=args.val_data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
@@ -236,7 +238,7 @@ def main(args, accelerator):
     # Loop
     with tracker.live:
         for tracker.step, paired_batch in enumerate(train_paired_loader, start=tracker.step):
-            train_step(args, accelerator, paired_batch, wrapper)
+            train_step(args, accelerator, paired_batch, wrapper, tracker.step)
 
             # Save Checkpoint
             if tracker.step % args.save_interval == 0:
@@ -305,17 +307,22 @@ def validate_step(args, accelerator, batch, wrapper, disentanglement):
 
 
 # @timer
-def train_step(args, accelerator, paired_batch, wrapper):
+def train_step(args, accelerator, paired_batch, wrapper, current_iter):
     output = {}
-    output.update(train_step_paired(args, accelerator, paired_batch, wrapper))
+    output.update(train_step_paired(args, accelerator, paired_batch, wrapper, current_iter))
     return output
 
 
 # @timer
-def train_step_paired(args, accelerator, batch, wrapper):
+def train_step_paired(args, accelerator, batch, wrapper, current_iter):
     time.time()
     wrapper.generator.train()
-    wrapper.discriminator.train()
+
+    # Only train discriminator after discriminator_iter_start
+    if current_iter >= args.discriminator_iter_start:
+        wrapper.discriminator.train()
+    else:
+        wrapper.discriminator.eval()
 
     # Load Batch Items
     batch = util.prepare_batch(batch, accelerator.device)
@@ -332,15 +339,19 @@ def train_step_paired(args, accelerator, batch, wrapper):
         output = {}
         recons = AudioSignal(out["audio"], args.sample_rate)
 
-        # Discriminator Losses
-        output["adv/disc_loss"] = wrapper.gan_loss.discriminator_loss(recons, target_audio)
+        # Discriminator Losses - only compute and train if past discriminator_iter_start
+        if current_iter >= args.discriminator_iter_start:
+            output["adv/disc_loss"] = wrapper.gan_loss.discriminator_loss(recons, target_audio)
 
-    wrapper.optimizer_d.zero_grad()
-    accelerator.backward(output["adv/disc_loss"])
-    accelerator.scaler.unscale_(wrapper.optimizer_d)
-    torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
-    accelerator.step(wrapper.optimizer_d)
-    wrapper.scheduler_d.step()
+            wrapper.optimizer_d.zero_grad()
+            accelerator.backward(output["adv/disc_loss"])
+            accelerator.scaler.unscale_(wrapper.optimizer_d)
+            torch.nn.utils.clip_grad_norm_(wrapper.discriminator.parameters(), 10.0)
+            accelerator.step(wrapper.optimizer_d)
+            wrapper.scheduler_d.step()
+        else:
+            # Set discriminator loss to 0 when not training discriminator
+            output["adv/disc_loss"] = torch.tensor(0.0, device=accelerator.device)
 
     # Generator Losses
     with accelerator.autocast():
@@ -348,7 +359,14 @@ def train_step_paired(args, accelerator, batch, wrapper):
         output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
         output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
-        output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
+        # Only compute adversarial losses if discriminator is being trained
+        if current_iter >= args.discriminator_iter_start:
+            output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
+        else:
+            # Set adversarial losses to 0 when discriminator is not being trained
+            output["adv/loss_g"] = torch.tensor(0.0, device=accelerator.device)
+            output["adv/loss_feature"] = torch.tensor(0.0, device=accelerator.device)
+
         output["vq/cont_commitment_loss"] = out["vq/cont_commitment_loss"]
         output["vq/cont_codebook_loss"] = out["vq/cont_codebook_loss"]
         output["vq/adsr_commitment_loss"] = out["vq/adsr_commitment_loss"]

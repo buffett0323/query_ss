@@ -16,7 +16,7 @@ from dac.nn.layers import WNConvTranspose1d
 from dac.nn.quantize import ResidualVectorQuantize
 from .encodec import SConv1d, SConvTranspose1d, SLSTM
 from .transformer import TransformerEncoder, AttentionPooling
-from .moco import MoCo
+from .gradient_reversal import GradientReversal
 from alias_free_torch import Activation1d
 from einops.layers.torch import Rearrange
 
@@ -255,6 +255,17 @@ class Decoder(nn.Module):
         return self.model(x)
 
 
+class LatentCrossAttn(nn.Module):
+    def __init__(self, dim, heads=4):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(dim, heads, batch_first=True)
+        self.norm = nn.LayerNorm(dim)
+
+    def forward(self, q, kv):         # q: content (B,T,D), kv: adsr (B,T,D)
+        out, _ = self.attn(q, kv, kv)
+        return self.norm(out + q)
+
+
 class MyDAC(BaseModel, CodecMixin):
     def __init__(
         self,
@@ -282,6 +293,7 @@ class MyDAC(BaseModel, CodecMixin):
         self.decoder_rates = decoder_rates
         self.sample_rate = sample_rate
         self.latent_dim = latent_dim
+        self.sample_rate = sample_rate
 
         self.hop_length = np.prod(encoder_rates)
         self.encoder = Encoder(encoder_dim, encoder_rates, latent_dim, causal=causal, lstm=lstm)
@@ -327,7 +339,7 @@ class MyDAC(BaseModel, CodecMixin):
             lstm=lstm,
             causal=causal,
         )
-        self.sample_rate = sample_rate
+
         self.apply(init_weights)
 
         # Predictors
@@ -348,6 +360,7 @@ class MyDAC(BaseModel, CodecMixin):
         self.style_linear.bias.data[:latent_dim] = 1
         self.style_linear.bias.data[latent_dim:] = 0
         self.style_norm = nn.LayerNorm(latent_dim, elementwise_affine=False)
+        # self.latent_cross_attn = LatentCrossAttn(latent_dim)
 
 
     def preprocess(self, audio_data, sample_rate):
@@ -399,44 +412,37 @@ class MyDAC(BaseModel, CodecMixin):
         adsr_match_z = self.encoder(adsr_match)
 
         # Content match
-        cont_z, cont_codes, cont_latents, cont_commitment_loss, cont_codebook_loss = self.quantizer(
+        cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
             content_match_z, n_quantizers
         )
 
         # ADSR match
-        adsr_z, adsr_codes, adsr_latents, adsr_commitment_loss, adsr_codebook_loss = self.adsr_quantizer(
+        adsr_z, _, _, adsr_commitment_loss, adsr_codebook_loss = self.adsr_quantizer(
             adsr_match_z, n_quantizers
         )
 
         # Timbre match
-        timbre_match_z = timbre_match_z.transpose(1, 2)
-        timbre_match_z = self.transformer(timbre_match_z, None, None)
-        timbre_match_z = timbre_match_z.transpose(1, 2)
-        timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
-        # timbre_match_z = self.timbre_pooling(timbre_match_z) # Attention pooling
+        timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T)
+        timbre_match_z = self.transformer(timbre_match_z, None, None) # (B, T', D)
+        timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T')
+        timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
-
-        # Predictors
-        # 1. Content predictor
-        pred_pitch = self.pitch_predictor(cont_z)[0]
-
-        # 2. Timbre predictor
-        timbre_match_z = F.normalize(timbre_match_z, dim=-1)
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
-
-        # 3. ADSR predictor
-        pred_adsr_id = self.adsr_predictor(adsr_z)[0]
+        # Predictors (detached)
+        pred_pitch     = self.pitch_predictor(cont_z.detach())[0]
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.detach().unsqueeze(-1))[0]
+        pred_adsr_id   = self.adsr_predictor(adsr_z.detach())[0]
 
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
 
+        # Fuse content + ADSR
+        z = cont_z + adsr_z # (B, D, T)
 
-        # Apply conditional normalization
-        z = adsr_z + cont_z
-        z = z.transpose(1, 2)
-        z = self.style_norm(z)
-        z = z.transpose(1, 2)
+        # Conditional normalization
+        z = z.transpose(1, 2) # (B, T, D)
+        z = self.style_norm(z) # (B, T, D)
+        z = z.transpose(1, 2) # (B, D, T)
         z = z * gamma + beta
 
         x = self.decode(z)
@@ -449,6 +455,7 @@ class MyDAC(BaseModel, CodecMixin):
             "vq/cont_codebook_loss": cont_codebook_loss,
             "vq/adsr_commitment_loss": adsr_commitment_loss,
             "vq/adsr_codebook_loss": adsr_codebook_loss,
+
             "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
             "pred_adsr_id": pred_adsr_id,
@@ -498,35 +505,30 @@ class MyDAC(BaseModel, CodecMixin):
         else:
             timbre_match_z = orig_audio_z
 
-        timbre_match_z = timbre_match_z.transpose(1, 2)
-        timbre_match_z = self.transformer(timbre_match_z, None, None)
-        timbre_match_z = timbre_match_z.transpose(1, 2)
-        timbre_match_z = torch.mean(timbre_match_z, dim=2) # Global mean pooling
-        # timbre_match_z = self.timbre_pooling(timbre_match_z) # Attention pooling
 
-        # Predictors
-        # 1. Content predictor
-        pred_pitch = self.pitch_predictor(cont_z)[0]
+        # Timbre match
+        timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T)
+        timbre_match_z = self.transformer(timbre_match_z, None, None) # (B, T', D)
+        timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T')
+        timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
-        # 2. Timbre predictor
-        timbre_match_z = F.normalize(timbre_match_z, dim=-1)
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
-
-        # 3. ADSR predictor
-        pred_adsr_id = self.adsr_predictor(adsr_z)[0]
+        # Predictors (detached)
+        pred_pitch     = self.pitch_predictor(cont_z.detach())[0]
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.detach().unsqueeze(-1))[0]
+        pred_adsr_id   = self.adsr_predictor(adsr_z.detach())[0]
 
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
 
+        # Fuse content + ADSR
+        z = cont_z + adsr_z # (B, D, T)
 
-        # Apply conditional normalization
-        z = adsr_z + cont_z
-        z = z.transpose(1, 2)
-        z = self.style_norm(z)
-        z = z.transpose(1, 2)
+        # Conditional normalization
+        z = z.transpose(1, 2) # (B, T, D)
+        z = self.style_norm(z) # (B, T, D)
+        z = z.transpose(1, 2) # (B, D, T)
         z = z * gamma + beta
-
 
         x = self.decode(z)
 
