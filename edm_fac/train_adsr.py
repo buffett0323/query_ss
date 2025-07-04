@@ -46,6 +46,9 @@ class Wrapper:
             timbre_classes=args.timbre_classes,
             adsr_classes=args.adsr_classes,
             pitch_nums=args.max_note - args.min_note + 1, # 88
+            use_gr_content=args.use_gr_content,
+            use_gr_adsr=args.use_gr_adsr,
+            use_gr_timbre=args.use_gr_timbre,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
@@ -71,8 +74,11 @@ class Wrapper:
 
         # ✅ Switched both to appropriate loss functions for classification
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
-        self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # Multi-label for pitch
+        self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # FocalLoss(gamma=2).to(device) # Multi-label for pitch
         self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
+
+        self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
+        self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Loss lambda parameters
         self.params = {
@@ -83,9 +89,11 @@ class Wrapper:
             "vq/cont_codebook_loss": 1.0,
             "vq/adsr_commitment_loss": 0.25,
             "vq/adsr_codebook_loss": 1.0,
-            # "pred/timbre_loss": 5.0,
-            # "pred/content_loss": 10.0,
-            # "pred/adsr_loss": 5.0, # 1.0,
+            "pred/timbre_loss": 5.0,
+            "pred/content_loss": 5.0,
+            "pred/adsr_loss": 5.0, # 1.0,
+            "rev/content_loss": 5.0,
+            "rev/adsr_loss": 5.0,
         }
         self.val_paired_data = val_paired_data
 
@@ -376,6 +384,10 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
         output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
         output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], batch['adsr_id'])
+
+        # Added gradient reversal losses
+        output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_pitch"], batch['pitch'])
+        output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr"], batch['adsr_id'])
 
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])

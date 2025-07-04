@@ -33,6 +33,9 @@ class EDM_ADSR_Paired_Dataset(Dataset):
         min_note: int = 21,
         max_note: int = 108,
         split: str = "train",
+        perturb_content: bool = True,
+        perturb_timbre: bool = True,
+        perturb_adsr: bool = True,
     ):
         midi_path = os.path.join(midi_path, split, "midi")
         self.root_path = Path(os.path.join(root_path, split))
@@ -45,7 +48,9 @@ class EDM_ADSR_Paired_Dataset(Dataset):
         self.max_note = max_note
         self.n_notes = max_note - min_note + 1
         self.split = split
-
+        self.perturb_content = perturb_content
+        self.perturb_timbre = perturb_timbre
+        self.perturb_adsr = perturb_adsr
 
         # Create ID mappings for all three levels
         self.timbre_to_files = {}
@@ -147,6 +152,18 @@ class EDM_ADSR_Paired_Dataset(Dataset):
             ]
             return random.choice(possible_matches)
 
+    # Timbre has to be different from target, content and adsr has to be different from target
+    def _get_random_match_content_adsr(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
+        possible_matches = [
+            idx for idx in range(len(self.paired_data))
+                if self.paired_data[idx][0] != timbre_id and \
+                    self.paired_data[idx][1] == content_id and \
+                    self.paired_data[idx][2] == adsr_id
+        ]
+        return random.choice(possible_matches)
+
+
+
     def _get_random_match_adsr(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
         if self.split == "train":
             return random.choice(self.adsr_to_files[adsr_id])
@@ -229,21 +246,30 @@ class EDM_ADSR_Paired_Dataset(Dataset):
         pitch_info = self._midi_to_pitch_sequence(midi_path, self.duration, offset)
 
         # 3. Find matches for content and timbre
-        content_match_idx = self._get_random_match_content(timbre_id, midi_id, adsr_id)
+        content_match_idx = self._get_random_match_content_adsr(timbre_id, midi_id, adsr_id) # self._get_random_match_content(timbre_id, midi_id, adsr_id)
         timbre_match_idx = self._get_random_match_timbre(timbre_id, midi_id, adsr_id)
-        adsr_match_idx = self._get_random_match_adsr(timbre_id, midi_id, adsr_id)
+        adsr_match_idx = content_match_idx #self._get_random_match_adsr(timbre_id, midi_id, adsr_id)
 
         """ Perturbation """
         # 1). Load content match
-        content_match = self._load_audio(self.paired_data[content_match_idx][3], offset=offset)
+        if self.perturb_content:
+            content_match = self._load_audio(self.paired_data[content_match_idx][3], offset=offset)
+        else:
+            content_match = target_gt
         # content_pitch = self._midi_to_pitch_sequence(self.paired_data[content_match_idx][3], self.duration) # Actually the same as input_pitch -> no need
 
         # 2). Load timbre match
-        timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], offset=offset)
+        if self.perturb_timbre:
+            timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], offset=offset)
+        else:
+            timbre_match = target_gt
         # timbre_pitch = self._midi_to_pitch_sequence(self.paired_data[timbre_match_idx][3], self.duration) # No need
 
         # 3). Load adsr match
-        adsr_match = self._load_audio(self.paired_data[adsr_match_idx][3], offset=offset)
+        if self.perturb_adsr:
+            adsr_match = self._load_audio(self.paired_data[adsr_match_idx][3], offset=offset)
+        else:
+            adsr_match = target_gt
 
         # # Validation use for conversion
         # if self.split == "evaluation":
@@ -1770,13 +1796,12 @@ if __name__ == "__main__":
         min_note=args.min_note,
         max_note=args.max_note,
         split="train",
+        perturb_content=args.perturb_content,
+        perturb_timbre=args.perturb_timbre,
+        perturb_adsr=args.perturb_adsr,
     )
 
     dt = train_paired_data[0]
-    # print(dt['target'].shape)
-    # print(dt['content_match'].shape)
-    # print(dt['timbre_match'].shape)
-    # print(dt['adsr_match'].shape)
     print(dt['metadata'])
 
     val_paired_data = EDM_ADSR_Val_Paired_Dataset(
@@ -1793,16 +1818,4 @@ if __name__ == "__main__":
 
 
     dt1 = val_paired_data[0]
-
-    # print(dt1['orig_audio'].shape)
-    # print(dt1['ref_audio'].shape)
-    # print(dt1['orig_pitch'].shape)
-    # print(dt1['ref_pitch'].shape)
-    # print(dt1['orig_timbre'])
-    # print(dt1['ref_timbre'])
-    # print(dt1['orig_adsr'])
-    # print(dt1['ref_adsr'])
-    # print(dt1['target_content'].shape)
-    # print(dt1['target_timbre'].shape)
-    # print(dt1['target_adsr'].shape)
     print(dt1['metadata'])

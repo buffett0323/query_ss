@@ -284,6 +284,9 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_classes: int = 428,
         adsr_classes: int = 100,
         pitch_nums: int = 88,
+        use_gr_content: bool = True,
+        use_gr_adsr: bool = True,
+        use_gr_timbre: bool = True,
     ):
         super().__init__()
 
@@ -294,6 +297,9 @@ class MyDAC(BaseModel, CodecMixin):
         self.sample_rate = sample_rate
         self.latent_dim = latent_dim
         self.sample_rate = sample_rate
+        self.use_gr_content = use_gr_content
+        self.use_gr_adsr = use_gr_adsr
+        self.use_gr_timbre = use_gr_timbre
 
         self.hop_length = np.prod(encoder_rates)
         self.encoder = Encoder(encoder_dim, encoder_rates, latent_dim, causal=causal, lstm=lstm)
@@ -351,6 +357,28 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 3. ADSR predictor
         self.adsr_predictor = CNNLSTM(latent_dim, adsr_classes, head=1, global_pred=True)
+
+        if self.use_gr_content:
+            self.rev_pitch_predictor = nn.Sequential(
+                GradientReversal(alpha=1.0), # For GRL ADSR
+                CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False),
+            )
+        else:
+            self.rev_pitch_predictor = None
+
+        if self.use_gr_adsr:
+            self.rev_adsr_predictor = nn.Sequential(
+                GradientReversal(alpha=1.0), # For GRL Content
+                CNNLSTM(latent_dim, adsr_classes, head=1, global_pred=True),
+            )
+        else:
+            self.rev_adsr_predictor = None
+
+        # # TODO: The result after adding content and adsr
+        # if self.use_gr_timbre:
+        #     self.cont_adsr_grl = GradientReversal(alpha=1.0)
+        # else:
+        #     self.cont_adsr_grl = None
 
         # Attention pooling
         # self.timbre_pooling = AttentionPooling(input_dim=latent_dim)
@@ -432,6 +460,18 @@ class MyDAC(BaseModel, CodecMixin):
         pred_timbre_id = self.timbre_predictor(timbre_match_z.detach().unsqueeze(-1))[0]
         pred_adsr_id   = self.adsr_predictor(adsr_z.detach())[0]
 
+
+        # Gradient Reversal
+        cont_rev_latent = torch.zeros_like(cont_z)
+        if self.use_gr_content:
+            cont_rev_latent += adsr_z
+        rev_cont_pred = self.rev_pitch_predictor(cont_rev_latent.detach())[0]
+
+        adsr_rev_latent = torch.zeros_like(adsr_z)
+        if self.use_gr_adsr:
+            adsr_rev_latent += cont_z
+        rev_adsr_pred = self.rev_adsr_predictor(adsr_rev_latent.detach())[0]
+
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
@@ -459,6 +499,9 @@ class MyDAC(BaseModel, CodecMixin):
             "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
             "pred_adsr_id": pred_adsr_id,
+
+            "rev_pitch": rev_cont_pred,
+            "rev_adsr": rev_adsr_pred,
         }
 
 

@@ -33,4 +33,3 @@ class GradientReversal(nn.Module):
 
     def forward(self, x):
         return revgrad(x, self.alpha)
-    
