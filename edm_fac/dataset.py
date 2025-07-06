@@ -20,17 +20,14 @@ import audiotools
 print("Audiotools imported from", audiotools.__file__)
 
 
-# New Dataset
-class EDM_TC_RMS_Paired_Dataset(Dataset):
+# Single Shot Dataset
+class EDM_Single_Shot_Dataset(Dataset):
     """
     Use RMS Curve to analyze the ADSR
     """
     def __init__(
         self,
         root_path: str,
-        midi_path: str,
-        data_path: str,
-        one_shot_path: str,
         duration: float = 1.0,
         sample_rate: int = 44100,
         hop_length: int = 512,
@@ -38,11 +35,7 @@ class EDM_TC_RMS_Paired_Dataset(Dataset):
         max_note: int = 108,
         split: str = "train",
     ):
-        midi_path = os.path.join(midi_path, split, "midi")
         self.root_path = Path(os.path.join(root_path, split))
-        self.midi_path = Path(midi_path)
-        self.data_path = Path(data_path)
-        self.one_shot_path = Path(one_shot_path)
         self.duration = duration
         self.sample_rate = sample_rate
         self.hop_length = hop_length
@@ -52,7 +45,8 @@ class EDM_TC_RMS_Paired_Dataset(Dataset):
         self.split = split
 
         # Data
-        self.one_shot_metadata = {}
+        with open(f'{self.root_path}/metadata.json', 'r') as f:
+            self.metadata = json.load(f)
         self.paired_data = []
 
     def _preload_metadata(self):
