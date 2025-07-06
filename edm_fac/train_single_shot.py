@@ -19,7 +19,7 @@ from audiotools import ml
 from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
-from dataset import EDM_Single_Shot_Dataset, EDM_ADSR_Val_Paired_Dataset
+from dataset import EDM_Single_Shot_Dataset, EDM_Single_Shot_Val_Dataset
 from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
 import dac
 
@@ -34,7 +34,6 @@ class Wrapper:
         accelerator,
         val_paired_data,
     ):
-        assert args.max_note - args.min_note + 1 == 88, "Pitch numbers must be 88"
         self.disentanglement = ["timbre", "content", "adsr"]
         self.generator = dac.model.MyDAC(
             encoder_dim=args.encoder_dim,
@@ -45,7 +44,7 @@ class Wrapper:
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
             adsr_classes=args.adsr_classes,
-            pitch_nums=args.max_note - args.min_note + 1, # 88
+            pitch_nums=21, #args.max_note - args.min_note + 1, # 88
             use_gr_content=args.use_gr_content,
             use_gr_adsr=args.use_gr_adsr,
             use_gr_timbre=args.use_gr_timbre,
@@ -77,8 +76,8 @@ class Wrapper:
         self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # FocalLoss(gamma=2).to(device) # Multi-label for pitch
         self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
-        self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
-        self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        # self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
+        # self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Loss lambda parameters
         self.params = {
@@ -87,13 +86,13 @@ class Wrapper:
             "adv/loss_g": 1.0,
             "vq/cont_commitment_loss": 0.25,
             "vq/cont_codebook_loss": 1.0,
-            "vq/adsr_commitment_loss": 0.25,
-            "vq/adsr_codebook_loss": 1.0,
+            # "vq/adsr_commitment_loss": 0.25,
+            # "vq/adsr_codebook_loss": 1.0,
             "pred/timbre_loss": 5.0,
             "pred/content_loss": 5.0,
             "pred/adsr_loss": 5.0, # 1.0,
-            "rev/content_loss": 5.0,
-            "rev/adsr_loss": 5.0,
+            # "rev/content_loss": 5.0,
+            # "rev/adsr_loss": 5.0,
         }
         self.val_paired_data = val_paired_data
 
@@ -179,27 +178,20 @@ def main(args, accelerator):
     )
 
     # Build datasets and dataloaders
-    train_paired_data = EDM_ADSR_Paired_Dataset(
+    train_paired_data = EDM_Single_Shot_Dataset(
         root_path=args.root_path,
-        midi_path=args.midi_path,
-        data_path=args.data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
-        min_note=args.min_note,
-        max_note=args.max_note,
+        perturb_prob=args.perturb_prob,
         split="train",
     )
 
-    val_paired_data = EDM_ADSR_Val_Paired_Dataset(
+    val_paired_data = EDM_Single_Shot_Val_Dataset(
         root_path=args.root_path,
-        midi_path=args.midi_path,
-        data_path=args.val_data_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
-        min_note=args.min_note,
-        max_note=args.max_note,
         split="evaluation",
     )
 
@@ -305,10 +297,10 @@ def validate_step(args, accelerator, batch, wrapper, disentanglement):
     # Timbre prediction loss and accuracy
     pitch_gt = batch['ref_pitch'] if disentanglement == "content" else batch['orig_pitch']
     timbre_gt = batch['ref_timbre'] if disentanglement == "timbre" else batch['orig_timbre']
-    adsr_gt = batch['ref_adsr'] if disentanglement == "adsr" else batch['orig_adsr']
+    # adsr_gt = batch['ref_adsr'] if disentanglement == "adsr" else batch['orig_adsr']
     output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch_gt)
     output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_gt)
-    output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_gt)
+    # output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_gt)
 
     return {k: v for k, v in sorted(output.items())}
 
@@ -377,8 +369,8 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 
         output["vq/cont_commitment_loss"] = out["vq/cont_commitment_loss"]
         output["vq/cont_codebook_loss"] = out["vq/cont_codebook_loss"]
-        output["vq/adsr_commitment_loss"] = out["vq/adsr_commitment_loss"]
-        output["vq/adsr_codebook_loss"] = out["vq/adsr_codebook_loss"]
+        # output["vq/adsr_commitment_loss"] = out["vq/adsr_commitment_loss"]
+        # output["vq/adsr_codebook_loss"] = out["vq/adsr_codebook_loss"]
 
         # Added predictor losses
         output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
@@ -386,8 +378,8 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], batch['adsr_id'])
 
         # Added gradient reversal losses
-        output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_pitch"], batch['pitch'])
-        output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr"], batch['adsr_id'])
+        # output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_pitch"], batch['pitch'])
+        # output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr"], batch['adsr_id'])
 
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
@@ -415,7 +407,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_adsr.yaml")
+    config = yaml_config_hook("configs/config_ss.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
