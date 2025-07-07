@@ -9,7 +9,7 @@ root_path: ${path}/EDM_FAC_NEW_DATA/rendered_ss_t_adsr_c #${path}/EDM_FAC_DATA
 # beatport_path: ${path}/EDM_FAC_DATA/beatport
 
 
-batch_size: 2 #4
+batch_size: 4
 save_interval: 5000
 sample_freq: 1000
 validate_interval: 1000
@@ -20,7 +20,7 @@ val_idx: [0, 1, 2, 3, 4, 5, 6, 7] #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 timbre_classes: 157 #428
 adsr_classes: 100
 n_notes: 21
-resume: False
+resume: True
 perturb_prob: 0.75
 
 

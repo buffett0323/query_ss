@@ -78,8 +78,8 @@ class ADSREncoder(nn.Module):
         right_pad = math.ceil(length / self.hop) * self.hop - length
         wav = nn.functional.pad(wav, (0, right_pad))
         return wav
-    
-    
+
+
     # --------------------------------------------------------------------- #
     #  helper: frame-wise log-RMS + derivative
     # --------------------------------------------------------------------- #
@@ -104,7 +104,7 @@ class ADSREncoder(nn.Module):
     def forward(self, wav: torch.Tensor) -> torch.Tensor:
         # 0) preprocess
         wav = self.preprocess(wav)
-        
+
         # 1) envelope features
         feats = self._envelope_features(wav)    # (B,2,Tf)
 

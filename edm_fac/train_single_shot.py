@@ -202,6 +202,7 @@ def main(args, accelerator):
     if args.resume:
         start_iter = load_checkpoint(args, device, -1, wrapper) or 0
         tracker.step = start_iter
+        print(f"Resuming from iteration {start_iter}")
     else:
         tracker.step = 0
 
@@ -230,7 +231,9 @@ def main(args, accelerator):
     train_step = tracker.log("Train", "value", history=False)(
         tracker.track("Train", args.num_iters, completed=tracker.step)(train_step)
     )
-    validate = tracker.track("Validation", int(args.num_iters / args.validate_interval))(validate)
+    validate = tracker.track("Validation",
+                             int(args.num_iters / args.validate_interval),
+                             completed=int(tracker.step / args.validate_interval))(validate)
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
     save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
 

@@ -435,7 +435,7 @@ class MyDAC(BaseModel, CodecMixin):
         length = audio_data.shape[-1]
         content_match = self.preprocess(content_match, sample_rate)
         timbre_match = self.preprocess(timbre_match, sample_rate)
-        
+
 
         # Perturbation's encoders
         content_match_z = self.encoder(content_match)
@@ -452,7 +452,7 @@ class MyDAC(BaseModel, CodecMixin):
             adsr_z = self.adsr_encoder(adsr_match)
         else:
             adsr_z = self.adsr_encoder(audio_data)
-            
+
         # Timbre match
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T)
         timbre_match_z = self.transformer(timbre_match_z, None, None) # (B, T', D)
