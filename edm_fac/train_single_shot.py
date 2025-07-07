@@ -49,6 +49,7 @@ class Wrapper:
             use_gr_content=args.use_gr_content,
             use_gr_adsr=args.use_gr_adsr,
             use_gr_timbre=args.use_gr_timbre,
+            use_FiLM=args.use_FiLM,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
@@ -404,14 +405,14 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], adsr_id)
 
         # Added gradient reversal losses
-        if out["rev_cont_pred"] is not None:
-            output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_cont_pred"], pitch)
+        # if args.use_gr_content:
+        #     output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_cont_pred"], batch['rev_content_id'])
 
-        if out["rev_adsr_pred"] is not None:
-            output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr_pred"], adsr_id)
+        if args.use_gr_adsr:
+            output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr_pred"], batch['rev_adsr_id'])
 
-        if out["rev_timbre_pred"] is not None:
-            output["rev/timbre_loss"] = wrapper.rev_timbre_loss(out["rev_timbre_pred"], timbre_id)
+        if args.use_gr_timbre:
+            output["rev/timbre_loss"] = wrapper.rev_timbre_loss(out["rev_timbre_pred"], batch['rev_timbre_id'])
 
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
@@ -439,7 +440,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_ss.yaml")
+    config = yaml_config_hook("configs/config_ss_grl.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()

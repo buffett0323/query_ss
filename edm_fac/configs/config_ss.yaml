@@ -44,6 +44,7 @@ n_c_codebooks: 2
 use_gr_content: False #True
 use_gr_adsr: False #True
 use_gr_timbre: False #True
+use_FiLM: True
 
 # dataset_params:
 perturb_content: True #True

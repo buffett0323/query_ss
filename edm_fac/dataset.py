@@ -245,6 +245,10 @@ class EDM_Single_Shot_Dataset(Dataset):
                 timbre_match = ref_audio
 
 
+        # TODO: Get Gradient Reversal Indexes
+        rev_timbre_id = timbre_id
+        rev_adsr_id = adsr_id
+
         # 4. Decoder's output GT
         if mode == "reconstruction":
             target_idx = idx
@@ -268,6 +272,9 @@ class EDM_Single_Shot_Dataset(Dataset):
             'timbre_id': timbre_id,
             'adsr_id': adsr_id,
             'midi_id': midi_id,
+            
+            'rev_timbre_id': rev_timbre_id,
+            'rev_adsr_id': rev_adsr_id,
 
             'metadata': {
                 'mode': mode,
@@ -289,12 +296,11 @@ class EDM_Single_Shot_Dataset(Dataset):
                     'adsr_id': adsr_id,
                     'path': str(self.paired_data[target_idx][3]),
                 },
-
-                'idxs': {
-                    'original': idx,
-                    'ref': ref_idx,
-                    'target': target_idx,
-                }
+                # 'idxs': {
+                #     'original': idx,
+                #     'ref': ref_idx,
+                #     'target': target_idx,
+                # }
                 # 'content_match': {
                 #     'timbre_id': self.paired_data[content_match_idx][0],
                 #     'content_id': self.paired_data[content_match_idx][1],
@@ -329,6 +335,10 @@ class EDM_Single_Shot_Dataset(Dataset):
             'timbre_id': torch.tensor([item['timbre_id'] for item in batch], dtype=torch.long),
             'adsr_id': torch.tensor([item['adsr_id'] for item in batch], dtype=torch.long),
             'midi_id': torch.tensor([item['midi_id'] for item in batch], dtype=torch.long),
+            
+            'rev_timbre_id': torch.tensor([item['rev_timbre_id'] for item in batch], dtype=torch.long),
+            'rev_adsr_id': torch.tensor([item['rev_adsr_id'] for item in batch], dtype=torch.long),
+            # 'rev_midi_id': torch.tensor([item['rev_midi_id'] for item in batch], dtype=torch.long),
 
             'metadata': [item['metadata'] for item in batch]
         }
@@ -2338,34 +2348,37 @@ def build_dataloader(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_ss.yaml")
+    config = yaml_config_hook("configs/config_ss_grl.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    # train_paired_data = EDM_Single_Shot_Dataset(
-    #     root_path=args.root_path,
-    #     duration=args.duration,
-    #     sample_rate=args.sample_rate,
-    #     hop_length=args.hop_length,
-    #     split="train",
-    #     n_notes=args.n_notes,
-    #     perturb_content=True, #args.perturb_content,
-    #     perturb_adsr=True, #args.perturb_adsr,
-    #     perturb_timbre=True, #args.perturb_timbre,
-    #     disentanglement_mode=args.disentanglement,
-    # )
-    # dt = train_paired_data[0]
-    # print(json.dumps(dt['metadata'], indent=2))
-
-
-    val_paired_data = EDM_Single_Shot_Val_Dataset(
+    train_paired_data = EDM_Single_Shot_Dataset(
         root_path=args.root_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
-        split="evaluation",
+        split="train",
         n_notes=args.n_notes,
+        perturb_content=True, #args.perturb_content,
+        perturb_adsr=True, #args.perturb_adsr,
+        perturb_timbre=True, #args.perturb_timbre,
+        disentanglement_mode=["reconstruction"] #args.disentanglement,
     )
-    dtv = val_paired_data[3]
-    print(json.dumps(dtv['metadata'], indent=2))
+    dt = train_paired_data[0]
+    print("Timbre id: ", dt['timbre_id'])
+    print("MIDI id: ", dt['midi_id'])
+    print("ADSR id: ", dt['adsr_id'])
+    print(json.dumps(dt['metadata'], indent=2))
+
+
+    # val_paired_data = EDM_Single_Shot_Val_Dataset(
+    #     root_path=args.root_path,
+    #     duration=args.duration,
+    #     sample_rate=args.sample_rate,
+    #     hop_length=args.hop_length,
+    #     split="evaluation",
+    #     n_notes=args.n_notes,
+    # )
+    # dtv = val_paired_data[3]
+    # print(json.dumps(dtv['metadata'], indent=2))

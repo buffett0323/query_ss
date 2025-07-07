@@ -289,6 +289,7 @@ class MyDAC(BaseModel, CodecMixin):
         use_gr_content: bool = True,
         use_gr_adsr: bool = True,
         use_gr_timbre: bool = True,
+        use_FiLM: bool = True,
     ):
         super().__init__()
 
@@ -302,6 +303,7 @@ class MyDAC(BaseModel, CodecMixin):
         self.use_gr_content = use_gr_content
         self.use_gr_adsr = use_gr_adsr
         self.use_gr_timbre = use_gr_timbre
+        self.use_FiLM = use_FiLM
 
         self.hop_length = np.prod(encoder_rates)
         self.encoder = Encoder(encoder_dim, encoder_rates, latent_dim, causal=causal, lstm=lstm)
@@ -327,9 +329,15 @@ class MyDAC(BaseModel, CodecMixin):
         #     codebook_dim=codebook_dim,
         #     quantizer_dropout=quantizer_dropout,
         # )
-        self.adsr_encoder = ADSREncoder(
-            embed_channels=adsr_enc_dim,
-        )
+        if self.use_FiLM:
+            self.adsr_encoder = ADSREncoder(
+                embed_channels=adsr_enc_dim,
+            )
+        else:
+            self.adsr_encoder = ADSREncoder(
+                embed_channels=latent_dim,
+            )
+
         self.adsr_film = ADSRFiLM(
             adsr_ch=adsr_enc_dim,
             cont_ch=latent_dim,
@@ -366,14 +374,17 @@ class MyDAC(BaseModel, CodecMixin):
         self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
 
         # 3. ADSR predictor
-        self.adsr_predictor = CNNLSTM(adsr_enc_dim, adsr_classes, head=1, global_pred=True)
+        if self.use_FiLM:
+            self.adsr_predictor = CNNLSTM(adsr_enc_dim, adsr_classes, head=1, global_pred=True)
+        else:
+            self.adsr_predictor = CNNLSTM(latent_dim, adsr_classes, head=1, global_pred=True)
 
 
         # Gradient Reversal
         if self.use_gr_content:
             self.rev_content_predictor = nn.Sequential(
                 GradientReversal(alpha=1.0), # For GRL ADSR
-                CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False),
+                CNNLSTM(adsr_enc_dim, pitch_nums, head=1, global_pred=False),
             )
         else:
             self.rev_content_predictor = None
@@ -381,7 +392,7 @@ class MyDAC(BaseModel, CodecMixin):
         if self.use_gr_adsr:
             self.rev_adsr_predictor = nn.Sequential(
                 GradientReversal(alpha=1.0), # For GRL Content
-                CNNLSTM(adsr_enc_dim, adsr_classes, head=1, global_pred=True),
+                CNNLSTM(latent_dim, adsr_classes, head=1, global_pred=True),
             )
         else:
             self.rev_adsr_predictor = None
@@ -470,7 +481,10 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
         # 4. Fuse content + ADSR using FiLM
-        z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+        if self.use_FiLM:
+            z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+        else:
+            z = cont_z + adsr_z # (B, D=256, T)
 
         # Predictors
         pred_pitch     = self.pitch_predictor(cont_z)[0]
@@ -574,7 +588,10 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
         # 4. Fuse content + ADSR using FiLM
-        z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+        if self.use_FiLM:
+            z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+        else:
+            z = cont_z + adsr_z # (B, D=256, T)
 
         # Predictors
         pred_pitch     = self.pitch_predictor(cont_z)[0]
