@@ -1,6 +1,5 @@
 import math
-from typing import List
-from typing import Union
+from typing import List, Union, Optional
 
 import numpy as np
 import torch.nn.functional as F
@@ -369,21 +368,32 @@ class MyDAC(BaseModel, CodecMixin):
         # 3. ADSR predictor
         self.adsr_predictor = CNNLSTM(adsr_enc_dim, adsr_classes, head=1, global_pred=True)
 
-        # if self.use_gr_content:
-        #     self.rev_pitch_predictor = nn.Sequential(
-        #         GradientReversal(alpha=1.0), # For GRL ADSR
-        #         CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False),
-        #     )
-        # else:
-        #     self.rev_pitch_predictor = None
 
-        # if self.use_gr_adsr:
-        #     self.rev_adsr_predictor = nn.Sequential(
-        #         GradientReversal(alpha=1.0), # For GRL Content
-        #         CNNLSTM(latent_dim, adsr_classes, head=1, global_pred=True),
-        #     )
-        # else:
-        #     self.rev_adsr_predictor = None
+        # Gradient Reversal
+        if self.use_gr_content:
+            self.rev_content_predictor = nn.Sequential(
+                GradientReversal(alpha=1.0), # For GRL ADSR
+                CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False),
+            )
+        else:
+            self.rev_content_predictor = None
+
+        if self.use_gr_adsr:
+            self.rev_adsr_predictor = nn.Sequential(
+                GradientReversal(alpha=1.0), # For GRL Content
+                CNNLSTM(adsr_enc_dim, adsr_classes, head=1, global_pred=True),
+            )
+        else:
+            self.rev_adsr_predictor = None
+
+        if self.use_gr_timbre:
+            self.rev_timbre_predictor = nn.Sequential(
+                GradientReversal(alpha=1.0), # For GRL Timbre
+                CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True),
+            )
+        else:
+            self.rev_timbre_predictor = None
+
 
 
         # conditional LayerNorm
@@ -409,7 +419,7 @@ class MyDAC(BaseModel, CodecMixin):
     def encode(
         self,
         audio_data: torch.Tensor,
-        n_quantizers: int = None,
+        n_quantizers: Optional[int] = None,
     ):
         z = self.encoder(audio_data)
         z, codes, latents, commitment_loss, codebook_loss = self.quantizer(
@@ -441,50 +451,58 @@ class MyDAC(BaseModel, CodecMixin):
         content_match_z = self.encoder(content_match)
         timbre_match_z = self.encoder(timbre_match)
 
-        # Content match
+        # 1. Disentangle Content
         cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
             content_match_z, n_quantizers
         )
 
-        # ADSR match
+        # 2. Disentangle ADSR
         if adsr_match is not None:
             adsr_match = self.preprocess(adsr_match, sample_rate)
             adsr_z = self.adsr_encoder(adsr_match)
         else:
             adsr_z = self.adsr_encoder(audio_data)
 
-        # Timbre match
+        # 3. Disentangle Timbre
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T)
         timbre_match_z = self.transformer(timbre_match_z, None, None) # (B, T', D)
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T')
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
-        # Predictors (detached)
-        pred_pitch     = self.pitch_predictor(cont_z.detach())[0]
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.detach().unsqueeze(-1))[0]
-        pred_adsr_id   = self.adsr_predictor(adsr_z.detach())[0]
+        # 4. Fuse content + ADSR using FiLM
+        z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+
+        # Predictors
+        pred_pitch     = self.pitch_predictor(cont_z)[0]
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        pred_adsr_id   = self.adsr_predictor(adsr_z)[0]
 
 
-        # # Gradient Reversal
-        # cont_rev_latent = torch.zeros_like(cont_z)
-        # if self.use_gr_content:
-        #     cont_rev_latent += adsr_z
-        # rev_cont_pred = self.rev_pitch_predictor(cont_rev_latent.detach())[0]
+        # 5. Gradient Reversal
+        # 1). Gradient Reversal: ADSR --> Content
+        if self.use_gr_content and self.rev_content_predictor is not None:
+            rev_cont_pred = self.rev_content_predictor(adsr_z)[0]
+        else:
+            rev_cont_pred = None
 
-        # adsr_rev_latent = torch.zeros_like(adsr_z)
-        # if self.use_gr_adsr:
-        #     adsr_rev_latent += cont_z
-        # rev_adsr_pred = self.rev_adsr_predictor(adsr_rev_latent.detach())[0]
+        # 2). Gradient Reversal: Content --> ADSR
+        if self.use_gr_adsr and self.rev_adsr_predictor is not None:
+            rev_adsr_pred = self.rev_adsr_predictor(cont_z)[0]
+        else:
+            rev_adsr_pred = None
+
+        # 3). Gradient Reversal: Combined ADSR and Content --> Timbre
+        if self.use_gr_timbre and self.rev_timbre_predictor is not None:
+            rev_timbre_pred = self.rev_timbre_predictor(z)[0]
+        else:
+            rev_timbre_pred = None
 
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
 
-        # Fuse content + ADSR
-        # z = cont_z + adsr_z # (B, D, T)
-        z = self.adsr_film(adsr_z, cont_z)
 
-        # Conditional normalization
+        # 6. Conditional Layer Norm
         z = z.transpose(1, 2) # (B, T, D)
         z = self.style_norm(z) # (B, T, D)
         z = z.transpose(1, 2) # (B, D, T)
@@ -504,8 +522,10 @@ class MyDAC(BaseModel, CodecMixin):
             "pred_timbre_id": pred_timbre_id,
             "pred_pitch": pred_pitch,
             "pred_adsr_id": pred_adsr_id,
-            # "rev_pitch": rev_cont_pred,
-            # "rev_adsr": rev_adsr_pred,
+
+            "rev_cont_pred": rev_cont_pred,
+            "rev_adsr_pred": rev_adsr_pred,
+            "rev_timbre_pred": rev_timbre_pred,
         }
 
 
@@ -516,7 +536,7 @@ class MyDAC(BaseModel, CodecMixin):
         ref_audio: torch.Tensor,
         sample_rate: int = None,
         n_quantizers: int = None,
-        convert_type: list = ["timbre"],
+        convert_type: str = "timbre",
     ):
         length = orig_audio.shape[-1]
         orig_audio = self.preprocess(orig_audio, sample_rate)
@@ -526,8 +546,8 @@ class MyDAC(BaseModel, CodecMixin):
         orig_audio_z = self.encoder(orig_audio)
         ref_audio_z = self.encoder(ref_audio)
 
-        # 1. Content match
-        if "content" in convert_type:
+        # 1. Disentangle Content
+        if convert_type == "content":
             cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
                 ref_audio_z, n_quantizers
             )
@@ -536,45 +556,39 @@ class MyDAC(BaseModel, CodecMixin):
                 orig_audio_z, n_quantizers
             )
 
-        # 2. ADSR match
-        if "adsr" in convert_type:
-            # adsr_z, _, _, adsr_commitment_loss, adsr_codebook_loss = self.adsr_quantizer(
-            #     ref_audio_z, n_quantizers
-            # )
+        # 2. Disentangle ADSR
+        if convert_type in ["adsr", "both"]:
             adsr_z = self.adsr_encoder(ref_audio)
         else:
-            # adsr_z, _, _, adsr_commitment_loss, adsr_codebook_loss = self.adsr_quantizer(
-            #     orig_audio_z, n_quantizers
-            # )
             adsr_z = self.adsr_encoder(orig_audio)
 
-        # 3. Timbre match
-        if "timbre" in convert_type:
+        # 3. Disentangle Timbre
+        if convert_type in ["timbre", "both"]:
             timbre_match_z = ref_audio_z
         else:
             timbre_match_z = orig_audio_z
 
-
-        # Timbre match
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T)
         timbre_match_z = self.transformer(timbre_match_z, None, None) # (B, T', D)
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T')
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
-        # Predictors (detached)
-        pred_pitch     = self.pitch_predictor(cont_z.detach())[0]
-        pred_timbre_id = self.timbre_predictor(timbre_match_z.detach().unsqueeze(-1))[0]
-        # pred_adsr_id   = self.adsr_predictor(adsr_z.detach())[0]
+        # 4. Fuse content + ADSR using FiLM
+        z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+
+        # Predictors
+        pred_pitch     = self.pitch_predictor(cont_z)[0]
+        pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
+        pred_adsr_id   = self.adsr_predictor(adsr_z)[0]
 
         # Project timbre latent to style parameters
         style = self.style_linear(timbre_match_z).unsqueeze(2)  # (B, 2d, 1)
         gamma, beta = style.chunk(2, 1)  # (B, d, 1)
 
-        # Fuse content + ADSR
-        # z = cont_z + adsr_z # (B, D, T)
-        z = self.adsr_film(adsr_z, cont_z)
+        # 5. Gradient Reversal
+        # No gradient reversal for conversion
 
-        # Conditional normalization
+        # 6. Conditional Layer Norm
         z = z.transpose(1, 2) # (B, T, D)
         z = self.style_norm(z) # (B, T, D)
         z = z.transpose(1, 2) # (B, D, T)
@@ -593,5 +607,5 @@ class MyDAC(BaseModel, CodecMixin):
 
             "pred_pitch": pred_pitch,
             "pred_timbre_id": pred_timbre_id,
-            # "pred_adsr_id": pred_adsr_id,
+            "pred_adsr_id": pred_adsr_id,
         }

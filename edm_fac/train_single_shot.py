@@ -1,7 +1,6 @@
 import sys
 import warnings
 import argparse
-import torch
 import os
 import time
 import torch
@@ -34,7 +33,9 @@ class Wrapper:
         accelerator,
         val_paired_data,
     ):
-        self.disentanglement = ["timbre", "content", "adsr"]
+        self.disentanglement = args.disentanglement # training
+        self.convert_type = args.convert_type # validation
+
         self.generator = dac.model.MyDAC(
             encoder_dim=args.encoder_dim,
             encoder_rates=args.encoder_rates,
@@ -44,7 +45,7 @@ class Wrapper:
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
             adsr_classes=args.adsr_classes,
-            pitch_nums=21, #args.max_note - args.min_note + 1, # 88
+            pitch_nums=args.n_notes, #args.max_note - args.min_note + 1, # 88
             use_gr_content=args.use_gr_content,
             use_gr_adsr=args.use_gr_adsr,
             use_gr_timbre=args.use_gr_timbre,
@@ -76,8 +77,9 @@ class Wrapper:
         self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # FocalLoss(gamma=2).to(device) # Multi-label for pitch
         self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
-        # self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
-        # self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
+        self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        self.rev_timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Loss lambda parameters
         self.params = {
@@ -91,9 +93,15 @@ class Wrapper:
             "pred/timbre_loss": 5.0,
             "pred/content_loss": 5.0,
             "pred/adsr_loss": 5.0, # 1.0,
-            # "rev/content_loss": 5.0,
-            # "rev/adsr_loss": 5.0,
         }
+        
+        if args.use_gr_content:
+            self.params["rev/content_loss"] = 5.0
+        if args.use_gr_adsr:
+            self.params["rev/adsr_loss"] = 5.0
+        if args.use_gr_timbre:
+            self.params["rev/timbre_loss"] = 5.0
+
         self.val_paired_data = val_paired_data
 
 
@@ -112,7 +120,7 @@ class Wrapper:
 
 @torch.no_grad()
 def save_samples(args, accelerator, tracker_step, wrapper):
-    """ Paired data validation """
+    wrapper.generator.eval()
     samples = [wrapper.val_paired_data[idx] for idx in args.val_idx]
     batch = wrapper.val_paired_data.collate(samples)
     batch = util.prepare_batch(batch, accelerator.device)
@@ -124,16 +132,16 @@ def save_samples(args, accelerator, tracker_step, wrapper):
     os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}'), exist_ok=True)
 
 
-    for disentanglement in wrapper.disentanglement:
-        os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv'), exist_ok=True)
+    for conv_type in wrapper.convert_type:
+        os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'conv_{conv_type}'), exist_ok=True)
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
-            convert_type=[disentanglement],
+            convert_type=conv_type,
         )
 
         recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
-        recons_gt = AudioSignal(batch[f'target_{disentanglement}'].audio_data.cpu(), args.sample_rate)
+        recons_gt = AudioSignal(batch[f'target_{conv_type}'].audio_data.cpu(), args.sample_rate)
 
 
         # Conversion & Save
@@ -144,10 +152,10 @@ def save_samples(args, accelerator, tracker_step, wrapper):
             single_ref = AudioSignal(ref_audio.audio_data[i], args.sample_rate)
 
 
-            recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_recon.wav')
-            recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_gt.wav')
-            orig_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_orig.wav')
-            ref_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'{disentanglement}_conv', f'{sample_idx}_{disentanglement}_ref.wav')
+            recon_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'conv_{conv_type}', f'{sample_idx}_recon.wav')
+            recon_gt_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'conv_{conv_type}', f'{sample_idx}_gt.wav')
+            orig_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'conv_{conv_type}', f'{sample_idx}_orig.wav')
+            ref_path = os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'conv_{conv_type}', f'{sample_idx}_ref.wav')
 
             single_recon.write(recon_path)
             single_recon_gt.write(recon_gt_path)
@@ -183,8 +191,12 @@ def main(args, accelerator):
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
-        perturb_prob=args.perturb_prob,
         split="train",
+        n_notes=args.n_notes,
+        perturb_content=args.perturb_content,
+        perturb_adsr=args.perturb_adsr,
+        perturb_timbre=args.perturb_timbre,
+        disentanglement_mode=args.disentanglement,
     )
 
     val_paired_data = EDM_Single_Shot_Val_Dataset(
@@ -193,6 +205,7 @@ def main(args, accelerator):
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="evaluation",
+        n_notes=args.n_notes,
     )
 
     wrapper = Wrapper(args, accelerator, val_paired_data)
@@ -240,8 +253,8 @@ def main(args, accelerator):
 
     # Loop
     with tracker.live:
-        for tracker.step, paired_batch in enumerate(train_paired_loader, start=tracker.step):
-            train_step(args, accelerator, paired_batch, wrapper, tracker.step)
+        for tracker.step, batch in enumerate(train_paired_loader, start=tracker.step):
+            train_step(args, accelerator, batch, wrapper, tracker.step)
 
             # Save Checkpoint
             if tracker.step % args.save_interval == 0:
@@ -265,8 +278,8 @@ def validate(args, accelerator, val_paired_loader, wrapper):
     output = {}
 
     for i, paired_batch in enumerate(val_paired_loader):
-        for disentanglement in wrapper.disentanglement:
-            output = validate_step(args, accelerator, paired_batch, wrapper, disentanglement)
+        for conv_type in wrapper.convert_type:
+            output = validate_step(args, accelerator, paired_batch, wrapper, conv_type)
         if i >= args.validate_steps:
             break
 
@@ -279,27 +292,29 @@ def validate(args, accelerator, val_paired_loader, wrapper):
 
 # @timer
 @torch.no_grad()
-def validate_step(args, accelerator, batch, wrapper, disentanglement):
+def validate_step(args, accelerator, batch, wrapper, conv_type):
     wrapper.generator.eval()
     wrapper.discriminator.eval()
     batch = util.prepare_batch(batch, accelerator.device)
 
-    target_audio = batch[f'target_{disentanglement}']
+    target_audio = batch[f'target_{conv_type}']
     with torch.no_grad():
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
-            convert_type=[disentanglement],
+            convert_type=conv_type,
         )
     output = {}
     recons = AudioSignal(out["audio"], args.sample_rate)
+
+    # Output Loss
     output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
     output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
     # Timbre prediction loss and accuracy
-    pitch_gt = batch['ref_pitch'] if disentanglement == "content" else batch['orig_pitch']
-    timbre_gt = batch['ref_timbre'] if disentanglement == "timbre" else batch['orig_timbre']
+    pitch_gt = batch['ref_pitch'] if conv_type == "content" else batch['orig_pitch']
+    timbre_gt = batch['ref_timbre'] if conv_type in ["timbre", "both"] else batch['orig_timbre']
     # adsr_gt = batch['ref_adsr'] if disentanglement == "adsr" else batch['orig_adsr']
     output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch_gt)
     output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_gt)
@@ -310,9 +325,9 @@ def validate_step(args, accelerator, batch, wrapper, disentanglement):
 
 
 # @timer
-def train_step(args, accelerator, paired_batch, wrapper, current_iter):
+def train_step(args, accelerator, batch, wrapper, current_iter):
     output = {}
-    output.update(train_step_paired(args, accelerator, paired_batch, wrapper, current_iter))
+    output.update(train_step_paired(args, accelerator, batch, wrapper, current_iter))
     return output
 
 
@@ -327,19 +342,27 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
     else:
         wrapper.discriminator.eval()
 
-    # Load Batch Items
+    # Pre-settings
+    output = {}
     batch = util.prepare_batch(batch, accelerator.device)
-    target_audio = batch['target']
+    with torch.no_grad():
+        target_audio = batch['target']
+        content_match_data = batch['content_match']
+        timbre_match_data = batch['timbre_match']
+        adsr_match_data = batch['adsr_match']
+        timbre_id = batch['timbre_id']
+        adsr_id = batch['adsr_id']
+        pitch = batch['pitch']
 
     # DAC Model
     with accelerator.autocast():
         out = wrapper.generator(
             audio_data=target_audio.audio_data,
-            content_match=batch['content_match'].audio_data,
-            timbre_match=batch['timbre_match'].audio_data,
-            adsr_match=batch['adsr_match'].audio_data,
+            content_match=content_match_data.audio_data,
+            timbre_match=timbre_match_data.audio_data,
+            adsr_match=adsr_match_data.audio_data,
         )
-        output = {}
+
         recons = AudioSignal(out["audio"], args.sample_rate)
 
         # Discriminator Losses - only compute and train if past discriminator_iter_start
@@ -376,14 +399,20 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         # output["vq/adsr_codebook_loss"] = out["vq/adsr_codebook_loss"]
 
         # Added predictor losses
-        output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], batch['timbre_id'])
-        output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], batch['pitch'])
-        output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], batch['adsr_id'])
+        output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], timbre_id)
+        output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch)
+        output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], adsr_id)
 
         # Added gradient reversal losses
-        # output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_pitch"], batch['pitch'])
-        # output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr"], batch['adsr_id'])
+        if out["rev_cont_pred"] is not None:
+            output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_cont_pred"], pitch)
+  
+        if out["rev_adsr_pred"] is not None:
+            output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr_pred"], adsr_id)
 
+        if out["rev_timbre_pred"] is not None:
+            output["rev/timbre_loss"] = wrapper.rev_timbre_loss(out["rev_timbre_pred"], timbre_id)
+            
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
 
@@ -391,7 +420,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
     wrapper.optimizer_g.zero_grad()
     accelerator.backward(output["loss_gen_all"])
     accelerator.scaler.unscale_(wrapper.optimizer_g)
-    torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1000.0)
+    torch.nn.utils.clip_grad_norm_(wrapper.generator.parameters(), 1e3)
     accelerator.step(wrapper.optimizer_g)
     wrapper.scheduler_g.step()
     accelerator.update()
