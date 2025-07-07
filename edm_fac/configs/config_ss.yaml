@@ -1,5 +1,5 @@
-# path: /mnt/gestalt/home/buffett # NTU
-path: /home/buffett/nas_data # Sinica
+path: /mnt/gestalt/home/buffett # NTU
+# path: /home/buffett/nas_data # Sinica
 postfix: "0707_ss"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"]
 convert_type: ["both", "adsr", "timbre"]
@@ -11,7 +11,7 @@ root_path: ${path}/EDM_FAC_NEW_DATA/rendered_ss_t_adsr_c #${path}/EDM_FAC_DATA
 # beatport_path: ${path}/EDM_FAC_DATA/beatport
 
 
-batch_size: 2 #4
+batch_size: 4
 save_interval: 5000
 sample_freq: 1000
 validate_interval: 1000
