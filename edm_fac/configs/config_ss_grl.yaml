@@ -1,7 +1,7 @@
 # path: /mnt/gestalt/home/buffett # NTU
 path: /home/buffett/nas_data # Sinica
 postfix: "0707_ss_grl"
-disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"] 
+disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"]
 
 wandb_dir: ${path}/EDM_FAC_LOG/${postfix}
 save_path: ${path}/EDM_FAC_LOG/${postfix}

@@ -94,7 +94,7 @@ class Wrapper:
             "pred/content_loss": 5.0,
             "pred/adsr_loss": 5.0, # 1.0,
         }
-        
+
         if args.use_gr_content:
             self.params["rev/content_loss"] = 5.0
         if args.use_gr_adsr:
@@ -406,13 +406,13 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         # Added gradient reversal losses
         if out["rev_cont_pred"] is not None:
             output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_cont_pred"], pitch)
-  
+
         if out["rev_adsr_pred"] is not None:
             output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr_pred"], adsr_id)
 
         if out["rev_timbre_pred"] is not None:
             output["rev/timbre_loss"] = wrapper.rev_timbre_loss(out["rev_timbre_pred"], timbre_id)
-            
+
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
 
