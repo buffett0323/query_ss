@@ -1,4 +1,4 @@
-# python inference_conversion.py \
+# python infer_conversion.py \
 #     --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0608/ckpt/checkpoint_latest.pt \
 #     --config configs/config.yaml \
 #     --device cuda:3 \
@@ -10,7 +10,7 @@
 #     --mode batch_convert \
 #     --amount 10 \
 
-python inference_conversion.py \
+python infer_conversion.py \
     --checkpoint /home/buffett/dataset/EDM_FAC_LOG/0608/ckpt/checkpoint_655000.pt \
     --config configs/config.yaml \
     --device cuda:0 \

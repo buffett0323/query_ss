@@ -272,7 +272,7 @@ class EDM_Single_Shot_Dataset(Dataset):
             'timbre_id': timbre_id,
             'adsr_id': adsr_id,
             'midi_id': midi_id,
-            
+
             'rev_timbre_id': rev_timbre_id,
             'rev_adsr_id': rev_adsr_id,
 
@@ -335,7 +335,7 @@ class EDM_Single_Shot_Dataset(Dataset):
             'timbre_id': torch.tensor([item['timbre_id'] for item in batch], dtype=torch.long),
             'adsr_id': torch.tensor([item['adsr_id'] for item in batch], dtype=torch.long),
             'midi_id': torch.tensor([item['midi_id'] for item in batch], dtype=torch.long),
-            
+
             'rev_timbre_id': torch.tensor([item['rev_timbre_id'] for item in batch], dtype=torch.long),
             'rev_adsr_id': torch.tensor([item['rev_adsr_id'] for item in batch], dtype=torch.long),
             # 'rev_midi_id': torch.tensor([item['rev_midi_id'] for item in batch], dtype=torch.long),
