@@ -594,6 +594,7 @@ class MyDAC(BaseModel, CodecMixin):
             z = cont_z + adsr_z # (B, D=256, T)
 
         # Predictors
+        timbre_match_z = F.normalize(timbre_match_z, dim=-1)
         pred_pitch     = self.pitch_predictor(cont_z)[0]
         pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_adsr_id   = self.adsr_predictor(adsr_z)[0]
