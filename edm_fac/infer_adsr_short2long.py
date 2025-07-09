@@ -137,12 +137,12 @@ class EDMFACInference:
         orig_audio = self.load_audio(orig_audio_path)
         ref_audio = self.load_audio(ref_audio_path)
         gt_audio = self.load_audio(gt_audio_path)
-        
+
         # Move to device
         orig_audio = orig_audio.to(self.device)
         ref_audio = ref_audio.to(self.device)
         gt_audio = gt_audio.to(self.device)
-        
+
         # Forward pass
         with torch.no_grad():
             out = self.generator.conversion(
@@ -162,23 +162,23 @@ class EDMFACInference:
 
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Save all audio files
         orig_audio_cpu = AudioSignal(orig_audio.audio_data.cpu(), self.args.sample_rate)
         ref_audio_cpu = AudioSignal(ref_audio.audio_data.cpu(), self.args.sample_rate)
         gt_audio_cpu = AudioSignal(gt_audio.audio_data.cpu(), self.args.sample_rate)
-        
+
         orig_audio_cpu.write(os.path.join(output_dir, "orig.wav"))
         ref_audio_cpu.write(os.path.join(output_dir, f"ref_{convert_type}.wav"))
         converted_audio.write(os.path.join(output_dir, f"conv_{convert_type}.wav"))
         gt_audio_cpu.write(os.path.join(output_dir, "gt.wav"))
-        
+
         # Calculate metrics - ensure all tensors are on the same device
         try:
             # Move both audio signals to the same device as the loss functions
             converted_audio_device = converted_audio.to(self.device)
             gt_audio_device = gt_audio.to(self.device)
-            
+
             stft_loss = self.stft_loss(converted_audio_device, gt_audio_device)
         except Exception as e:
             print(f"STFT loss calculation failed: {e}")
@@ -220,7 +220,7 @@ def main():
     parser.add_argument("--ref_audio", required=True, help="Path to reference audio file")
     parser.add_argument("--gt_audio", required=True, help="Path to ground truth audio file")
     parser.add_argument("--output_dir", required=True, help="Output directory to save all audio files")
-    parser.add_argument("--convert_type", default="timbre", choices=["timbre", "adsr", "both"], 
+    parser.add_argument("--convert_type", default="timbre", choices=["timbre", "adsr", "both"],
                        help="Type of conversion to perform")
     parser.add_argument("--device", default="cuda", help="Device to use for inference")
 
@@ -246,13 +246,13 @@ def main():
     metadata_path = os.path.join(args.output_dir, "metadata.json")
     with open(metadata_path, "w") as f:
         json.dump(results, f, indent=4)
-    
+
     # Print results
     print(f"Conversion completed!")
     print(f"Output directory: {args.output_dir}")
     print(f"Files saved:")
     print(f"  - orig.wav")
-    print(f"  - ref_{args.convert_type}.wav") 
+    print(f"  - ref_{args.convert_type}.wav")
     print(f"  - conv_{args.convert_type}.wav")
     print(f"  - gt.wav")
     print(f"  - metadata.json")
