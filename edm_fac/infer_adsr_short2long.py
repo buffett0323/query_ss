@@ -16,6 +16,7 @@ from dac.nn.loss import MultiScaleSTFTLoss, MelSpectrogramLoss, L1Loss
 # Filter out specific warnings
 warnings.filterwarnings("ignore", message="stft_data changed shape")
 warnings.filterwarnings("ignore", message="Audio amplitude > 1 clipped when saving")
+LENGTH = 44100
 
 class EDMFACInference:
     def __init__(
@@ -117,13 +118,14 @@ class EDMFACInference:
 
         # Load audio
         audio, sr = librosa.load(audio_path, sr=self.args.sample_rate, mono=True)
+        audio = audio[:LENGTH]
 
         # Convert to AudioSignal
         audio_signal = AudioSignal(torch.tensor(audio).unsqueeze(0).unsqueeze(0), self.args.sample_rate)
         return audio_signal
 
     @torch.no_grad()
-    def convert_audio(self, orig_audio_path, ref_audio_path, gt_audio_path, output_dir, convert_type="timbre"):
+    def convert_audio(self, orig_audio_path, ref_audio_path, gt_audio_path, output_dir, convert_type="timbre", prefix=""):
         """
         Perform audio conversion
 
@@ -168,10 +170,10 @@ class EDMFACInference:
         ref_audio_cpu = AudioSignal(ref_audio.audio_data.cpu(), self.args.sample_rate)
         gt_audio_cpu = AudioSignal(gt_audio.audio_data.cpu(), self.args.sample_rate)
 
-        orig_audio_cpu.write(os.path.join(output_dir, "orig.wav"))
-        ref_audio_cpu.write(os.path.join(output_dir, f"ref_{convert_type}.wav"))
-        converted_audio.write(os.path.join(output_dir, f"conv_{convert_type}.wav"))
-        gt_audio_cpu.write(os.path.join(output_dir, "gt.wav"))
+        orig_audio_cpu.write(os.path.join(output_dir, f"{prefix}orig.wav"))
+        ref_audio_cpu.write(os.path.join(output_dir, f"{prefix}ref_{convert_type}.wav"))
+        converted_audio.write(os.path.join(output_dir, f"{prefix}conv_{convert_type}.wav"))
+        gt_audio_cpu.write(os.path.join(output_dir, f"{prefix}gt.wav"))
 
         # Calculate metrics - ensure all tensors are on the same device
         try:
@@ -223,6 +225,7 @@ def main():
     parser.add_argument("--convert_type", default="timbre", choices=["timbre", "adsr", "both"],
                        help="Type of conversion to perform")
     parser.add_argument("--device", default="cuda", help="Device to use for inference")
+    parser.add_argument("--prefix", default="", help="Prefix to add to the output files")
 
     args = parser.parse_args()
 
@@ -239,7 +242,8 @@ def main():
         args.ref_audio,
         args.gt_audio,
         args.output_dir,
-        args.convert_type
+        args.convert_type,
+        args.prefix
     )
 
     # Save metadata
