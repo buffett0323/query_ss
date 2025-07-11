@@ -16,7 +16,7 @@ from dac.nn.quantize import ResidualVectorQuantize
 from .encodec import SConv1d, SConvTranspose1d, SLSTM
 from .transformer import TransformerEncoder, AttentionPooling
 from .gradient_reversal import GradientReversal
-from .adsr_enc import ADSREncoder, ADSRFiLM
+from .adsr_enc import ADSREncoderV1, ADSREncoderV2, ADSRFiLM
 from alias_free_torch import Activation1d
 from einops.layers.torch import Rearrange
 
@@ -330,11 +330,11 @@ class MyDAC(BaseModel, CodecMixin):
         #     quantizer_dropout=quantizer_dropout,
         # )
         if self.use_FiLM:
-            self.adsr_encoder = ADSREncoder(
+            self.adsr_encoder = ADSREncoderV1(
                 embed_channels=adsr_enc_dim,
             )
         else:
-            self.adsr_encoder = ADSREncoder(
+            self.adsr_encoder = ADSREncoderV1(
                 embed_channels=latent_dim,
             )
 

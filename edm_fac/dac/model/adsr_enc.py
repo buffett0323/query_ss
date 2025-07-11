@@ -2,6 +2,50 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from typing import Optional, Tuple
+
+
+def masked_mean(x: torch.Tensor, mask: torch.Tensor, dim: int) -> torch.Tensor:
+    """
+    Compute mean over `dim` while ignoring positions where mask == 0.
+
+    Args
+    ----
+    x     : (B, C, T) or (B, N, C) tensor
+    mask  : broadcastable to x; same shape except at `dim`
+    dim   : dimension to reduce over
+
+    Returns
+    -------
+    Tensor with `dim` removed.
+    """
+    mask = mask.to(dtype=x.dtype)
+    total = (x * mask).sum(dim=dim)
+    denom = mask.sum(dim=dim).clamp_min(1e-6)
+    return total / denom
+
+
+def l2_normalise(vec: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
+    """L2-normalise the last dimension."""
+    return vec / (vec.norm(p=2, dim=-1, keepdim=True) + eps)
+
+
+class DSConv1d(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, kernel_size: int, dilation: int):
+        super().__init__()
+        pad = (kernel_size - 1) // 2 * dilation
+        self.depthwise = nn.Conv1d(in_ch, in_ch, kernel_size,
+                                   groups=in_ch, dilation=dilation,
+                                   padding=pad, bias=False)
+        self.pointwise = nn.Conv1d(in_ch, out_ch, 1, bias=False)
+        self.norm = nn.BatchNorm1d(out_ch)
+        self.act  = nn.SiLU()
+
+    def forward(self, x):
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        x = self.norm(x)
+        return self.act(x)
 
 
 class ResidualDilatedBlock(nn.Module):
@@ -19,7 +63,7 @@ class ResidualDilatedBlock(nn.Module):
         return x + self.act(self.conv(x))
 
 
-class ADSREncoder(nn.Module):
+class ADSREncoderV1(nn.Module):
     """
     Temporal multi-scale ConvNet + BiLSTM.
     Input  : waveform  (B, 1, 44100)
@@ -131,6 +175,196 @@ class ADSREncoder(nn.Module):
         return z_a
 
 
+# New Note-pooled ADSR Encoder
+class ADSREncoderV2(nn.Module):
+    """
+    A note-pooled ADSR encoder that turns audio into ONE global envelope code z_a ∈ ℝ^(param_dim + residual_dim).
+
+    Input  : waveform  (B, 1, T_samples) in [-1,1]
+    Output : ADSR code (B, param_dim + residual_dim)
+
+    Audio (T_samples)
+        ↓
+    Frame-based log-RMS features (T_frames)
+        ↓
+    Multi-scale temporal modeling
+        ↓
+    Note-pooled features
+        ↓
+    ADSR code (param_dim + residual_dim)
+
+    Args
+    ----
+    hop           : frame hop in samples
+    d_model       : channel width of internal representation
+    n_layers      : number of DSConv blocks
+    param_dim     : number of explicit ADSR parameters (default 4: A,D,R,S_lvl)
+    residual_dim  : dimension of extra residual code concatenated to params
+    """
+    def __init__(self,
+                 hop: int = 512,
+                 d_model: int = 64,
+                 n_layers: int = 3,
+                 param_dim: int = 4,
+                 residual_dim: int = 4):
+        super().__init__()
+        self.hop = hop                        # frame hop in samples
+        self.eps = 1.0e-7
+
+        layers = []
+        in_ch = 1
+        dilations = [2 ** i for i in range(n_layers)]
+        for d in dilations:
+            layers.append(DSConv1d(in_ch, d_model, kernel_size=5, dilation=d))
+            in_ch = d_model
+        self.feat_extractor = nn.Sequential(*layers)
+
+        # Two heads
+        self.param_head = nn.Linear(d_model, param_dim)
+        self.resid_head = nn.Linear(d_model, residual_dim)
+
+        # Store hyper-params
+        self.param_dim = param_dim
+        self.residual_dim = residual_dim
+        self.out_dim = param_dim + residual_dim
+
+    def preprocess(self, wav: torch.Tensor) -> torch.Tensor:
+        """
+        wav: (B, 1, T_samples) in [-1,1]
+        returns (B, 1, T_frames)
+        """
+        length = wav.shape[-1]
+        right_pad = math.ceil(length / self.hop) * self.hop - length
+        wav = nn.functional.pad(wav, (0, right_pad))
+        return wav
+
+    def _envelope_features(self, wav: torch.Tensor) -> torch.Tensor:
+        """
+        wav: (B, 1, T_samples) in [-1,1]
+        returns (B, 1, T_frames) : log-RMS
+        """
+        # square + pool = frame energy
+        rms = torch.sqrt(
+            F.avg_pool1d(wav ** 2, kernel_size=self.hop, stride=self.hop) + self.eps
+        )                                       # (B,1,Tf)
+
+        log_rms = torch.log(rms + self.eps)          # (B,1,Tf)
+        return log_rms
+
+    # --------------------------------------------------------------------- #
+
+    def forward(self,
+                wav: torch.Tensor,
+                note_mask: Optional[torch.Tensor] = None
+                ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Parameters
+        ----------
+        wav        : (B, 1, T_samples) – audio waveform in [-1,1]
+        note_mask  : (B, N, T_frames)  – binary mask per note (optional)
+                                     1 where the note is active, else 0.
+                                     If None, global average pooling is used.
+
+        Returns
+        -------
+        z_a        : (B, out_dim) – concatenated ADSR code
+        param_vec  : (B, param_dim) – raw param outputs (before concat)
+        """
+        # 0) preprocess audio
+        wav = self.preprocess(wav)
+
+        # 1) extract log-RMS features
+        log_rms = self._envelope_features(wav)    # (B,1,Tf)
+        print(log_rms.shape)
+
+        B, _, T = log_rms.shape
+        feats = self.feat_extractor(log_rms)          # (B, D, T)
+
+        # ------------------ note-pool → z_feats -------------------------- #
+        if note_mask is not None:
+            # Masked mean over time for each note -> (B, N, D)
+            note_feats = masked_mean(
+                feats.unsqueeze(1),  # (B, 1, D, T)
+                note_mask.unsqueeze(2),  # (B, N, 1, T)
+                dim=-1
+            )  # → (B, N, D)
+
+            # Pool notes into ONE vector (mean or max)
+            z_feats = note_feats.mean(dim=1)          # (B, D)
+        else:
+            # Global average pool over time
+            z_feats = feats.mean(dim=-1)              # (B, D)
+
+        # ------------------ heads --------------------------------------- #
+        raw_params = self.param_head(z_feats)         # (B, P)
+        residual   = l2_normalise(self.resid_head(z_feats))  # (B, R)
+
+        # Apply bounded activations for interpretability
+        # times ≥0 via softplus; sustain level in (0,1) via sigmoid
+        t_a, t_d, t_r, s_lvl = torch.split(raw_params, 1, dim=-1)
+        param_vec = torch.cat([
+            F.softplus(t_a),
+            F.softplus(t_d),
+            F.softplus(t_r),
+            torch.sigmoid(s_lvl)
+        ], dim=-1)
+
+        z_a = torch.cat([param_vec, residual], dim=-1)   # (B, P+R)
+        return z_a, param_vec
+
+
+# --------------------------------------------------------------------------- #
+# Differentiable ADSR kernel (parametric option)
+# --------------------------------------------------------------------------- #
+
+def adsr_kernel(params: torch.Tensor,
+                env_sr: int = 1000,
+                total_len: int = 1024) -> torch.Tensor:
+    """
+    Convert ADSR params to an envelope kernel suitable for convolution.
+
+    Args
+    ----
+    params    : (B, 4) [t_a, t_d, t_r, s_lvl]
+    env_sr    : sample-rate at which to build the envelope
+    total_len : length of kernel in env-samples
+
+    Returns
+    -------
+    env       : (B, 1, total_len) envelope kernel
+    """
+    B = params.size(0)
+    t_a, t_d, t_r, s = params.t()          # each (B,)
+    t_a  = (t_a * env_sr).long().clamp(1, total_len)
+    t_d  = (t_d * env_sr).long().clamp(1, total_len)
+    t_r  = (t_r * env_sr).long().clamp(1, total_len)
+
+    env = torch.zeros(B, total_len, device=params.device)
+
+    for b in range(B):
+        A = t_a[b]
+        D = t_d[b]
+        R = t_r[b]
+        S = s[b]
+
+        # Attack
+        env[b, :A] = torch.linspace(0, 1, A, device=params.device)
+        # Decay
+        end_d = A + D
+        env[b, A:end_d] = torch.linspace(1, S, D, device=params.device)
+        # Sustain (flat until start of release)
+        start_r = total_len - R
+        if start_r > end_d:
+            env[b, end_d:start_r] = S
+        # Release
+        env[b, start_r:] = torch.linspace(S, 0, R, device=params.device)
+
+    return env.unsqueeze(1)  # (B, 1, total_len)
+
+
+# --------------------------------------------------------------------------- #
+# FiLM Module (kept from original)
+# --------------------------------------------------------------------------- #
 
 class ADSRFiLM(nn.Module):
     """
@@ -176,9 +410,39 @@ class ADSRFiLM(nn.Module):
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # Test original ADSREncoderV1
+    print("\n=== Testing ADSREncoderV1 ===")
     B = 2
     wav = torch.randn(B, 1, 44100).to(device)             # dummy 1-second batch
-    encoder = ADSREncoder()
+    encoder_v1 = ADSREncoderV1()
+    encoder_v1.to(device)
+    z_a_v1 = encoder_v1(wav)
+    print(f"ADSREncoderV1 output shape: {z_a_v1.shape}")  # → torch.Size([2, 64, 87])
+
+    # Test new ADSREncoderV2
+    print("\n=== Testing ADSREncoderV2 ===")
+    wav = torch.randn(B, 1, 44100).to(device)  # dummy 1-second audio batch
+
+    # Test without note mask (global pooling)
+    encoder = ADSREncoderV2(hop=512, d_model=64, n_layers=3, param_dim=4, residual_dim=4)
     encoder.to(device)
-    z_a = encoder(wav)
-    print(z_a.shape)                           # → torch.Size([2, 64, 87])
+    z_a, param_vec = encoder(wav)
+    print(f"ADSREncoderV2 output shape: {z_a.shape}")  # → torch.Size([2, 8])
+    print(f"Param vector shape: {param_vec.shape}")  # → torch.Size([2, 4])
+    print(f"Param vector values: {param_vec[0]}")  # Show first batch params
+
+    # Test with note mask
+    N = 3  # number of notes
+    T_frames = 87  # 44100 / 512 ≈ 87 frames
+    note_mask = torch.randint(0, 2, (B, N, T_frames)).to(device).float()  # random binary mask
+    z_a_masked, param_vec_masked = encoder(wav, note_mask)
+    print(f"ADSREncoderV2 with note mask output shape: {z_a_masked.shape}")
+
+    # Test ADSR kernel
+    print("\n=== Testing ADSR kernel ===")
+    params = torch.tensor([[0.1, 0.2, 0.3, 0.7],  # [t_a, t_d, t_r, s_lvl] for batch 1
+                          [0.05, 0.15, 0.25, 0.8]], device=device)  # for batch 2
+    env_kernel = adsr_kernel(params, env_sr=1000, total_len=1024)
+    print(f"ADSR kernel shape: {env_kernel.shape}")  # → torch.Size([2, 1, 1024])
