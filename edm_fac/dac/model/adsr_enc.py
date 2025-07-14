@@ -11,7 +11,7 @@ def repeat_adsr_by_onset(adsr_embed, onset_flags):
     adsr_embed : (B, 64, L0) where L0 is the ADSR envelope length
     onset_flags: (B, 1, T)  0/1 indicating onset positions where 1 starts a new ADSR envelope
     Returns  : (B, 64, T) repeated ADSR embedding based on onset positions
-    
+
     Concept: When onset_flags[b, 0, t] = 1, the ADSR envelope starts at position t
     and continues until the next onset (1) or until the sequence ends.
     """
@@ -20,33 +20,33 @@ def repeat_adsr_by_onset(adsr_embed, onset_flags):
 
     # Initialize output tensor
     adsr_expanded = torch.zeros(B, 64, T, device=adsr_embed.device, dtype=adsr_embed.dtype)
-    
+
     # Create frame indices for all batches
     frame_indices = torch.arange(T, device=onset_flags.device)[None, :].expand(B, -1)  # (B, T)
-    
+
     # For each batch
     for b in range(B):
         onset_sequence = onset_flags[b, 0]  # (T,)
         onset_positions = torch.where(onset_sequence == 1)[0]
-        
+
         if len(onset_positions) == 0:
             continue
-        
+
         # Create segment boundaries
         segment_starts = onset_positions
         segment_ends = torch.cat([onset_positions[1:], torch.tensor([T], device=onset_flags.device)])
-        
+
         # For each frame, find which segment it belongs to
         segment_idx = torch.zeros(T, dtype=torch.long, device=onset_flags.device)
         for i, (start, end) in enumerate(zip(segment_starts, segment_ends)):
             segment_idx[start:end] = i
-        
+
         # Calculate frame position within its segment
         frame_in_segment = frame_indices[b] - segment_starts[segment_idx]
-        
+
         # Only apply ADSR for frames within the ADSR length
         valid_mask = (frame_in_segment >= 0) & (frame_in_segment < L0)
-        
+
         # Apply ADSR using advanced indexing
         adsr_expanded[b, :, valid_mask] = adsr_embed[b, :, frame_in_segment[valid_mask]]
 
@@ -467,9 +467,10 @@ if __name__ == "__main__":
     onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
     # Create dummy ADSR embedding
+    tmp_len = 24
     adsr_embed = torch.zeros(1, 64, 87)
     adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
-    adsr_embed[:, :, 1:45] = torch.randn(1, 64, 44)
+    adsr_embed[:, :, 1:tmp_len+1] = torch.randn(1, 64, tmp_len)
 
     print(f"Onset shape: {onset.shape}")
     print(f"ADSR embed shape: {adsr_embed.shape}")
