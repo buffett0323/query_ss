@@ -4,6 +4,57 @@ import torch.nn.functional as F
 import math
 from typing import Optional, Tuple
 
+def repeat_adsr_by_onset(adsr_embed, onset_flags):
+    """
+    adsr_embed : (B, 64, L0) where L0 is the ADSR envelope length
+    onset_flags: (B, 1, T)  0/1 indicating onset positions where 1 starts a new ADSR envelope
+    Returns  : (B, 64, T) repeated ADSR embedding based on onset positions
+
+    Concept: When onset_flags[b, 0, t] = 1, the ADSR envelope starts at position t
+    and continues until the next onset (1) or until the sequence ends.
+    """
+    B, _, L0  = adsr_embed.shape          # L0 = 87 (ADSR envelope length)
+    _, _, T   = onset_flags.shape
+
+    # Initialize output tensor
+    adsr_expanded = torch.zeros(B, 64, T, device=adsr_embed.device, dtype=adsr_embed.dtype)
+
+    # Process each batch separately
+    for b in range(B):
+        onset_sequence = onset_flags[b, 0]  # (T,)
+
+        # Find all onset positions (where onset_sequence == 1)
+        onset_positions = torch.where(onset_sequence == 1)[0]
+
+        if len(onset_positions) == 0:
+            continue
+
+        # Process each onset segment
+        for i, start_pos in enumerate(onset_positions):
+            # Determine end position: next onset or end of sequence
+            if i + 1 < len(onset_positions):
+                end_pos = onset_positions[i + 1]
+            else:
+                end_pos = T
+
+            # Calculate segment length
+            segment_length = end_pos - start_pos
+
+            if segment_length <= 0:
+                continue
+
+            # Map this segment to ADSR envelope
+            # Apply ADSR from the start, but don't repeat if segment is longer
+            if segment_length <= L0:
+                # Segment is shorter than or equal to ADSR length
+                # Use the first segment_length frames of the ADSR
+                adsr_expanded[b, :, start_pos:end_pos] = adsr_embed[b, :, :segment_length]
+            else:
+                # Segment is longer than ADSR length
+                # Apply the full ADSR envelope from the start, leave the rest as zeros
+                adsr_expanded[b, :, start_pos:start_pos + L0] = adsr_embed[b, :, :]
+
+    return adsr_expanded
 
 def masked_mean(x: torch.Tensor, mask: torch.Tensor, dim: int) -> torch.Tensor:
     """
@@ -275,7 +326,6 @@ class ADSREncoderV2(nn.Module):
 
         # 1) extract log-RMS features
         log_rms = self._envelope_features(wav)    # (B,1,Tf)
-        print(log_rms.shape)
 
         B, _, T = log_rms.shape
         feats = self.feat_extractor(log_rms)          # (B, D, T)
@@ -348,16 +398,16 @@ def adsr_kernel(params: torch.Tensor,
         S = s[b]
 
         # Attack
-        env[b, :A] = torch.linspace(0, 1, A, device=params.device)
+        env[b, :A] = torch.linspace(0, 1, int(A), device=params.device)
         # Decay
         end_d = A + D
-        env[b, A:end_d] = torch.linspace(1, S, D, device=params.device)
+        env[b, A:end_d] = torch.linspace(1, S, int(D), device=params.device)
         # Sustain (flat until start of release)
         start_r = total_len - R
         if start_r > end_d:
             env[b, end_d:start_r] = S
         # Release
-        env[b, start_r:] = torch.linspace(S, 0, R, device=params.device)
+        env[b, start_r:] = torch.linspace(S, 0, int(R), device=params.device)
 
     return env.unsqueeze(1)  # (B, 1, total_len)
 
@@ -409,40 +459,45 @@ class ADSRFiLM(nn.Module):
 
 
 if __name__ == "__main__":
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    # Test the revised repeat_adsr_by_onset function
+    print("=== Testing revised repeat_adsr_by_onset function ===")
 
-    # Test original ADSREncoderV1
-    print("\n=== Testing ADSREncoderV1 ===")
-    B = 2
-    wav = torch.randn(B, 1, 44100).to(device)             # dummy 1-second batch
-    encoder_v1 = ADSREncoderV1()
-    encoder_v1.to(device)
-    z_a_v1 = encoder_v1(wav)
-    print(f"ADSREncoderV1 output shape: {z_a_v1.shape}")  # → torch.Size([2, 64, 87])
+    # Your example onset flags
+    onset = torch.tensor([1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+         0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
+    onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
-    # Test new ADSREncoderV2
-    print("\n=== Testing ADSREncoderV2 ===")
-    wav = torch.randn(B, 1, 44100).to(device)  # dummy 1-second audio batch
+    # Create dummy ADSR embedding
+    adsr_embed = torch.zeros(1, 64, 87)
+    adsr_embed[:, :, :20] = torch.randn(1, 64, 20)
 
-    # Test without note mask (global pooling)
-    encoder = ADSREncoderV2(hop=512, d_model=64, n_layers=3, param_dim=4, residual_dim=4)
-    encoder.to(device)
-    z_a, param_vec = encoder(wav)
-    print(f"ADSREncoderV2 output shape: {z_a.shape}")  # → torch.Size([2, 8])
-    print(f"Param vector shape: {param_vec.shape}")  # → torch.Size([2, 4])
-    print(f"Param vector values: {param_vec[0]}")  # Show first batch params
+    print(f"Onset shape: {onset.shape}")
+    print(f"ADSR embed shape: {adsr_embed.shape}")
+    print(f"Onset positions: {torch.where(onset[0, 0] == 1)[0].tolist()}")
 
-    # Test with note mask
-    N = 3  # number of notes
-    T_frames = 87  # 44100 / 512 ≈ 87 frames
-    note_mask = torch.randint(0, 2, (B, N, T_frames)).to(device).float()  # random binary mask
-    z_a_masked, param_vec_masked = encoder(wav, note_mask)
-    print(f"ADSREncoderV2 with note mask output shape: {z_a_masked.shape}")
+    # Test the function
+    result = repeat_adsr_by_onset(adsr_embed, onset)
+    print(f"Result shape: {result.shape}")
 
-    # Test ADSR kernel
-    print("\n=== Testing ADSR kernel ===")
-    params = torch.tensor([[0.1, 0.2, 0.3, 0.7],  # [t_a, t_d, t_r, s_lvl] for batch 1
-                          [0.05, 0.15, 0.25, 0.8]], device=device)  # for batch 2
-    env_kernel = adsr_kernel(params, env_sr=1000, total_len=1024)
-    print(f"ADSR kernel shape: {env_kernel.shape}")  # → torch.Size([2, 1, 1024])
+    # Verify the concept: check that ADSR is applied correctly
+    onset_positions = torch.where(onset[0, 0] == 1)[0]
+    print(f"\nOnset positions: {onset_positions.tolist()}")
+
+    for i, start_pos in enumerate(onset_positions):
+        if i + 1 < len(onset_positions):
+            end_pos = onset_positions[i + 1]
+        else:
+            end_pos = onset.shape[-1]
+
+        segment_length = end_pos - start_pos
+        print(f"Segment {i}: position {start_pos} to {end_pos} (length: {segment_length})")
+
+        # Check that the segment is not all zeros (ADSR was applied)
+        segment_data = result[0, :, start_pos:end_pos]
+        non_zero_count = (segment_data != 0).sum().item()
+        print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
+
+    print("\nFunction test completed!")

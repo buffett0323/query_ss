@@ -18,7 +18,7 @@ from audiotools import ml
 from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
-from dataset import EDM_Single_Shot_Dataset, EDM_Single_Shot_Val_Dataset
+from dataset import EDM_SS_MN_Dataset, EDM_SS_MN_Val_Dataset
 from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
 import dac
 
@@ -45,7 +45,7 @@ class Wrapper:
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
             adsr_classes=args.adsr_classes,
-            pitch_nums=args.n_notes, #args.max_note - args.min_note + 1, # 88
+            pitch_nums=args.max_note - args.min_note + 1, # 88
             use_gr_content=args.use_gr_content,
             use_gr_adsr=args.use_gr_adsr,
             use_gr_timbre=args.use_gr_timbre,
@@ -118,7 +118,7 @@ class Wrapper:
         acc = correct / total
         return acc
 
-
+# TODO
 @torch.no_grad()
 def save_samples(args, accelerator, tracker_step, wrapper):
     wrapper.generator.eval()
@@ -138,6 +138,9 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
+            onset_flags=batch['onset'],
+            orig_adsr_audio=batch['orig_adsr_audio'].audio_data,
+            ref_adsr_audio=batch['ref_adsr_audio'].audio_data,
             convert_type=conv_type,
         )
 
@@ -187,26 +190,32 @@ def main(args, accelerator):
     )
 
     # Build datasets and dataloaders
-    train_paired_data = EDM_Single_Shot_Dataset(
-        root_path=args.root_path,
+    train_paired_data = EDM_SS_MN_Dataset(
+        ss_root_path=args.ss_root_path,
+        mn_root_path=args.mn_root_path,
+        midi_path=args.midi_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="train",
-        n_notes=args.n_notes,
         perturb_content=args.perturb_content,
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         disentanglement_mode=args.disentanglement,
     )
 
-    val_paired_data = EDM_Single_Shot_Val_Dataset(
-        root_path=args.root_path,
+    val_paired_data = EDM_SS_MN_Val_Dataset(
+        ss_root_path=args.ss_root_path,
+        mn_root_path=args.mn_root_path,
+        midi_path=args.midi_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="evaluation",
-        n_notes=args.n_notes,
+        perturb_content=args.perturb_content,
+        perturb_adsr=args.perturb_adsr,
+        perturb_timbre=args.perturb_timbre,
+        disentanglement_mode=args.disentanglement,
     )
 
     wrapper = Wrapper(args, accelerator, val_paired_data)
@@ -303,6 +312,9 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
+            onset_flags=batch['onset'],
+            orig_adsr_audio=batch['orig_adsr_audio'].audio_data,
+            ref_adsr_audio=batch['ref_adsr_audio'].audio_data,
             convert_type=conv_type,
         )
     output = {}
@@ -354,6 +366,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         timbre_id = batch['timbre_id']
         adsr_id = batch['adsr_id']
         pitch = batch['pitch']
+        onset_vec = batch['onset']
 
     # DAC Model
     with accelerator.autocast():
@@ -362,6 +375,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
             content_match=content_match_data.audio_data,
             timbre_match=timbre_match_data.audio_data,
             adsr_match=adsr_match_data.audio_data,
+            onset_flags=onset_vec,
         )
 
         recons = AudioSignal(out["audio"], args.sample_rate)
@@ -440,7 +454,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_ss_grl.yaml")
+    config = yaml_config_hook("configs/config_ss_mn.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
