@@ -4,12 +4,14 @@ import torch.nn.functional as F
 import math
 from typing import Optional, Tuple
 
+
+# Use one ADSR's embedding to repeat for each onset in content
 def repeat_adsr_by_onset(adsr_embed, onset_flags):
     """
     adsr_embed : (B, 64, L0) where L0 is the ADSR envelope length
     onset_flags: (B, 1, T)  0/1 indicating onset positions where 1 starts a new ADSR envelope
     Returns  : (B, 64, T) repeated ADSR embedding based on onset positions
-
+    
     Concept: When onset_flags[b, 0, t] = 1, the ADSR envelope starts at position t
     and continues until the next onset (1) or until the sequence ends.
     """
@@ -18,41 +20,35 @@ def repeat_adsr_by_onset(adsr_embed, onset_flags):
 
     # Initialize output tensor
     adsr_expanded = torch.zeros(B, 64, T, device=adsr_embed.device, dtype=adsr_embed.dtype)
-
-    # Process each batch separately
+    
+    # Create frame indices for all batches
+    frame_indices = torch.arange(T, device=onset_flags.device)[None, :].expand(B, -1)  # (B, T)
+    
+    # For each batch
     for b in range(B):
         onset_sequence = onset_flags[b, 0]  # (T,)
-
-        # Find all onset positions (where onset_sequence == 1)
         onset_positions = torch.where(onset_sequence == 1)[0]
-
+        
         if len(onset_positions) == 0:
             continue
-
-        # Process each onset segment
-        for i, start_pos in enumerate(onset_positions):
-            # Determine end position: next onset or end of sequence
-            if i + 1 < len(onset_positions):
-                end_pos = onset_positions[i + 1]
-            else:
-                end_pos = T
-
-            # Calculate segment length
-            segment_length = end_pos - start_pos
-
-            if segment_length <= 0:
-                continue
-
-            # Map this segment to ADSR envelope
-            # Apply ADSR from the start, but don't repeat if segment is longer
-            if segment_length <= L0:
-                # Segment is shorter than or equal to ADSR length
-                # Use the first segment_length frames of the ADSR
-                adsr_expanded[b, :, start_pos:end_pos] = adsr_embed[b, :, :segment_length]
-            else:
-                # Segment is longer than ADSR length
-                # Apply the full ADSR envelope from the start, leave the rest as zeros
-                adsr_expanded[b, :, start_pos:start_pos + L0] = adsr_embed[b, :, :]
+        
+        # Create segment boundaries
+        segment_starts = onset_positions
+        segment_ends = torch.cat([onset_positions[1:], torch.tensor([T], device=onset_flags.device)])
+        
+        # For each frame, find which segment it belongs to
+        segment_idx = torch.zeros(T, dtype=torch.long, device=onset_flags.device)
+        for i, (start, end) in enumerate(zip(segment_starts, segment_ends)):
+            segment_idx[start:end] = i
+        
+        # Calculate frame position within its segment
+        frame_in_segment = frame_indices[b] - segment_starts[segment_idx]
+        
+        # Only apply ADSR for frames within the ADSR length
+        valid_mask = (frame_in_segment >= 0) & (frame_in_segment < L0)
+        
+        # Apply ADSR using advanced indexing
+        adsr_expanded[b, :, valid_mask] = adsr_embed[b, :, frame_in_segment[valid_mask]]
 
     return adsr_expanded
 
@@ -472,7 +468,8 @@ if __name__ == "__main__":
 
     # Create dummy ADSR embedding
     adsr_embed = torch.zeros(1, 64, 87)
-    adsr_embed[:, :, :20] = torch.randn(1, 64, 20)
+    adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
+    adsr_embed[:, :, 1:45] = torch.randn(1, 64, 44)
 
     print(f"Onset shape: {onset.shape}")
     print(f"ADSR embed shape: {adsr_embed.shape}")
@@ -499,5 +496,10 @@ if __name__ == "__main__":
         segment_data = result[0, :, start_pos:end_pos]
         non_zero_count = (segment_data != 0).sum().item()
         print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
+
+    print(result[:,:,0])
+    print(result[:,:,1])
+    print(result[:,:,43])
+    print(result[:,:,44])
 
     print("\nFunction test completed!")

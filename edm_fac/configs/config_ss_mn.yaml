@@ -1,6 +1,6 @@
 # path: /mnt/gestalt/home/buffett # NTU
 path: /home/buffett/nas_data # Sinica
-postfix: "0714_ss_mn"
+postfix: "0714_ss_mn_new"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"]
 convert_type: ["both", "adsr", "timbre"]
 
@@ -13,7 +13,7 @@ ss_root_path: ${path}/EDM_FAC_NEW_DATA/rendered_ss_t_adsr_c_new
 mn_root_path: ${path}/EDM_FAC_NEW_DATA/rendered_mn_t_adsr_c
 midi_path: ${path}/EDM_FAC_NEW_DATA/midi_files
 
-batch_size: 2
+batch_size: 8
 save_interval: 10000
 sample_freq: 1000
 validate_interval: 1000
