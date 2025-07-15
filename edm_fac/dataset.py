@@ -859,10 +859,10 @@ class EDM_SS_MN_Val_Dataset(Dataset):
         target_adsr_idx = self.mn_ids_to_item_idx[f"T{timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
         target_both_idx = self.mn_ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
 
-        target_content = self._load_audio(self.mn_paired_data[target_content_idx][3])
-        target_timbre = self._load_audio(self.mn_paired_data[target_timbre_idx][3])
-        target_adsr = self._load_audio(self.mn_paired_data[target_adsr_idx][3])
-        target_both = self._load_audio(self.mn_paired_data[target_both_idx][3])
+        target_content = self._load_audio(self.mn_paired_data[target_content_idx][3], ref_offset_pick)
+        target_timbre = self._load_audio(self.mn_paired_data[target_timbre_idx][3], offset_pick)
+        target_adsr = self._load_audio(self.mn_paired_data[target_adsr_idx][3], offset_pick)
+        target_both = self._load_audio(self.mn_paired_data[target_both_idx][3], offset_pick)
 
         # 4. Get target pitch
         # orig_pitch = self._get_midi_from_adsr(midi_id, adsr_id)
@@ -3286,10 +3286,10 @@ def build_dataloader(
         batch_size=batch_size,
         num_workers=num_workers,
         collate_fn=collate_fn,
-        drop_last=True,
-        pin_memory=True,
-        prefetch_factor=prefetch_factor if num_workers > 0 else None,
-        persistent_workers=True if num_workers > 0 else False,
+        # drop_last=True,
+        # pin_memory=True,
+        # prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        # persistent_workers=True if num_workers > 0 else False,
         shuffle=True if split == "train" else False,
     )
 
@@ -3304,38 +3304,79 @@ if __name__ == "__main__":
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    data_tmp = EDM_SS_MN_Dataset(
-        ss_root_path=args.ss_root_path,
-        mn_root_path=args.mn_root_path,
-        midi_path=args.midi_path,
-        duration=args.duration,
-        sample_rate=args.sample_rate,
-        hop_length=args.hop_length,
-        split="train",
-        perturb_content=args.perturb_content,
-        perturb_adsr=args.perturb_adsr,
-        perturb_timbre=args.perturb_timbre,
-        disentanglement_mode=args.disentanglement,
-    )
-    dl = build_dataloader(data_tmp, batch_size=4, num_workers=8, split="train")
-    for i, dt in enumerate(dl):
-        print("Onset: ", dt['onset'])
-        print(json.dumps(dt['metadata'], indent=2))
-        break
-
-    # data_val = EDM_SS_MN_Val_Dataset(
+    # data_tmp = EDM_SS_MN_Dataset(
     #     ss_root_path=args.ss_root_path,
     #     mn_root_path=args.mn_root_path,
     #     midi_path=args.midi_path,
     #     duration=args.duration,
     #     sample_rate=args.sample_rate,
     #     hop_length=args.hop_length,
-    #     split="evaluation",
+    #     split="train",
     #     perturb_content=args.perturb_content,
     #     perturb_adsr=args.perturb_adsr,
     #     perturb_timbre=args.perturb_timbre,
     #     disentanglement_mode=args.disentanglement,
     # )
+    # dt0 = data_tmp[0]
+    # target = AudioSignal(dt0['target'].audio_data, 44100)
+    # cm = AudioSignal(dt0['content_match'].audio_data, 44100)
+    # tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
+    # am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
+
+    # target.write("target.wav")
+    # cm.write("content_match.wav")
+    # tm.write("timbre_match.wav")
+    # am.write("adsr_match.wav")
+
+    # print(cm.shape, tm.shape, am.shape)
+    # print(cm.audio_data.shape, tm.audio_data.shape, am.audio_data.shape)
+    # print(cm.audio_data.shape, tm.audio_data.shape, am.audio_data.shape)
+
+    # print(cm.shape, tm.shape, am.shape)
+
+    # print(json.dumps(dt0['metadata'], indent=2))
+
+    # dl = build_dataloader(data_tmp, batch_size=4, num_workers=8, split="train")
+    # for i, dt in enumerate(dl):
+    #     print("Onset: ", dt['onset'])
+    #     print(json.dumps(dt['metadata'], indent=2))
+    #     break
+
+    data_val = EDM_SS_MN_Val_Dataset(
+        ss_root_path=args.ss_root_path,
+        mn_root_path=args.mn_root_path,
+        midi_path=args.midi_path,
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        hop_length=args.hop_length,
+        split="evaluation",
+        perturb_content=args.perturb_content,
+        perturb_adsr=args.perturb_adsr,
+        perturb_timbre=args.perturb_timbre,
+        disentanglement_mode=args.disentanglement,
+    )
+    dv0 = data_val[0]
+    oa = AudioSignal(dv0['orig_audio'].audio_data, 44100)
+    ra = AudioSignal(dv0['ref_audio'].audio_data, 44100)
+    oaa = AudioSignal(dv0['orig_adsr_audio'].audio_data, 44100)
+    raa = AudioSignal(dv0['ref_adsr_audio'].audio_data, 44100)
+    tc = AudioSignal(dv0['target_content'].audio_data, 44100)
+    ta = AudioSignal(dv0['target_adsr'].audio_data, 44100)
+    tt = AudioSignal(dv0['target_timbre'].audio_data, 44100)
+    tb = AudioSignal(dv0['target_both'].audio_data, 44100)
+
+    oa.write("testtest/orig_audio.wav")
+    ra.write("testtest/ref_audio.wav")
+    oaa.write("testtest/orig_adsr_audio.wav")
+    raa.write("testtest/ref_adsr_audio.wav")
+    tc.write("testtest/target_content.wav")
+    ta.write("testtest/target_adsr.wav")
+    tt.write("testtest/target_timbre.wav")
+    tb.write("testtest/target_both.wav")
+    print(json.dumps(dv0['metadata'], indent=2))
+
+    # print(json.dumps(dv0['metadata'], indent=2))
+
     # dl = build_dataloader(data_val, batch_size=4, num_workers=8, split="evaluation")
     # for i, dt in enumerate(dl):
     #     print(dt['orig_audio'].shape)
