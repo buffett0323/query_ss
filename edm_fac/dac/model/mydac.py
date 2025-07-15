@@ -16,7 +16,8 @@ from dac.nn.quantize import ResidualVectorQuantize
 from .encodec import SConv1d, SConvTranspose1d, SLSTM
 from .transformer import TransformerEncoder, AttentionPooling
 from .gradient_reversal import GradientReversal
-from .adsr_enc import ADSREncoderV1, ADSREncoderV2, ADSRFiLM, repeat_adsr_by_onset
+from .adsr_enc import ADSREncoderV1, ADSREncoderV2, ADSREncoderV3, ADSRFiLM
+from .util import repeat_adsr_by_onset
 from alias_free_torch import Activation1d
 from einops.layers.torch import Rearrange
 

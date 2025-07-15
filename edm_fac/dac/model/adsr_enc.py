@@ -2,63 +2,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-
-
-# Use one ADSR's embedding to repeat for each onset in content
-def repeat_adsr_by_onset(adsr_embed, onset_flags):
-    """
-    adsr_embed : (B, 64, L0) where L0 is the ADSR envelope length
-    onset_flags: (B, 1, T)  0/1 indicating onset positions where 1 starts a new ADSR envelope
-    Returns  : (B, 64, T) repeated ADSR embedding based on onset positions
-
-    Concept: When onset_flags[b, 0, t] = 1, the ADSR envelope starts at position t
-    and continues until the next onset (1) or until the sequence ends.
-    """
-    B, _, L0  = adsr_embed.shape          # L0 = 87 (ADSR envelope length)
-    _, _, T   = onset_flags.shape
-
-    # Initialize output tensor
-    adsr_expanded = torch.zeros(B, 64, T, device=adsr_embed.device, dtype=adsr_embed.dtype)
-
-    # Create frame indices for all batches
-    frame_indices = torch.arange(T, device=onset_flags.device)[None, :].expand(B, -1)  # (B, T)
-
-    # For each batch
-    for b in range(B):
-        onset_sequence = onset_flags[b, 0]  # (T,)
-        onset_positions = torch.where(onset_sequence == 1)[0]
-
-        if len(onset_positions) == 0:
-            continue
-
-        # Create segment boundaries
-        segment_starts = onset_positions
-        segment_ends = torch.cat([onset_positions[1:], torch.tensor([T], device=onset_flags.device)])
-
-        # For each frame, find which segment it belongs to
-        segment_idx = torch.zeros(T, dtype=torch.long, device=onset_flags.device)
-        for i, (start, end) in enumerate(zip(segment_starts, segment_ends)):
-            segment_idx[start:end] = i
-
-        # Calculate frame position within its segment
-        frame_in_segment = frame_indices[b] - segment_starts[segment_idx]
-
-        # Only apply ADSR for frames within the ADSR length
-        valid_mask = (frame_in_segment >= 0) & (frame_in_segment < L0)
-
-        # Apply ADSR using advanced indexing
-        adsr_expanded[b, :, valid_mask] = adsr_embed[b, :, frame_in_segment[valid_mask]]
-
-    return adsr_expanded
-
-
-def sequencer(proto_E, delta):
-    L = proto_E.size(-1)
-    stream = F.conv1d(
-        delta.expand(-1, proto_E.size(1), -1),  # (B,64,T)
-        weight=proto_E,                         # (B,64,L)
-        groups=proto_E.size(1), padding=L-1)
-    return stream[..., :delta.size(-1)]
+try:
+    from .util import (
+        repeat_adsr_by_onset,
+        build_phase_grid,
+        gather_notes_pad,
+        resample_adsr,
+        sequencer
+    )
+except ImportError:
+    # Fallback for when running the script directly
+    from util import (
+        repeat_adsr_by_onset,
+        build_phase_grid,
+        gather_notes_pad,
+        resample_adsr,
+        sequencer
+    )
 
 
 # ADSR Encoder V1
@@ -77,7 +37,7 @@ class ResidualDilatedBlock(nn.Module):
         return x + self.act(self.conv(x))
 
 
-# ADSR Encoder V2
+# ADSR Encoder V2, V3: Depthwise-separable convolution
 class DSConv1d(nn.Module):
     def __init__(self, in_ch: int, out_ch: int, k: int, d: int):
         super().__init__()
@@ -96,24 +56,56 @@ class DSConv1d(nn.Module):
         return self.act(x)
 
 
+# ADSR Encoder V2, V3: Basic convolution backbone
+class ConvBackbone(nn.Module):
+    """Convert log-RMS to amplitude features"""
+    def __init__(self, ch: int = 64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 32, 3, padding=1), nn.GELU(),
+            nn.Conv1d(32, 64, 3, padding=1, dilation=2), nn.GELU(),
+            nn.Conv1d(64, ch, 3, padding=1, dilation=4), nn.GELU(),
+            nn.BatchNorm1d(ch)
+        )
+
+    def forward(self, x):
+        return self.net(x)          # (B,64,T)
+
+
+# ADSR Encoder V3: Depthwise-separable backbone
+class DSBackbone(nn.Module):
+    def __init__(self, ch: int = 64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 32, 3, padding=1), nn.GELU(),          # early channel mix
+            DSConv1d(32, 64, k=3, d=1),
+            DSConv1d(64, 64, k=3, d=2),
+            DSConv1d(64, 64, k=3, d=4),
+            DSConv1d(64, 64, k=3, d=8),
+        )
+
+    def forward(self, x):
+        return self.net(x)          # (B, 64, T)
+
+
 # ADSR Encoder V2
 class ResidualTCN(nn.Module):
     """
-    Dilated residual TCN block
-    --------------------------------
-    x --(depthwise dilated conv)--> BN/GELU --> 1×1 pw conv --+
-      |                                                      |
-      +---------------------------(residual add)-------------+
+    Dilated residual temporal convolution block.
 
-    Args
-    ----
-    channels : int   -- in/out channel 同時 = residual channel 數
-    k        : int   -- kernel size  (一般用 3)
-    d        : int   -- dilation     (2^i)
+    Architecture:
+    x --(depthwise dilated conv)--> BN/GELU --> 1×1 conv --+
+      |                                                    |
+      +---------------------------(residual add)-----------+
+
+    Args:
+        channels: Number of input/output channels
+        k: Kernel size (usually 3)
+        d: Dilation factor (2^i)
     """
     def __init__(self, channels: int, k: int = 3, d: int = 1):
         super().__init__()
-        pad = (k - 1) * d                       # 保長度不變
+        pad = (k - 1) * d                       # Maintain length
 
         # Depth-wise dilated conv (groups=channels)
         self.depthwise = nn.utils.weight_norm(
@@ -135,7 +127,7 @@ class ResidualTCN(nn.Module):
         """
         y = self.depthwise(x)
         y = self.pointwise(self.act(self.norm(y)))
-        # 如果多餘 padding 造成長度 > T，裁掉右端
+        # Trim right side if padding causes length > T
         if y.size(-1) != x.size(-1):
             y = y[..., :x.size(-1)]
         return x + y
@@ -166,7 +158,7 @@ class ADSREncoderV1(nn.Module):
         self.hop = hop                        # frame hop in samples
         self.eps = 1.0e-7
 
-        # ───────────────────── envelope pre-processor ───────────────────── #
+        # Envelope pre-processor
         # 1×1 conv (maps [log-RMS, Δlog-RMS] → C₀)
         self.pre = nn.Conv1d(2, embed_channels, kernel_size=1)
 
@@ -174,7 +166,7 @@ class ADSREncoderV1(nn.Module):
         self.dilated = nn.ModuleList(
             [ResidualDilatedBlock(embed_channels, d) for d in dilations])
 
-        # Low-rate context branch (×4 downsample → global context)
+        # Low-rate context branch (4x downsample for global context)
         self.lowrate = nn.Sequential(
             nn.Conv1d(embed_channels, embed_channels, kernel_size=3,
                       padding=1, stride=4),
@@ -237,7 +229,7 @@ class ADSREncoderV1(nn.Module):
         for block in self.dilated:
             x = block(x)                        # (B,C,Tf)
 
-        # 4) multi-scale concat (high-rate || up-sampled low-rate)
+        # 4) Multi-scale concatenation (high-rate + up-sampled low-rate)
         low = self.lowrate(x)                   # (B,C,Tf/4)
         low = F.interpolate(low, size=x.shape[-1],
                             mode='linear', align_corners=False)
@@ -257,8 +249,8 @@ class ADSREncoderV1(nn.Module):
 class ADSREncoderV2(nn.Module):
     def __init__(self, proto_len=87, ch=64):
         super().__init__()
-        # ---------- OnsetNet (可替換成預訓 madmom CNN) ----------
-        # self.onset_net = CNNOnsetNet()  # 任何輸出 (B,1,T) ∈ (0,1) 的網路
+        # ---------- OnsetNet (can be replaced with pre-trained madmom CNN) ----------
+        # self.onset_net = CNNOnsetNet()  # Any network outputting (B,1,T) ∈ (0,1)
 
         # ---------- Context Encoder ----------
         self.ctx = nn.Sequential(
@@ -268,10 +260,10 @@ class ADSREncoderV2(nn.Module):
             nn.AdaptiveAvgPool1d(1))
         self.fc_ctx  = nn.Linear(64, 128)
 
-        # ---------- FiLM 生成器 ----------
+        # ---------- FiLM generator ----------
         self.film = nn.Sequential(
             nn.Linear(128, 256), nn.GELU(),
-            nn.Linear(256, ch * 2 * 16))  # 16層TCN，每層 γ,β
+            nn.Linear(256, ch * 2 * 16))  # 16 TCN layers, each with γ,β
 
         # ---------- One-Shot TCN ----------
         self.tcn = nn.ModuleList(
@@ -284,12 +276,13 @@ class ADSREncoderV2(nn.Module):
 
     def forward(self, p_onset, log_rms):
         """
-        wav     : (B,1,T)   – 原始波形（給 OnsetNet）
-        log_rms : (B,1,T)   – 事先算好或即場算
+        Args:
+            p_onset: (B,1,T) – Onset probability (can be pre-computed)
+            log_rms: (B,1,T) – Log-RMS features (pre-computed or computed on-the-fly)
         """
         # 1) Onset detection (soft probability)
         # p_onset = self.onset_net(wav)            # (B,1,T) ∈ (0,1)
-        # delta   = (p_onset > 0.5).float()        # 若要完全可微，可用 p_onset 直接捲積
+        # delta   = (p_onset > 0.5).float()        # For fully differentiable, use p_onset directly
 
         # 2) Context embedding
         e = self.ctx(log_rms).squeeze(-1)        # (B,64)
@@ -312,10 +305,90 @@ class ADSREncoderV2(nn.Module):
         return adsr_stream, proto_E, p_onset
 
 
-# --------------------------------------------------------------------------- #
-# FiLM Module (kept from original)
-# --------------------------------------------------------------------------- #
 
+# Phase-Align One-Shot ADSR Encoder
+class ADSREncoderV3(nn.Module):
+    def __init__(self,
+                 proto_len: int = 87,
+                 channels: int = 64,
+                 hop: int = 512):
+        super().__init__()
+        self.proto_len = proto_len
+        self.hop = hop
+        self.eps = 1.0e-7
+
+
+        self.backbone = DSBackbone(channels)
+
+        # Attention pooling to single proto_E
+        self.attn_pool = nn.Sequential(
+            nn.Linear(channels, channels),
+            nn.GELU(),
+            nn.Linear(channels, 1)
+        )
+
+    def preprocess(self, wav: torch.Tensor) -> torch.Tensor:
+        """
+        wav: (B, 1, T_samples) in [-1,1]
+        returns (B, 1, T_frames)
+        """
+        length = wav.shape[-1]
+        right_pad = math.ceil(length / self.hop) * self.hop - length
+        wav = nn.functional.pad(wav, (0, right_pad))
+        return wav
+
+    def _envelope_features(self, wav: torch.Tensor) -> torch.Tensor:
+        """
+        wav: (B, 1, T_samples) in [-1,1]
+        returns (B, 1, T_frames) : log-RMS
+        """
+        # square + pool = frame energy
+        rms = torch.sqrt(
+            F.avg_pool1d(wav ** 2, kernel_size=self.hop, stride=self.hop) + self.eps
+        )                                       # (B,1,Tf)
+        log_rms = torch.log(rms + self.eps)          # (B,1,Tf)
+        return log_rms
+
+    def forward(self,
+                wav: torch.Tensor,          # (B,1,T_samples) waveform input
+                onset_flags: torch.Tensor   # (B,1,T_frames)  0/1 impulse train
+                ) -> dict:
+
+        # 0) Preprocess waveform and calculate log-RMS
+        wav = self.preprocess(wav)          # (B,1,T_samples)
+        log_rms = self._envelope_features(wav)  # (B,1,T_frames)
+
+        B, _, _ = log_rms.shape
+
+        # 1) Get on-set index list
+        on_idx = [torch.where(onset_flags[b, 0] == 1)[0].tolist() for b in range(B)]
+
+        # 2) DSConv backbone
+        adsr_feat = self.backbone(log_rms)  # (B,64,T)
+
+        # 3) Zero-pad per note  →    note_E, mask
+        note_E, mask = gather_notes_pad(
+            adsr_feat, on_idx, self.proto_len)             # (B,N,64,L), (B,N,L)
+
+        # 4) Attention or length-weighted averaging
+        if note_E.size(1) > 0:
+            # Mask-based averaging: normalize each note by valid length
+            lengths = mask.sum(-1, keepdim=True)                    # (B,N,1)
+            w = lengths / (lengths.sum(1, keepdim=True) + self.eps) # (B,N,1)
+            w = w.unsqueeze(-1)                                     # (B,N,1,1)
+            proto_E = (note_E * w).sum(dim=1)                       # (B,64,L)
+        else:
+            proto_E = note_E.mean(dim=1)
+
+        # 5) Sequencer
+        adsr_stream = sequencer(proto_E, onset_flags)            # (B,64,T)
+
+        return {"proto_E": proto_E,
+                "adsr_stream": adsr_stream}
+
+
+
+# FiLM Module (kept from original)
 class ADSRFiLM(nn.Module):
     """
     FiLM-gates a content latent with an ADSR embedding.
@@ -361,11 +434,12 @@ class ADSRFiLM(nn.Module):
 if __name__ == "__main__":
 
     # Your example onset flags
-    onset = torch.tensor([1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-         0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
+    onset = torch.tensor([
+        1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
     onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
     # # Create dummy ADSR embedding
@@ -407,10 +481,11 @@ if __name__ == "__main__":
 
     # print("\nFunction test completed!")
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    model = ADSREncoderV2().to(device)
+    model = ADSREncoderV3(proto_len=87, channels=64).to(device)
+
     p_onset = onset.to(device)
-    log_rms = torch.randn(1, 1, 87).to(device)
-    adsr_stream, proto_E, p_onset = model(p_onset, log_rms)
-    print(adsr_stream.shape)
-    print(proto_E.shape)
-    print(p_onset.shape)
+    wav = torch.randn(1, 1, 44100).to(device)
+
+    out = model(wav, p_onset)
+    print(out["proto_E"].shape)     # (1, 64, 87)
+    print(out["adsr_stream"].shape) # (1, 64, 87)
