@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from typing import Optional, Tuple
 
 
 # Use one ADSR's embedding to repeat for each onset in content
@@ -52,49 +51,17 @@ def repeat_adsr_by_onset(adsr_embed, onset_flags):
 
     return adsr_expanded
 
-def masked_mean(x: torch.Tensor, mask: torch.Tensor, dim: int) -> torch.Tensor:
-    """
-    Compute mean over `dim` while ignoring positions where mask == 0.
 
-    Args
-    ----
-    x     : (B, C, T) or (B, N, C) tensor
-    mask  : broadcastable to x; same shape except at `dim`
-    dim   : dimension to reduce over
-
-    Returns
-    -------
-    Tensor with `dim` removed.
-    """
-    mask = mask.to(dtype=x.dtype)
-    total = (x * mask).sum(dim=dim)
-    denom = mask.sum(dim=dim).clamp_min(1e-6)
-    return total / denom
+def sequencer(proto_E, delta):
+    L = proto_E.size(-1)
+    stream = F.conv1d(
+        delta.expand(-1, proto_E.size(1), -1),  # (B,64,T)
+        weight=proto_E,                         # (B,64,L)
+        groups=proto_E.size(1), padding=L-1)
+    return stream[..., :delta.size(-1)]
 
 
-def l2_normalise(vec: torch.Tensor, eps: float = 1e-9) -> torch.Tensor:
-    """L2-normalise the last dimension."""
-    return vec / (vec.norm(p=2, dim=-1, keepdim=True) + eps)
-
-
-class DSConv1d(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, kernel_size: int, dilation: int):
-        super().__init__()
-        pad = (kernel_size - 1) // 2 * dilation
-        self.depthwise = nn.Conv1d(in_ch, in_ch, kernel_size,
-                                   groups=in_ch, dilation=dilation,
-                                   padding=pad, bias=False)
-        self.pointwise = nn.Conv1d(in_ch, out_ch, 1, bias=False)
-        self.norm = nn.BatchNorm1d(out_ch)
-        self.act  = nn.SiLU()
-
-    def forward(self, x):
-        x = self.depthwise(x)
-        x = self.pointwise(x)
-        x = self.norm(x)
-        return self.act(x)
-
-
+# ADSR Encoder V1
 class ResidualDilatedBlock(nn.Module):
     """
     Dilated 1-D residual block (kernel=3) with weight-norm Conv.
@@ -108,6 +75,70 @@ class ResidualDilatedBlock(nn.Module):
 
     def forward(self, x):
         return x + self.act(self.conv(x))
+
+
+# ADSR Encoder V2
+class DSConv1d(nn.Module):
+    def __init__(self, in_ch: int, out_ch: int, k: int, d: int):
+        super().__init__()
+        pad = (k - 1) // 2 * d
+        self.depthwise = nn.Conv1d(in_ch, in_ch, k,
+                                   groups=in_ch, dilation=d,
+                                   padding=pad, bias=False)
+        self.pointwise = nn.Conv1d(in_ch, out_ch, 1, bias=False)
+        self.norm = nn.BatchNorm1d(out_ch)
+        self.act  = nn.SiLU()
+
+    def forward(self, x):
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        x = self.norm(x)
+        return self.act(x)
+
+
+# ADSR Encoder V2
+class ResidualTCN(nn.Module):
+    """
+    Dilated residual TCN block
+    --------------------------------
+    x --(depthwise dilated conv)--> BN/GELU --> 1×1 pw conv --+
+      |                                                      |
+      +---------------------------(residual add)-------------+
+
+    Args
+    ----
+    channels : int   -- in/out channel 同時 = residual channel 數
+    k        : int   -- kernel size  (一般用 3)
+    d        : int   -- dilation     (2^i)
+    """
+    def __init__(self, channels: int, k: int = 3, d: int = 1):
+        super().__init__()
+        pad = (k - 1) * d                       # 保長度不變
+
+        # Depth-wise dilated conv (groups=channels)
+        self.depthwise = nn.utils.weight_norm(
+            nn.Conv1d(channels, channels, kernel_size=k,
+                      dilation=d, padding=pad,
+                      groups=channels, bias=False)
+        )
+        # Point-wise conv 1×1
+        self.pointwise = nn.utils.weight_norm(
+            nn.Conv1d(channels, channels, kernel_size=1, bias=False)
+        )
+
+        self.norm = nn.BatchNorm1d(channels)
+        self.act  = nn.GELU()
+
+    def forward(self, x):
+        """
+        x : (B, channels, T)
+        """
+        y = self.depthwise(x)
+        y = self.pointwise(self.act(self.norm(y)))
+        # 如果多餘 padding 造成長度 > T，裁掉右端
+        if y.size(-1) != x.size(-1):
+            y = y[..., :x.size(-1)]
+        return x + y
 
 
 class ADSREncoderV1(nn.Module):
@@ -222,190 +253,63 @@ class ADSREncoderV1(nn.Module):
         return z_a
 
 
-# New Note-pooled ADSR Encoder
+
 class ADSREncoderV2(nn.Module):
-    """
-    A note-pooled ADSR encoder that turns audio into ONE global envelope code z_a ∈ ℝ^(param_dim + residual_dim).
-
-    Input  : waveform  (B, 1, T_samples) in [-1,1]
-    Output : ADSR code (B, param_dim + residual_dim)
-
-    Audio (T_samples)
-        ↓
-    Frame-based log-RMS features (T_frames)
-        ↓
-    Multi-scale temporal modeling
-        ↓
-    Note-pooled features
-        ↓
-    ADSR code (param_dim + residual_dim)
-
-    Args
-    ----
-    hop           : frame hop in samples
-    d_model       : channel width of internal representation
-    n_layers      : number of DSConv blocks
-    param_dim     : number of explicit ADSR parameters (default 4: A,D,R,S_lvl)
-    residual_dim  : dimension of extra residual code concatenated to params
-    """
-    def __init__(self,
-                 hop: int = 512,
-                 d_model: int = 64,
-                 n_layers: int = 3,
-                 param_dim: int = 4,
-                 residual_dim: int = 4):
+    def __init__(self, proto_len=87, ch=64):
         super().__init__()
-        self.hop = hop                        # frame hop in samples
-        self.eps = 1.0e-7
+        # ---------- OnsetNet (可替換成預訓 madmom CNN) ----------
+        # self.onset_net = CNNOnsetNet()  # 任何輸出 (B,1,T) ∈ (0,1) 的網路
 
-        layers = []
-        in_ch = 1
-        dilations = [2 ** i for i in range(n_layers)]
-        for d in dilations:
-            layers.append(DSConv1d(in_ch, d_model, kernel_size=5, dilation=d))
-            in_ch = d_model
-        self.feat_extractor = nn.Sequential(*layers)
+        # ---------- Context Encoder ----------
+        self.ctx = nn.Sequential(
+            nn.Conv1d(1, 32, 3, padding=1), nn.GELU(),
+            DSConv1d(32, 64, k=3, d=2), nn.GELU(),
+            DSConv1d(64, 64, k=3, d=4), nn.GELU(),
+            nn.AdaptiveAvgPool1d(1))
+        self.fc_ctx  = nn.Linear(64, 128)
 
-        # Two heads
-        self.param_head = nn.Linear(d_model, param_dim)
-        self.resid_head = nn.Linear(d_model, residual_dim)
+        # ---------- FiLM 生成器 ----------
+        self.film = nn.Sequential(
+            nn.Linear(128, 256), nn.GELU(),
+            nn.Linear(256, ch * 2 * 16))  # 16層TCN，每層 γ,β
 
-        # Store hyper-params
-        self.param_dim = param_dim
-        self.residual_dim = residual_dim
-        self.out_dim = param_dim + residual_dim
+        # ---------- One-Shot TCN ----------
+        self.tcn = nn.ModuleList(
+            [ResidualTCN(ch, k=3, d=2**i) for i in range(16)]
+        )
+        self.proto_len = proto_len
+        self.ch = ch
 
-    def preprocess(self, wav: torch.Tensor) -> torch.Tensor:
+    # ----------------------------------------------------------
+
+    def forward(self, p_onset, log_rms):
         """
-        wav: (B, 1, T_samples) in [-1,1]
-        returns (B, 1, T_frames)
+        wav     : (B,1,T)   – 原始波形（給 OnsetNet）
+        log_rms : (B,1,T)   – 事先算好或即場算
         """
-        length = wav.shape[-1]
-        right_pad = math.ceil(length / self.hop) * self.hop - length
-        wav = nn.functional.pad(wav, (0, right_pad))
-        return wav
+        # 1) Onset detection (soft probability)
+        # p_onset = self.onset_net(wav)            # (B,1,T) ∈ (0,1)
+        # delta   = (p_onset > 0.5).float()        # 若要完全可微，可用 p_onset 直接捲積
 
-    def _envelope_features(self, wav: torch.Tensor) -> torch.Tensor:
-        """
-        wav: (B, 1, T_samples) in [-1,1]
-        returns (B, 1, T_frames) : log-RMS
-        """
-        # square + pool = frame energy
-        rms = torch.sqrt(
-            F.avg_pool1d(wav ** 2, kernel_size=self.hop, stride=self.hop) + self.eps
-        )                                       # (B,1,Tf)
+        # 2) Context embedding
+        e = self.ctx(log_rms).squeeze(-1)        # (B,64)
+        cond = self.fc_ctx(e)                    # (B,128)
+        film = self.film(cond).view(-1, 16, 2, self.ch, 1)
 
-        log_rms = torch.log(rms + self.eps)          # (B,1,Tf)
-        return log_rms
+        # 3) Synth proto ADSR
+        x = torch.randn(log_rms.size(0), 1, self.proto_len,
+                        device=log_rms.device)
 
-    # --------------------------------------------------------------------- #
+        for i, block in enumerate(self.tcn):
+            γ, β = film[:, i, 0], film[:, i, 1]
+            x = block(x)
+            x = γ * x + β
+        proto_E = x                              # (B,64,L)
 
-    def forward(self,
-                wav: torch.Tensor,
-                note_mask: Optional[torch.Tensor] = None
-                ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Parameters
-        ----------
-        wav        : (B, 1, T_samples) – audio waveform in [-1,1]
-        note_mask  : (B, N, T_frames)  – binary mask per note (optional)
-                                     1 where the note is active, else 0.
-                                     If None, global average pooling is used.
+        # 4) Sequencer
+        adsr_stream = sequencer(proto_E, p_onset)  # (B,64,T)
 
-        Returns
-        -------
-        z_a        : (B, out_dim) – concatenated ADSR code
-        param_vec  : (B, param_dim) – raw param outputs (before concat)
-        """
-        # 0) preprocess audio
-        wav = self.preprocess(wav)
-
-        # 1) extract log-RMS features
-        log_rms = self._envelope_features(wav)    # (B,1,Tf)
-
-        B, _, T = log_rms.shape
-        feats = self.feat_extractor(log_rms)          # (B, D, T)
-
-        # ------------------ note-pool → z_feats -------------------------- #
-        if note_mask is not None:
-            # Masked mean over time for each note -> (B, N, D)
-            note_feats = masked_mean(
-                feats.unsqueeze(1),  # (B, 1, D, T)
-                note_mask.unsqueeze(2),  # (B, N, 1, T)
-                dim=-1
-            )  # → (B, N, D)
-
-            # Pool notes into ONE vector (mean or max)
-            z_feats = note_feats.mean(dim=1)          # (B, D)
-        else:
-            # Global average pool over time
-            z_feats = feats.mean(dim=-1)              # (B, D)
-
-        # ------------------ heads --------------------------------------- #
-        raw_params = self.param_head(z_feats)         # (B, P)
-        residual   = l2_normalise(self.resid_head(z_feats))  # (B, R)
-
-        # Apply bounded activations for interpretability
-        # times ≥0 via softplus; sustain level in (0,1) via sigmoid
-        t_a, t_d, t_r, s_lvl = torch.split(raw_params, 1, dim=-1)
-        param_vec = torch.cat([
-            F.softplus(t_a),
-            F.softplus(t_d),
-            F.softplus(t_r),
-            torch.sigmoid(s_lvl)
-        ], dim=-1)
-
-        z_a = torch.cat([param_vec, residual], dim=-1)   # (B, P+R)
-        return z_a, param_vec
-
-
-# --------------------------------------------------------------------------- #
-# Differentiable ADSR kernel (parametric option)
-# --------------------------------------------------------------------------- #
-
-def adsr_kernel(params: torch.Tensor,
-                env_sr: int = 1000,
-                total_len: int = 1024) -> torch.Tensor:
-    """
-    Convert ADSR params to an envelope kernel suitable for convolution.
-
-    Args
-    ----
-    params    : (B, 4) [t_a, t_d, t_r, s_lvl]
-    env_sr    : sample-rate at which to build the envelope
-    total_len : length of kernel in env-samples
-
-    Returns
-    -------
-    env       : (B, 1, total_len) envelope kernel
-    """
-    B = params.size(0)
-    t_a, t_d, t_r, s = params.t()          # each (B,)
-    t_a  = (t_a * env_sr).long().clamp(1, total_len)
-    t_d  = (t_d * env_sr).long().clamp(1, total_len)
-    t_r  = (t_r * env_sr).long().clamp(1, total_len)
-
-    env = torch.zeros(B, total_len, device=params.device)
-
-    for b in range(B):
-        A = t_a[b]
-        D = t_d[b]
-        R = t_r[b]
-        S = s[b]
-
-        # Attack
-        env[b, :A] = torch.linspace(0, 1, int(A), device=params.device)
-        # Decay
-        end_d = A + D
-        env[b, A:end_d] = torch.linspace(1, S, int(D), device=params.device)
-        # Sustain (flat until start of release)
-        start_r = total_len - R
-        if start_r > end_d:
-            env[b, end_d:start_r] = S
-        # Release
-        env[b, start_r:] = torch.linspace(S, 0, int(R), device=params.device)
-
-    return env.unsqueeze(1)  # (B, 1, total_len)
+        return adsr_stream, proto_E, p_onset
 
 
 # --------------------------------------------------------------------------- #
@@ -455,8 +359,6 @@ class ADSRFiLM(nn.Module):
 
 
 if __name__ == "__main__":
-    # Test the revised repeat_adsr_by_onset function
-    print("=== Testing revised repeat_adsr_by_onset function ===")
 
     # Your example onset flags
     onset = torch.tensor([1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
@@ -466,41 +368,49 @@ if __name__ == "__main__":
          0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
     onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
-    # Create dummy ADSR embedding
-    tmp_len = 24
-    adsr_embed = torch.zeros(1, 64, 87)
-    adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
-    adsr_embed[:, :, 1:tmp_len+1] = torch.randn(1, 64, tmp_len)
+    # # Create dummy ADSR embedding
+    # tmp_len = 24
+    # adsr_embed = torch.zeros(1, 64, 87)
+    # adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
+    # adsr_embed[:, :, 1:tmp_len+1] = torch.randn(1, 64, tmp_len)
 
-    print(f"Onset shape: {onset.shape}")
-    print(f"ADSR embed shape: {adsr_embed.shape}")
-    print(f"Onset positions: {torch.where(onset[0, 0] == 1)[0].tolist()}")
+    # print(f"Onset shape: {onset.shape}")
+    # print(f"ADSR embed shape: {adsr_embed.shape}")
+    # print(f"Onset positions: {torch.where(onset[0, 0] == 1)[0].tolist()}")
 
-    # Test the function
-    result = repeat_adsr_by_onset(adsr_embed, onset)
-    print(f"Result shape: {result.shape}")
+    # # Test the function
+    # result = repeat_adsr_by_onset(adsr_embed, onset)
+    # print(f"Result shape: {result.shape}")
 
-    # Verify the concept: check that ADSR is applied correctly
-    onset_positions = torch.where(onset[0, 0] == 1)[0]
-    print(f"\nOnset positions: {onset_positions.tolist()}")
+    # # Verify the concept: check that ADSR is applied correctly
+    # onset_positions = torch.where(onset[0, 0] == 1)[0]
+    # print(f"\nOnset positions: {onset_positions.tolist()}")
 
-    for i, start_pos in enumerate(onset_positions):
-        if i + 1 < len(onset_positions):
-            end_pos = onset_positions[i + 1]
-        else:
-            end_pos = onset.shape[-1]
+    # for i, start_pos in enumerate(onset_positions):
+    #     if i + 1 < len(onset_positions):
+    #         end_pos = onset_positions[i + 1]
+    #     else:
+    #         end_pos = onset.shape[-1]
 
-        segment_length = end_pos - start_pos
-        print(f"Segment {i}: position {start_pos} to {end_pos} (length: {segment_length})")
+    #     segment_length = end_pos - start_pos
+    #     print(f"Segment {i}: position {start_pos} to {end_pos} (length: {segment_length})")
 
-        # Check that the segment is not all zeros (ADSR was applied)
-        segment_data = result[0, :, start_pos:end_pos]
-        non_zero_count = (segment_data != 0).sum().item()
-        print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
+    #     # Check that the segment is not all zeros (ADSR was applied)
+    #     segment_data = result[0, :, start_pos:end_pos]
+    #     non_zero_count = (segment_data != 0).sum().item()
+    #     print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
 
-    print(result[:,:,0])
-    print(result[:,:,1])
-    print(result[:,:,43])
-    print(result[:,:,44])
+    # print(result[:,:,0])
+    # print(result[:,:,1])
+    # print(result[:,:,43])
+    # print(result[:,:,44])
 
-    print("\nFunction test completed!")
+    # print("\nFunction test completed!")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    model = ADSREncoderV2().to(device)
+    p_onset = onset.to(device)
+    log_rms = torch.randn(1, 1, 87).to(device)
+    adsr_stream, proto_E, p_onset = model(p_onset, log_rms)
+    print(adsr_stream.shape)
+    print(proto_E.shape)
+    print(p_onset.shape)
