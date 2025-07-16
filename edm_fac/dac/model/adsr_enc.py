@@ -309,11 +309,9 @@ class ADSREncoderV2(nn.Module):
 # Phase-Align One-Shot ADSR Encoder
 class ADSREncoderV3(nn.Module):
     def __init__(self,
-                 proto_len: int = 87,
                  channels: int = 64,
                  hop: int = 512):
         super().__init__()
-        self.proto_len = proto_len
         self.hop = hop
         self.eps = 1.0e-7
 
@@ -358,7 +356,7 @@ class ADSREncoderV3(nn.Module):
         wav = self.preprocess(wav)          # (B,1,T_samples)
         log_rms = self._envelope_features(wav)  # (B,1,T_frames)
 
-        B, _, _ = log_rms.shape
+        B, _, P = log_rms.shape
 
         # 1) Get on-set index list
         on_idx = [torch.where(onset_flags[b, 0] == 1)[0].tolist() for b in range(B)]
@@ -368,7 +366,7 @@ class ADSREncoderV3(nn.Module):
 
         # 3) Zero-pad per note  →    note_E, mask
         note_E, mask = gather_notes_pad(
-            adsr_feat, on_idx, self.proto_len)             # (B,N,64,L), (B,N,L)
+            adsr_feat, on_idx, P)             # (B,N,64,L), (B,N,L)
 
         # 4) Attention or length-weighted averaging
         if note_E.size(1) > 0:
@@ -380,11 +378,12 @@ class ADSREncoderV3(nn.Module):
         else:
             proto_E = note_E.mean(dim=1)
 
-        # 5) Sequencer
-        adsr_stream = sequencer(proto_E, onset_flags)            # (B,64,T)
+        return proto_E
+        # # 5) Sequencer
+        # adsr_stream = sequencer(proto_E, onset_flags)            # (B,64,T)
 
-        return {"proto_E": proto_E,
-                "adsr_stream": adsr_stream}
+        # return {"proto_E": proto_E,
+        #         "adsr_stream": adsr_stream}
 
 
 
@@ -481,7 +480,7 @@ if __name__ == "__main__":
 
     # print("\nFunction test completed!")
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    model = ADSREncoderV3(proto_len=87, channels=64).to(device)
+    model = ADSREncoderV3(channels=64).to(device)
 
     p_onset = onset.to(device)
     wav = torch.randn(1, 1, 44100).to(device)

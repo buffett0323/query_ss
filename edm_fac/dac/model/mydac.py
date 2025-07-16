@@ -24,7 +24,8 @@ from einops.layers.torch import Rearrange
 def init_weights(m):
     if isinstance(m, nn.Conv1d):
         nn.init.trunc_normal_(m.weight, std=0.02)
-        nn.init.constant_(m.bias, 0)
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
 
 
 class ResidualUnit(nn.Module):
@@ -331,9 +332,8 @@ class MyDAC(BaseModel, CodecMixin):
         #     quantizer_dropout=quantizer_dropout,
         # )
         if self.use_FiLM:
-            self.adsr_encoder = ADSREncoderV1(
-                embed_channels=adsr_enc_dim,
-            )
+            self.adsr_encoder = ADSREncoderV3(channels=adsr_enc_dim)
+            # ADSREncoderV1(embed_channels=adsr_enc_dim)
         else:
             self.adsr_encoder = ADSREncoderV1(
                 embed_channels=latent_dim,
@@ -450,7 +450,8 @@ class MyDAC(BaseModel, CodecMixin):
         content_match: torch.Tensor = None,
         timbre_match: torch.Tensor = None,
         adsr_match: torch.Tensor = None,
-        onset_flags: torch.Tensor = None,
+        cont_onset: torch.Tensor = None,
+        adsr_onset: torch.Tensor = None,
         sample_rate: int = None,
         n_quantizers: int = None,
     ):
@@ -458,7 +459,8 @@ class MyDAC(BaseModel, CodecMixin):
         length = audio_data.shape[-1]
         content_match = self.preprocess(content_match, sample_rate)
         timbre_match = self.preprocess(timbre_match, sample_rate)
-
+        cont_onset = cont_onset.unsqueeze(1) # (B, 1, T)
+        adsr_onset = adsr_onset.unsqueeze(1) # (B, 1, T)
 
         # Perturbation's encoders
         content_match_z = self.encoder(content_match)
@@ -472,9 +474,10 @@ class MyDAC(BaseModel, CodecMixin):
         # 2. Disentangle ADSR
         if adsr_match is not None:
             adsr_match = self.preprocess(adsr_match, sample_rate)
-            adsr_z = self.adsr_encoder(adsr_match)
+            adsr_z = self.adsr_encoder(adsr_match, adsr_onset)
         else:
-            adsr_z = self.adsr_encoder(audio_data)
+            wav = self.preprocess(audio_data, sample_rate)
+            adsr_z = self.adsr_encoder(wav, adsr_onset.unsqueeze(1))
 
         # 3. Disentangle Timbre
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T)
@@ -484,13 +487,13 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 4. Fuse content + ADSR using FiLM
         if self.use_FiLM:
-            onset_flags = onset_flags.unsqueeze(1) # (B, 1, T)
-            adsr_z = repeat_adsr_by_onset(adsr_z, onset_flags)
-            z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+            adsr_stream = repeat_adsr_by_onset(adsr_z, cont_onset)
+            z = self.adsr_film(adsr_stream, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
         else:
             z = cont_z + adsr_z # (B, D=256, T)
 
         # Predictors
+        timbre_match_z = F.normalize(timbre_match_z, dim=-1)
         pred_pitch     = self.pitch_predictor(cont_z)[0]
         pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_adsr_id   = self.adsr_predictor(adsr_z)[0]
@@ -552,9 +555,10 @@ class MyDAC(BaseModel, CodecMixin):
         self,
         orig_audio: torch.Tensor,
         ref_audio: torch.Tensor,
-        onset_flags: torch.Tensor,
-        orig_adsr_audio: torch.Tensor,
-        ref_adsr_audio: torch.Tensor,
+        orig_onset: torch.Tensor,
+        ref_onset: torch.Tensor,
+        # orig_adsr_audio: torch.Tensor,
+        # ref_adsr_audio: torch.Tensor,
         sample_rate: int = None,
         n_quantizers: int = None,
         convert_type: str = "timbre",
@@ -562,28 +566,26 @@ class MyDAC(BaseModel, CodecMixin):
         length = orig_audio.shape[-1]
         orig_audio = self.preprocess(orig_audio, sample_rate)
         ref_audio = self.preprocess(ref_audio, sample_rate)
-        orig_adsr_audio = self.preprocess(orig_adsr_audio, sample_rate)
-        ref_adsr_audio = self.preprocess(ref_adsr_audio, sample_rate)
+        orig_onset = orig_onset.unsqueeze(1) # (B, 1, T)
+        ref_onset = ref_onset.unsqueeze(1) # (B, 1, T)
+        # orig_adsr_audio = self.preprocess(orig_adsr_audio, sample_rate)
+        # ref_adsr_audio = self.preprocess(ref_adsr_audio, sample_rate)
 
         # Perturbation's encoders
         orig_audio_z = self.encoder(orig_audio)
         ref_audio_z = self.encoder(ref_audio)
 
         # 1. Disentangle Content
-        if convert_type == "content":
-            cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
-                ref_audio_z, n_quantizers
-            )
-        else:
-            cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
-                orig_audio_z, n_quantizers
-            )
+        cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
+            orig_audio_z, n_quantizers
+        )
+
 
         # 2. Disentangle ADSR
         if convert_type in ["adsr", "both"]:
-            adsr_z = self.adsr_encoder(ref_adsr_audio)
+            adsr_z = self.adsr_encoder(ref_audio, ref_onset) # (ref_adsr_audio)
         else:
-            adsr_z = self.adsr_encoder(orig_adsr_audio)
+            adsr_z = self.adsr_encoder(orig_audio, orig_onset) # (orig_adsr_audio)
 
         # 3. Disentangle Timbre
         if convert_type in ["timbre", "both"]:
@@ -598,9 +600,8 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 4. Fuse content + ADSR using FiLM
         if self.use_FiLM:
-            onset_flags = onset_flags.unsqueeze(1) # (B, 1, T)
-            adsr_z = repeat_adsr_by_onset(adsr_z, onset_flags)
-            z = self.adsr_film(adsr_z, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
+            adsr_stream = repeat_adsr_by_onset(adsr_z, orig_onset)
+            z = self.adsr_film(adsr_stream, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
         else:
             z = cont_z + adsr_z # (B, D=256, T)
 
