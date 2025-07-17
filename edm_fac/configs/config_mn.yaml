@@ -1,5 +1,5 @@
-path: /mnt/gestalt/home/buffett # NTU
-# path: /home/buffett/nas_data # Sinica
+# path: /mnt/gestalt/home/buffett # NTU
+path: /home/buffett/nas_data # Sinica
 postfix: "0716_mn"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"]
 convert_type: ["both", "adsr", "timbre"]
@@ -12,7 +12,7 @@ ckpt_path: ${path}/EDM_FAC_LOG/${postfix}/ckpt
 root_path: ${path}/EDM_FAC_NEW_DATA/rendered_mn_t_adsr_c
 midi_path: ${path}/EDM_FAC_NEW_DATA/midi_files
 
-batch_size: 4
+batch_size: 8
 save_interval: 10000
 sample_freq: 2000
 validate_interval: 2000

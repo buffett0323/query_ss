@@ -363,7 +363,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         content_match_data = batch['content_match']
         timbre_match_data = batch['timbre_match']
         adsr_match_data = batch['adsr_match']
-        
+
         timbre_id = batch['timbre_id']
         adsr_id = batch['adsr_id']
         pitch = batch['pitch']
