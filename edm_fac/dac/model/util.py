@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from typing import List
 
 
 # Repeat ADSR embedding for each onset position
@@ -61,36 +60,6 @@ def repeat_adsr_by_onset(proto_E: torch.Tensor,
     adsr_stream = adsr_stream * mask_valid
     return adsr_stream
 
-
-# Build phase grid for resampling
-def build_phase_grid(on_idx: List[torch.Tensor],
-                     T: int,
-                     L: int,
-                     device) -> torch.Tensor:
-    """
-    Build phase grid for resampling ADSR features.
-
-    Args:
-        on_idx: List of onset indices for each batch
-        T: Total time length
-        L: Target length for resampling
-        device: Device to create tensors on
-
-    Returns:
-        (B, N_max, L) Phase grid for resampling
-    """
-    B = len(on_idx)
-    N_max = max(len(x) for x in on_idx)
-    grid = torch.zeros(B, N_max, L, device=device)
-
-    for b, idx in enumerate(on_idx):
-        idx = idx.tolist()
-        for n, start in enumerate(idx):
-            end = idx[n + 1] if n + 1 < len(idx) else T
-            length = max(end - start, 1)
-            phase = torch.linspace(0, 1, L, device=device)
-            grid[b, n] = start + phase * (length - 1)
-    return grid                      # (B, N_max, L)
 
 
 # Gather note segments with padding
@@ -217,38 +186,53 @@ if __name__ == "__main__":
     onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
     # Create dummy ADSR embedding
-    tmp_len = 24
+    tmp_len = 20
     adsr_embed = torch.zeros(1, 64, 87)
-    adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
-    adsr_embed[:, :, 1:tmp_len+1] = torch.randn(1, 64, tmp_len)
+    for i in range(tmp_len):
+        adsr_embed[:, :, i] = i * torch.ones(1, 64)
 
-    print(f"Onset shape: {onset.shape}")
-    print(f"ADSR embed shape: {adsr_embed.shape}")
-    print(f"Onset positions: {torch.where(onset[0, 0] == 1)[0].tolist()}")
+    # adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
+    # adsr_embed[:, :, 1:tmp_len+1] = torch.randn(1, 64, tmp_len)
+
+    # print(f"Onset shape: {onset.shape}")
+    # print(f"ADSR embed shape: {adsr_embed.shape}")
+    # print(f"Onset positions: {torch.where(onset[0, 0] == 1)[0].tolist()}")
 
     # Test the function
     result = repeat_adsr_by_onset(adsr_embed, onset)
     print(f"Result shape: {result.shape}")
+    print("0:", result[:, :, 0])
+    print("1:", result[:, :, 1])
+    print("2:", result[:, :, 2])
+    print("3:", result[:, :, 3])
+    print("4:", result[:, :, 4])
+    print("40:", result[:, :, 40])
+    print(f"{tmp_len}:", result[:, :, tmp_len])
+    # print(result[:, :, tmp_len+1])
+    print("49:", result[:, :, 49])
+    print("50:", result[:, :, 50])
+    print("-1:", result[:, :, -1])
 
-    # Verify the concept: check that ADSR is applied correctly
-    onset_positions = torch.where(onset[0, 0] == 1)[0]
-    print(f"\nOnset positions: {onset_positions.tolist()}")
 
-    for i, start_pos in enumerate(onset_positions):
-        if i + 1 < len(onset_positions):
-            end_pos = onset_positions[i + 1]
-        else:
-            end_pos = onset.shape[-1]
+    # # Verify the concept: check that ADSR is applied correctly
+    # onset_positions = torch.where(onset[0, 0] == 1)[0]
+    # print(f"\nOnset positions: {onset_positions.tolist()}")
 
-        segment_length = end_pos - start_pos
-        print(f"Segment {i}: position {start_pos} to {end_pos} (length: {segment_length})")
+    # for i, start_pos in enumerate(onset_positions):
+    #     if i + 1 < len(onset_positions):
+    #         end_pos = onset_positions[i + 1]
+    #     else:
+    #         end_pos = onset.shape[-1]
 
-        # Check that the segment is not all zeros (ADSR was applied)
-        segment_data = result[0, :, start_pos:end_pos]
-        non_zero_count = (segment_data != 0).sum().item()
-        print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
+    #     segment_length = end_pos - start_pos
+    #     print(f"Segment {i}: position {start_pos} to {end_pos} (length: {segment_length})")
 
-    print(result[:,:,0])
-    print(result[:,:,1])
-    print(result[:,:,43])
-    print(result[:,:,44])
+    #     # Check that the segment is not all zeros (ADSR was applied)
+    #     segment_data = result[0, :, start_pos:end_pos]
+    #     non_zero_count = (segment_data != 0).sum().item()
+    #     print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
+
+    # print(result[:,:,0])
+    # print(result[:,:,1])
+    # print(result[:,:,43])
+    # print(result[:,:,44])

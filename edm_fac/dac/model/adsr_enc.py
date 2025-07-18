@@ -1,22 +1,16 @@
 import torch
+import torchaudio
 import torch.nn as nn
 import torch.nn.functional as F
 import math
 try:
     from .util import (
-        repeat_adsr_by_onset,
-        build_phase_grid,
         gather_notes_pad,
-        resample_adsr,
         sequencer
     )
 except ImportError:
-    # Fallback for when running the script directly
     from util import (
-        repeat_adsr_by_onset,
-        build_phase_grid,
         gather_notes_pad,
-        resample_adsr,
         sequencer
     )
 
@@ -306,24 +300,18 @@ class ADSREncoderV2(nn.Module):
 
 
 
-# Phase-Align One-Shot ADSR Encoder
+# ADSR Encoder
 class ADSREncoderV3(nn.Module):
     def __init__(self,
                  channels: int = 64,
-                 hop: int = 512):
+                 hop: int = 512,
+                 method: str = "length-weighted"):
         super().__init__()
         self.hop = hop
         self.eps = 1.0e-7
 
-
         self.backbone = DSBackbone(channels)
-
-        # Attention pooling to single proto_E
-        self.attn_pool = nn.Sequential(
-            nn.Linear(channels, channels),
-            nn.GELU(),
-            nn.Linear(channels, 1)
-        )
+        self.method = method
 
     def preprocess(self, wav: torch.Tensor) -> torch.Tensor:
         """
@@ -368,22 +356,25 @@ class ADSREncoderV3(nn.Module):
         note_E, mask = gather_notes_pad(
             adsr_feat, on_idx, P)             # (B,N,64,L), (B,N,L)
 
-        # 4) Attention or length-weighted averaging
-        if note_E.size(1) > 0:
+        # 4) Length-weighted averaging
+        if self.method == "length-weighted":
             # Mask-based averaging: normalize each note by valid length
             lengths = mask.sum(-1, keepdim=True)                    # (B,N,1)
             w = lengths / (lengths.sum(1, keepdim=True) + self.eps) # (B,N,1)
             w = w.unsqueeze(-1)                                     # (B,N,1,1)
             proto_E = (note_E * w).sum(dim=1)                       # (B,64,L)
+
+        elif self.method == "equal-weighted":
+            valid = mask.unsqueeze(2)                 # (B,N,1,L)
+            sum_notes = (note_E * valid).sum(dim=1)   # (B,C,L)
+            num_notes = valid.sum(dim=1).clamp(min=1) # (B,1,L)
+            proto_E = sum_notes / num_notes
+
         else:
-            proto_E = note_E.mean(dim=1)
+            raise ValueError(f"Invalid method: {self.method}")
 
         return proto_E
-        # # 5) Sequencer
-        # adsr_stream = sequencer(proto_E, onset_flags)            # (B,64,T)
 
-        # return {"proto_E": proto_E,
-        #         "adsr_stream": adsr_stream}
 
 
 
@@ -441,50 +432,92 @@ if __name__ == "__main__":
         0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
     onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
-    # # Create dummy ADSR embedding
-    # tmp_len = 24
-    # adsr_embed = torch.zeros(1, 64, 87)
-    # adsr_embed[:, :, 0] = 99 * torch.ones(1, 64)
-    # adsr_embed[:, :, 1:tmp_len+1] = torch.randn(1, 64, tmp_len)
-
-    # print(f"Onset shape: {onset.shape}")
-    # print(f"ADSR embed shape: {adsr_embed.shape}")
-    # print(f"Onset positions: {torch.where(onset[0, 0] == 1)[0].tolist()}")
-
-    # # Test the function
-    # result = repeat_adsr_by_onset(adsr_embed, onset)
-    # print(f"Result shape: {result.shape}")
-
-    # # Verify the concept: check that ADSR is applied correctly
-    # onset_positions = torch.where(onset[0, 0] == 1)[0]
-    # print(f"\nOnset positions: {onset_positions.tolist()}")
-
-    # for i, start_pos in enumerate(onset_positions):
-    #     if i + 1 < len(onset_positions):
-    #         end_pos = onset_positions[i + 1]
-    #     else:
-    #         end_pos = onset.shape[-1]
-
-    #     segment_length = end_pos - start_pos
-    #     print(f"Segment {i}: position {start_pos} to {end_pos} (length: {segment_length})")
-
-    #     # Check that the segment is not all zeros (ADSR was applied)
-    #     segment_data = result[0, :, start_pos:end_pos]
-    #     non_zero_count = (segment_data != 0).sum().item()
-    #     print(f"  Non-zero elements in segment: {non_zero_count}/{segment_data.numel()}")
-
-    # print(result[:,:,0])
-    # print(result[:,:,1])
-    # print(result[:,:,43])
-    # print(result[:,:,44])
-
-    # print("\nFunction test completed!")
     device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     model = ADSREncoderV3(channels=64).to(device)
 
     p_onset = onset.to(device)
-    wav = torch.randn(1, 1, 44100).to(device)
+    wav, _ = torchaudio.load("/mnt/gestalt/home/buffett/EDM_FAC_LOG/0716_mn/sample_audio/iter_0/conv_both/1_ref.wav")
+    wav = wav.unsqueeze(0)
+    wav = wav.to(device)
 
     out = model(wav, p_onset)
-    print(out["proto_E"].shape)     # (1, 64, 87)
-    print(out["adsr_stream"].shape) # (1, 64, 87)
+    print(out.shape) # 1, 64, 87
+
+    # # Visualize the ADSR embedding (64, 87)
+    # import matplotlib.pyplot as plt
+    # import numpy as np
+
+    # # Extract the actual embedding (remove batch dimension)
+    # adsr_embedding = out.squeeze(0).detach().cpu().numpy()  # Shape: (64, 87)
+
+    # # Create a figure with multiple visualization methods
+    # fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    # fig.suptitle('ADSR Encoder Output Visualization (64 channels × 87 time steps)', fontsize=16)
+
+    # # 1. Heatmap visualization
+    # im1 = axes[0, 0].imshow(adsr_embedding, aspect='auto', cmap='viridis')
+    # axes[0, 0].set_title('Heatmap: All 64 channels over time')
+    # axes[0, 0].set_xlabel('Time steps (87)')
+    # axes[0, 0].set_ylabel('Channels (64)')
+    # plt.colorbar(im1, ax=axes[0, 0])
+
+    # # 2. Mean activation over time
+    # mean_over_time = np.mean(adsr_embedding, axis=0)
+    # axes[0, 1].plot(mean_over_time, linewidth=2)
+    # axes[0, 1].set_title('Mean activation across all channels')
+    # axes[0, 1].set_xlabel('Time steps (87)')
+    # axes[0, 1].set_ylabel('Mean activation')
+    # axes[0, 1].grid(True, alpha=0.3)
+
+    # # 3. Channel-wise statistics
+    # channel_means = np.mean(adsr_embedding, axis=1)
+    # channel_stds = np.std(adsr_embedding, axis=1)
+    # x_pos = np.arange(64)
+    # axes[1, 0].bar(x_pos, channel_means, alpha=0.7, label='Mean')
+    # axes[1, 0].set_title('Mean activation per channel')
+    # axes[1, 0].set_xlabel('Channel index (0-63)')
+    # axes[1, 0].set_ylabel('Mean activation')
+    # axes[1, 0].grid(True, alpha=0.3)
+
+    # # 4. Sample individual channels
+    # sample_channels = [0, 15, 31, 47]  # Sample 4 channels
+    # for i, ch_idx in enumerate(sample_channels):
+    #     axes[1, 1].plot(adsr_embedding[ch_idx], label=f'Channel {ch_idx}', alpha=0.8)
+    # axes[1, 1].set_title('Sample individual channels')
+    # axes[1, 1].set_xlabel('Time steps (87)')
+    # axes[1, 1].set_ylabel('Activation')
+    # axes[1, 1].legend()
+    # axes[1, 1].grid(True, alpha=0.3)
+
+    # plt.tight_layout()
+    # plt.savefig('adsr_embedding_visualization.png', dpi=300, bbox_inches='tight')
+    # plt.show()
+
+    # # Print some statistics
+    # print(f"\nADSR Embedding Statistics:")
+    # print(f"Shape: {adsr_embedding.shape}")
+    # print(f"Min value: {adsr_embedding.min():.4f}")
+    # print(f"Max value: {adsr_embedding.max():.4f}")
+    # print(f"Mean value: {adsr_embedding.mean():.4f}")
+    # print(f"Std value: {adsr_embedding.std():.4f}")
+
+    # # Show correlation with onset positions
+    # onset_positions = torch.where(p_onset[0, 0] == 1)[0].cpu().numpy()
+    # print(f"\nOnset positions: {onset_positions}")
+
+    # # Highlight onset positions in the visualization
+    # if len(onset_positions) > 0:
+    #     fig2, ax = plt.subplots(figsize=(12, 6))
+    #     im = ax.imshow(adsr_embedding, aspect='auto', cmap='viridis')
+    #     ax.set_title('ADSR Embedding with Onset Positions Highlighted')
+    #     ax.set_xlabel('Time steps (87)')
+    #     ax.set_ylabel('Channels (64)')
+
+    #     # Mark onset positions with vertical lines
+    #     for onset_pos in onset_positions:
+    #         ax.axvline(x=onset_pos, color='red', linestyle='--', alpha=0.8, linewidth=2)
+
+    #     plt.colorbar(im)
+    #     plt.tight_layout()
+    #     plt.savefig('adsr_embedding_with_onsets.png', dpi=300, bbox_inches='tight')
+    #     plt.show()

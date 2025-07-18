@@ -486,11 +486,11 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
         # 4. Fuse content + ADSR using FiLM
+        adsr_stream = repeat_adsr_by_onset(adsr_z, cont_onset)
         if self.use_FiLM:
-            adsr_stream = repeat_adsr_by_onset(adsr_z, cont_onset)
             z = self.adsr_film(adsr_stream, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
         else:
-            z = cont_z + adsr_z # (B, D=256, T)
+            z = cont_z + adsr_stream # (B, D=256, T)
 
         # Predictors
         timbre_match_z = F.normalize(timbre_match_z, dim=-1)
@@ -599,11 +599,11 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
         # 4. Fuse content + ADSR using FiLM
+        adsr_stream = repeat_adsr_by_onset(adsr_z, orig_onset)
         if self.use_FiLM:
-            adsr_stream = repeat_adsr_by_onset(adsr_z, orig_onset)
             z = self.adsr_film(adsr_stream, cont_z) # z = cont_z + adsr_z # (B, D=256, T)
         else:
-            z = cont_z + adsr_z # (B, D=256, T)
+            z = cont_z + adsr_stream # (B, D=256, T)
 
         # Predictors
         timbre_match_z = F.normalize(timbre_match_z, dim=-1)
