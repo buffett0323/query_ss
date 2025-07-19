@@ -33,7 +33,7 @@ class ResidualDilatedBlock(nn.Module):
 
 # ADSR Encoder V2, V3: Depthwise-separable convolution
 class DSConv1d(nn.Module):
-    def __init__(self, in_ch: int, out_ch: int, k: int, d: int):
+    def __init__(self, in_ch: int, out_ch: int, k: int = 3, d: int = 1):
         super().__init__()
         pad = (k - 1) // 2 * d
         self.depthwise = nn.Conv1d(in_ch, in_ch, k,
@@ -68,15 +68,24 @@ class ConvBackbone(nn.Module):
 
 # ADSR Encoder V3: Depthwise-separable backbone
 class DSBackbone(nn.Module):
-    def __init__(self, ch: int = 64):
+    def __init__(self, pre_ch: int = 1, ch: int = 64):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv1d(1, 32, 3, padding=1), nn.GELU(),          # early channel mix
-            DSConv1d(32, 64, k=3, d=1),
-            DSConv1d(64, 64, k=3, d=2),
-            DSConv1d(64, 64, k=3, d=4),
-            DSConv1d(64, 64, k=3, d=8),
-        )
+        if ch == 64:
+            self.net = nn.Sequential(
+                nn.Conv1d(pre_ch, 32, 3, padding=1), nn.GELU(),          # early channel mix
+                DSConv1d(32, 64, k=3, d=1),
+                DSConv1d(64, 64, k=3, d=2),
+                DSConv1d(64, 64, k=3, d=4),
+                DSConv1d(64, 64, k=3, d=8),
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.Conv1d(pre_ch,  64, 3, padding=1),  nn.GELU(),  # early mix
+                DSConv1d( 64, 128, d=1),
+                DSConv1d(128, 128, d=2),
+                DSConv1d(128, 256, d=4),
+                DSConv1d(256, 256, d=8),
+            )
 
     def forward(self, x):
         return self.net(x)          # (B, 64, T)
@@ -240,66 +249,6 @@ class ADSREncoderV1(nn.Module):
 
 
 
-class ADSREncoderV2(nn.Module):
-    def __init__(self, proto_len=87, ch=64):
-        super().__init__()
-        # ---------- OnsetNet (can be replaced with pre-trained madmom CNN) ----------
-        # self.onset_net = CNNOnsetNet()  # Any network outputting (B,1,T) ∈ (0,1)
-
-        # ---------- Context Encoder ----------
-        self.ctx = nn.Sequential(
-            nn.Conv1d(1, 32, 3, padding=1), nn.GELU(),
-            DSConv1d(32, 64, k=3, d=2), nn.GELU(),
-            DSConv1d(64, 64, k=3, d=4), nn.GELU(),
-            nn.AdaptiveAvgPool1d(1))
-        self.fc_ctx  = nn.Linear(64, 128)
-
-        # ---------- FiLM generator ----------
-        self.film = nn.Sequential(
-            nn.Linear(128, 256), nn.GELU(),
-            nn.Linear(256, ch * 2 * 16))  # 16 TCN layers, each with γ,β
-
-        # ---------- One-Shot TCN ----------
-        self.tcn = nn.ModuleList(
-            [ResidualTCN(ch, k=3, d=2**i) for i in range(16)]
-        )
-        self.proto_len = proto_len
-        self.ch = ch
-
-    # ----------------------------------------------------------
-
-    def forward(self, p_onset, log_rms):
-        """
-        Args:
-            p_onset: (B,1,T) – Onset probability (can be pre-computed)
-            log_rms: (B,1,T) – Log-RMS features (pre-computed or computed on-the-fly)
-        """
-        # 1) Onset detection (soft probability)
-        # p_onset = self.onset_net(wav)            # (B,1,T) ∈ (0,1)
-        # delta   = (p_onset > 0.5).float()        # For fully differentiable, use p_onset directly
-
-        # 2) Context embedding
-        e = self.ctx(log_rms).squeeze(-1)        # (B,64)
-        cond = self.fc_ctx(e)                    # (B,128)
-        film = self.film(cond).view(-1, 16, 2, self.ch, 1)
-
-        # 3) Synth proto ADSR
-        x = torch.randn(log_rms.size(0), 1, self.proto_len,
-                        device=log_rms.device)
-
-        for i, block in enumerate(self.tcn):
-            γ, β = film[:, i, 0], film[:, i, 1]
-            x = block(x)
-            x = γ * x + β
-        proto_E = x                              # (B,64,L)
-
-        # 4) Sequencer
-        adsr_stream = sequencer(proto_E, p_onset)  # (B,64,T)
-
-        return adsr_stream, proto_E, p_onset
-
-
-
 # ADSR Encoder
 class ADSREncoderV3(nn.Module):
     def __init__(self,
@@ -310,7 +259,7 @@ class ADSREncoderV3(nn.Module):
         self.hop = hop
         self.eps = 1.0e-7
 
-        self.backbone = DSBackbone(channels)
+        self.backbone = DSBackbone(pre_ch=1, ch=channels)
         self.method = method
 
     def preprocess(self, wav: torch.Tensor) -> torch.Tensor:
@@ -376,6 +325,106 @@ class ADSREncoderV3(nn.Module):
         return proto_E
 
 
+# V3 without folding
+class ADSREncoderV4(nn.Module):
+    """
+    Input : waveform (B,1,T_samples)
+    Output: ADSR feature map (B, 64, T_frames)
+      – log-RMS and its derivative are extracted as in V1.
+      – a very small DSConv stack does the temporal modelling.
+    No onset / note pooling; keep the model light & fully frame-aligned.
+    """
+    def __init__(self,
+                 channels: int = 64,
+                 hop: int = 512):
+        super().__init__()
+        self.hop = hop
+        self.eps = 1e-7
+        self.backbone = DSBackbone(pre_ch=1, ch=channels)
+
+
+    def _pad(self, wav: torch.Tensor) -> torch.Tensor:
+        length = wav.size(-1)
+        pad = (math.ceil(length / self.hop) * self.hop) - length
+        return F.pad(wav, (0, pad))
+
+
+    def _env_feats(self, wav: torch.Tensor) -> torch.Tensor:
+        """Return (B,2,T_frames)"""
+        rms = torch.sqrt(
+            F.avg_pool1d(wav**2, kernel_size=self.hop, stride=self.hop) + self.eps
+        )
+        log_rms = torch.log(rms + self.eps)
+        return log_rms
+
+
+    def forward(self, wav: torch.Tensor) -> torch.Tensor:
+        """
+        wav : (B,1,T_samples)  range [-1,1]
+        returns ADSR features (B,64,T_frames)
+        """
+        wav   = self._pad(wav)
+        feats = self._env_feats(wav)          # (B,2,T)
+        z_a   = self.backbone(feats)          # (B,64,T)
+        return z_a
+
+
+
+# ADSR encoder with content alignment
+class ADSRContentAlignment(nn.Module):
+    def __init__(self,
+                 content_dim: int = 256,
+                 adsr_dim: int = 64,
+                 hidden_dim: int = 512,
+                 num_heads: int = 8):
+        super().__init__()
+
+        # Project to common attention space
+        self.content_query_proj = nn.Linear(content_dim, hidden_dim)
+        self.adsr_key_proj = nn.Linear(adsr_dim, hidden_dim)
+        self.adsr_value_proj = nn.Linear(adsr_dim, hidden_dim)
+
+        # Cross-attention
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=hidden_dim,
+            num_heads=num_heads,
+            batch_first=True
+        )
+
+        # Output projection back to content space
+        self.output_proj = nn.Linear(hidden_dim, content_dim)
+        self.norm = nn.LayerNorm(hidden_dim)
+
+
+    def forward(self,
+                content_embedding: torch.Tensor,
+                adsr_embedding: torch.Tensor
+                ) -> torch.Tensor:
+        """
+        content_embedding: [B, 256, T]
+        adsr_embedding: [B, 64, T]
+        """
+        content_embedding = content_embedding.transpose(1, 2) # [B, T, 256]
+        adsr_embedding = adsr_embedding.transpose(1, 2) # [B, T, 64]
+
+        # Project to attention space
+        query = self.content_query_proj(content_embedding)    # [B, T, hidden_dim]
+        key = self.adsr_key_proj(adsr_embedding)             # [B, T, hidden_dim]
+        value = self.adsr_value_proj(adsr_embedding)         # [B, T, hidden_dim]
+
+        # Cross-attention: content queries attend to ADSR keys/values
+        attn_out, _ = self.cross_attention(
+            query=query,    # [B, T, hidden_dim] - content embedding
+            key=key,        # [B, T, hidden_dim] - ADSR embedding
+            value=value     # [B, T, hidden_dim] - ADSR embedding
+        )
+
+
+        # Residual connection + norm
+        output = self.norm(attn_out + query)
+
+        # Project back to content dimension
+        return self.output_proj(output).transpose(1, 2) # [B, T, 256] -> [B, 256, T]
 
 
 # FiLM Module (kept from original)
@@ -404,8 +453,9 @@ class ADSRFiLM(nn.Module):
         )
 
         # initialise to identity: γ=0, β=0
-        nn.init.zeros_(self.to_film[-1].weight)
-        nn.init.zeros_(self.to_film[-1].bias)
+        with torch.no_grad():
+            self.to_film[-1].weight.zero_()
+            self.to_film[-1].bias.zero_()
 
     def forward(self, A: torch.Tensor, C: torch.Tensor):
         """
@@ -442,82 +492,3 @@ if __name__ == "__main__":
 
     out = model(wav, p_onset)
     print(out.shape) # 1, 64, 87
-
-    # # Visualize the ADSR embedding (64, 87)
-    # import matplotlib.pyplot as plt
-    # import numpy as np
-
-    # # Extract the actual embedding (remove batch dimension)
-    # adsr_embedding = out.squeeze(0).detach().cpu().numpy()  # Shape: (64, 87)
-
-    # # Create a figure with multiple visualization methods
-    # fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-    # fig.suptitle('ADSR Encoder Output Visualization (64 channels × 87 time steps)', fontsize=16)
-
-    # # 1. Heatmap visualization
-    # im1 = axes[0, 0].imshow(adsr_embedding, aspect='auto', cmap='viridis')
-    # axes[0, 0].set_title('Heatmap: All 64 channels over time')
-    # axes[0, 0].set_xlabel('Time steps (87)')
-    # axes[0, 0].set_ylabel('Channels (64)')
-    # plt.colorbar(im1, ax=axes[0, 0])
-
-    # # 2. Mean activation over time
-    # mean_over_time = np.mean(adsr_embedding, axis=0)
-    # axes[0, 1].plot(mean_over_time, linewidth=2)
-    # axes[0, 1].set_title('Mean activation across all channels')
-    # axes[0, 1].set_xlabel('Time steps (87)')
-    # axes[0, 1].set_ylabel('Mean activation')
-    # axes[0, 1].grid(True, alpha=0.3)
-
-    # # 3. Channel-wise statistics
-    # channel_means = np.mean(adsr_embedding, axis=1)
-    # channel_stds = np.std(adsr_embedding, axis=1)
-    # x_pos = np.arange(64)
-    # axes[1, 0].bar(x_pos, channel_means, alpha=0.7, label='Mean')
-    # axes[1, 0].set_title('Mean activation per channel')
-    # axes[1, 0].set_xlabel('Channel index (0-63)')
-    # axes[1, 0].set_ylabel('Mean activation')
-    # axes[1, 0].grid(True, alpha=0.3)
-
-    # # 4. Sample individual channels
-    # sample_channels = [0, 15, 31, 47]  # Sample 4 channels
-    # for i, ch_idx in enumerate(sample_channels):
-    #     axes[1, 1].plot(adsr_embedding[ch_idx], label=f'Channel {ch_idx}', alpha=0.8)
-    # axes[1, 1].set_title('Sample individual channels')
-    # axes[1, 1].set_xlabel('Time steps (87)')
-    # axes[1, 1].set_ylabel('Activation')
-    # axes[1, 1].legend()
-    # axes[1, 1].grid(True, alpha=0.3)
-
-    # plt.tight_layout()
-    # plt.savefig('adsr_embedding_visualization.png', dpi=300, bbox_inches='tight')
-    # plt.show()
-
-    # # Print some statistics
-    # print(f"\nADSR Embedding Statistics:")
-    # print(f"Shape: {adsr_embedding.shape}")
-    # print(f"Min value: {adsr_embedding.min():.4f}")
-    # print(f"Max value: {adsr_embedding.max():.4f}")
-    # print(f"Mean value: {adsr_embedding.mean():.4f}")
-    # print(f"Std value: {adsr_embedding.std():.4f}")
-
-    # # Show correlation with onset positions
-    # onset_positions = torch.where(p_onset[0, 0] == 1)[0].cpu().numpy()
-    # print(f"\nOnset positions: {onset_positions}")
-
-    # # Highlight onset positions in the visualization
-    # if len(onset_positions) > 0:
-    #     fig2, ax = plt.subplots(figsize=(12, 6))
-    #     im = ax.imshow(adsr_embedding, aspect='auto', cmap='viridis')
-    #     ax.set_title('ADSR Embedding with Onset Positions Highlighted')
-    #     ax.set_xlabel('Time steps (87)')
-    #     ax.set_ylabel('Channels (64)')
-
-    #     # Mark onset positions with vertical lines
-    #     for onset_pos in onset_positions:
-    #         ax.axvline(x=onset_pos, color='red', linestyle='--', alpha=0.8, linewidth=2)
-
-    #     plt.colorbar(im)
-    #     plt.tight_layout()
-    #     plt.savefig('adsr_embedding_with_onsets.png', dpi=300, bbox_inches='tight')
-    #     plt.show()

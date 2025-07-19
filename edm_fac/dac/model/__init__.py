@@ -3,5 +3,8 @@ from .base import DACFile
 from .dac import DAC
 from .discriminator import Discriminator
 from .mydac import MyDAC
-from .adsr_enc import ADSREncoderV1, ADSREncoderV2, ADSREncoderV3, ADSRFiLM
 from .util import *
+from .adsr_enc import (
+    ADSREncoderV1, ADSREncoderV3, ADSREncoderV4,
+    ADSRFiLM, ADSRContentAlignment
+)
