@@ -16,7 +16,7 @@ from dac.nn.loss import MultiScaleSTFTLoss, MelSpectrogramLoss, L1Loss
 # Filter out specific warnings
 warnings.filterwarnings("ignore", message="stft_data changed shape")
 warnings.filterwarnings("ignore", message="Audio amplitude > 1 clipped when saving")
-LENGTH = 44100
+LENGTH = 44100*3
 
 class EDMFACInference:
     def __init__(
@@ -50,14 +50,17 @@ class EDMFACInference:
             latent_dim=self.args.latent_dim,
             decoder_dim=self.args.decoder_dim,
             decoder_rates=self.args.decoder_rates,
+            adsr_enc_dim=self.args.adsr_enc_dim,
+            adsr_enc_ver=self.args.adsr_enc_ver,
             sample_rate=self.args.sample_rate,
             timbre_classes=self.args.timbre_classes,
             adsr_classes=self.args.adsr_classes,
-            pitch_nums=self.args.n_notes,
+            pitch_nums=self.args.max_note - self.args.min_note + 1, # 88
             use_gr_content=self.args.use_gr_content,
             use_gr_adsr=self.args.use_gr_adsr,
             use_gr_timbre=self.args.use_gr_timbre,
             use_FiLM=self.args.use_FiLM,
+            rule_based_adsr_folding=self.args.rule_based_adsr_folding,
         ).to(self.device)
 
         # Load checkpoint
@@ -125,7 +128,8 @@ class EDMFACInference:
         return audio_signal
 
     @torch.no_grad()
-    def convert_audio(self, orig_audio_path, ref_audio_path, gt_audio_path, output_dir, convert_type="timbre", prefix=""):
+    def convert_audio(self, orig_audio_path, ref_audio_path, gt_audio_path,
+                      output_dir, convert_type="timbre", prefix=""):
         """
         Perform audio conversion
 
@@ -170,8 +174,8 @@ class EDMFACInference:
         ref_audio_cpu = AudioSignal(ref_audio.audio_data.cpu(), self.args.sample_rate)
         gt_audio_cpu = AudioSignal(gt_audio.audio_data.cpu(), self.args.sample_rate)
 
-        orig_audio_cpu.write(os.path.join(output_dir, f"{prefix}orig.wav"))
-        ref_audio_cpu.write(os.path.join(output_dir, f"{prefix}ref_{convert_type}.wav"))
+        orig_audio_cpu.write(os.path.join(output_dir, "orig.wav")) #f"{prefix}orig.wav"))
+        ref_audio_cpu.write(os.path.join(output_dir, "ref.wav")) #f"{prefix}ref_{convert_type}.wav"))
         converted_audio.write(os.path.join(output_dir, f"{prefix}conv_{convert_type}.wav"))
         gt_audio_cpu.write(os.path.join(output_dir, f"{prefix}gt.wav"))
 
@@ -247,7 +251,7 @@ def main():
     )
 
     # Save metadata
-    metadata_path = os.path.join(args.output_dir, "metadata.json")
+    metadata_path = os.path.join(args.output_dir, f"{args.prefix}metadata.json")
     with open(metadata_path, "w") as f:
         json.dump(results, f, indent=4)
 
