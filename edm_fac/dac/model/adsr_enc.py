@@ -371,7 +371,7 @@ class ADSREncoderV4(nn.Module):
 
 
 # ADSR encoder with content alignment
-class ADSRContentAlignment(nn.Module):
+class ADSR_Content_Align(nn.Module):
     def __init__(self,
                  content_dim: int = 256,
                  adsr_dim: int = 64,
@@ -427,12 +427,64 @@ class ADSRContentAlignment(nn.Module):
         return self.output_proj(output).transpose(1, 2) # [B, T, 256] -> [B, 256, T]
 
 
+# MLP
+class ResidualFF(nn.Module):
+    """Single position‑wise feed‑forward (1×1 Conv) block with residual & pre‑norm."""
+    def __init__(self, dim: int, hidden: int,
+                 dropout: float = 0.1, res_scale: float = 0.1):
+
+        super().__init__()
+        # Layer Norm makes the model not affected by original energy amplitude
+        self.ln = nn.LayerNorm(dim)
+        self.fc1 = nn.Conv1d(dim, hidden, 1)
+        self.fc2 = nn.Conv1d(hidden, dim, 1)
+        self.act = nn.GELU()
+        self.drop = nn.Dropout(dropout)
+        self.res_scale = res_scale
+        nn.init.zeros_(self.fc2.weight)  # Initialize close to identity mapping
+        nn.init.zeros_(self.fc2.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, D, T)
+        y = self.ln(x.transpose(1, 2)).transpose(1, 2)
+        y = self.fc1(y)
+        y = self.act(y)
+        y = self.drop(y)
+        y = self.fc2(y) * self.res_scale
+        return x + y # (B, D, T)
+
+
+# MLP for content-adsr alignment
+class ADSR_Content_MLP(nn.Module):
+    """Stack of position‑wise residual FF blocks to refine (B,T,D) latent Z.
+
+    Args:
+        dim:     feature dimension (default 256)
+        hidden:  hidden dimension of each FF block (default 512)
+        n_layers:number of residual FF layers (default 5)
+        dropout: dropout rate inside each block (default 0.1)
+        res_scale: residual scale (<1 to stabilize deep stacks)
+    """
+    def __init__(self, dim: int = 256, hidden: int = 512,
+                 n_layers: int = 10, dropout: float = 0.1, res_scale: float = 0.1):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            ResidualFF(dim, hidden, dropout, res_scale)
+                for _ in range(n_layers)
+        ])
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:  # (B, D, T)
+        for blk in self.layers:
+            z = blk(z)
+        return z
+
+
 # FiLM Module (kept from original)
 class ADSRFiLM(nn.Module):
     """
     FiLM-gates a content latent with an ADSR embedding.
 
-        C_hat = C * (1 + γ) + β
+        C_hat = γ ⊙ C + β
     where γ, β are learned linear projections of A.
 
     A : (B, adsr_ch,  T)
@@ -452,10 +504,13 @@ class ADSRFiLM(nn.Module):
             nn.Conv1d(hidden_ch, 2 * cont_ch, kernel_size=1)
         )
 
-        # initialise to identity: γ=0, β=0
+        # initialise to identity: γ=1, β=0
         with torch.no_grad():
             self.to_film[-1].weight.zero_()
             self.to_film[-1].bias.zero_()
+            # Set γ to 1 for identity transformation
+            self.to_film[-1].bias[:cont_ch] = 0.0  # β = 0
+            self.to_film[-1].bias[cont_ch:] = 1.0  # γ = 1
 
     def forward(self, A: torch.Tensor, C: torch.Tensor):
         """
@@ -467,28 +522,35 @@ class ADSRFiLM(nn.Module):
         """
         γβ = self.to_film(A)                # (B, 2·C, T)
         γ, β = γβ.chunk(2, dim=1)           # split along channel
-        C_tilde = C * (1.0 + γ) + β
+        C_tilde = γ * C + β                 # Standard FiLM formula: y = γ ⊙ x + β
         return C_tilde
 
 
 if __name__ == "__main__":
 
-    # Your example onset flags
-    onset = torch.tensor([
-        1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-        0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
-        0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
-    onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
+    # # Your example onset flags
+    # onset = torch.tensor([
+    #     1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+    #     0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+    #     0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+    #     0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+    #     0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
+    # onset = onset.unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, 87)
 
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    model = ADSREncoderV3(channels=64).to(device)
+    device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+    # model = ADSREncoderV3(channels=64).to(device)
 
-    p_onset = onset.to(device)
-    wav, _ = torchaudio.load("/mnt/gestalt/home/buffett/EDM_FAC_LOG/0716_mn/sample_audio/iter_0/conv_both/1_ref.wav")
-    wav = wav.unsqueeze(0)
-    wav = wav.to(device)
+    # p_onset = onset.to(device)
+    # wav, _ = torchaudio.load("/mnt/gestalt/home/buffett/EDM_FAC_LOG/0716_mn/sample_audio/iter_0/conv_both/1_ref.wav")
+    # wav = wav.unsqueeze(0)
+    # wav = wav.to(device)
 
-    out = model(wav, p_onset)
-    print(out.shape) # 1, 64, 87
+    # out = model(wav, p_onset)
+    # print(out.shape) # 1, 64, 87
+
+    B, D, T = 4, 256, 87
+    z = torch.randn(B, D, T)
+    model = ADSR_Content_MLP(dim=D, hidden=512, n_layers=10).to(device)
+    z = z.to(device)
+    out = model(z)
+    print(out.shape)  # torch.Size([4, 256, 87])

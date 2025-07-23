@@ -227,9 +227,6 @@ class TransformerEncoder(nn.Module):
         else:
             self.last_ln = nn.LayerNorm(self.encoder_hidden)
 
-        # # Attention pooling
-        # self.timbre_pooling = AttentionPooling(input_dim=self.encoder_hidden)
-
 
     def forward(self, x, key_padding_mask, condition=None):
         if len(x.shape) == 2 and self.use_enc_emb:
@@ -246,41 +243,4 @@ class TransformerEncoder(nn.Module):
         else:
             x = self.last_ln(x)
 
-        # # Attention pooling
-        # x = x.transpose(1, 2)
-        # x = self.timbre_pooling(x) # (B, 256)
         return x
-
-
-if __name__ == "__main__":
-    # Test TransformerEncoder
-    batch_size = 2
-    seq_len = 10
-    hidden_dim = 256
-
-    # Create random input tensor (B, T, d)
-    x = torch.randn(batch_size, seq_len, hidden_dim)
-
-    # Create random key padding mask (B, T)
-    key_padding_mask = torch.ones(batch_size, seq_len)
-    key_padding_mask[:, -2:] = 0  # Set last 2 positions as padding
-
-    # Create random condition tensor for CLN (B, T, d)
-    condition = torch.randn(batch_size, seq_len, hidden_dim)
-
-    # Test without CLN
-    print("\nTesting TransformerEncoder without CLN:")
-    encoder = TransformerEncoder(
-        enc_emb_tokens=None,
-        encoder_layer=4,
-        encoder_hidden=256,
-        encoder_head=4,
-        conv_filter_size=1024,
-        conv_kernel_size=5,
-        encoder_dropout=0.1,
-        use_cln=False,
-    )
-    print(encoder)
-    # output = encoder(x, key_padding_mask)
-    # print("Input shape:", x.shape)
-    # print("Output shape:", output.shape)

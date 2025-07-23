@@ -1,14 +1,16 @@
-from omegaconf import OmegaConf
-from tqdm import tqdm
 import os
-import torch
 import random
 import librosa
 import numpy as np
 import scipy.signal
 import pretty_midi
 import json
+import torch
+import torch.nn.functional as F
+
 from multiprocessing import Pool
+from omegaconf import OmegaConf
+from tqdm import tqdm
 
 SAMPLE_RATE = 44100
 FILTER_TIME = 4.0
@@ -394,3 +396,11 @@ if __name__ == "__main__":
             json.dump(peak_records, f, indent=4)
 
         print(f"Saved {len(peak_records)} peak records for {split} split")
+
+
+def log_rms(wav, hop=512, eps=1e-7):
+    """Return log-RMS envelope. wav: (B, 1, T_samples)."""
+    rms = torch.sqrt(
+        F.avg_pool1d(wav ** 2, kernel_size=hop, stride=hop) + eps
+    )
+    return torch.log(rms + eps).squeeze(1)        # (B, T_frames)

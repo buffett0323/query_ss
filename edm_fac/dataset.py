@@ -8,6 +8,8 @@ import soundfile as sf
 import pretty_midi
 import argparse
 import librosa
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 from audiotools import AudioSignal
 from audiotools import transforms as tfm
@@ -55,6 +57,7 @@ class EDM_MN_Dataset(Dataset):
         self.perturb_adsr = perturb_adsr
         self.perturb_timbre = perturb_timbre
         self.disentanglement_mode = disentanglement_mode
+        self.eps = 1e-7
 
 
         # Pre-load metadata
@@ -217,6 +220,79 @@ class EDM_MN_Dataset(Dataset):
             return torch.zeros((n_frames, self.n_notes))
 
 
+    def _pad(self, wav: torch.Tensor) -> torch.Tensor:
+        length = wav.size(-1)
+        pad = (math.ceil(length / self.hop_length) * self.hop_length) - length
+        return F.pad(wav, (0, pad))
+
+
+    def _load_adsr_curve(self, wav: torch.Tensor) -> torch.Tensor:
+        wav = self._pad(wav)
+        rms = torch.sqrt(
+            F.avg_pool1d(wav**2, kernel_size=self.hop_length, stride=self.hop_length) + self.eps
+        )
+        log_rms = torch.log(rms + self.eps)
+        return log_rms
+
+
+    def _map_midi_adsr_to_pitch(self, midi_path: Path, target_audio: AudioSignal,
+                                offset: float, adsr_threshold: float = -3) -> torch.Tensor:
+        '''
+        Load ADSR curve and revise the target pitch sequence.
+        For each note, only activate the pitch if the ADSR value is above the threshold.
+        '''
+        # 1. Load ADSR curve
+        adsr_curve = self._load_adsr_curve(target_audio.audio_data).squeeze()
+        # # Plot ADSR curve
+        # plt.figure(figsize=(10, 4))
+        # plt.plot(adsr_curve.cpu().numpy())
+        # plt.axhline(y=adsr_threshold, color='r', linestyle='--', label='Threshold')
+        # plt.title("ADSR Curve")
+        # plt.xlabel("Frame")
+        # plt.ylabel("Log RMS")
+        # plt.legend()
+        # plt.savefig("testtest/adsr_curve.png")
+        # plt.close()
+
+        pm = pretty_midi.PrettyMIDI(str(midi_path))
+        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
+        pitch_sequence = np.zeros((n_frames, self.n_notes))
+
+        for instrument in pm.instruments:
+            for note in instrument.notes:
+                # Adjust note timing by subtracting offset
+                note_start = note.start - offset
+                note_end = note.end - offset
+
+                # Skip notes that end before our offset window starts
+                if note_end <= 0:
+                    continue
+
+                # Skip notes that start after our duration window ends
+                if note_start >= self.duration:
+                    continue
+
+                # Clamp note timing to our duration window
+                note_start = max(0, note_start)
+                note_end = min(self.duration, note_end)
+
+                start_frame = int(note_start * self.sample_rate / self.hop_length)
+                end_frame = int(note_end * self.sample_rate / self.hop_length)
+
+                start_frame = max(0, min(start_frame, n_frames-1))
+                end_frame = max(0, min(end_frame, n_frames-1))
+
+                note_idx = note.pitch - self.min_note
+
+                if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
+                    # Apply ADSR mask
+                    for frame in range(start_frame, end_frame + 1):
+                        if adsr_curve[frame] > adsr_threshold:
+                            pitch_sequence[frame, note_idx] = 1
+
+        return torch.FloatTensor(pitch_sequence)
+
+
     # From validation
     def _get_random_match_total(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
         possible_matches = [
@@ -283,8 +359,8 @@ class EDM_MN_Dataset(Dataset):
         # 0. Choose mode to disentangle
         mode = random.choice(self.disentanglement_mode)
 
-        # 0.5. Get onset
-        adsr_onset = None
+        # # 0.5. Get onset
+        # adsr_onset = None
 
         # 1. Original: T1, C1, A1
         timbre_id, midi_id, adsr_id, wav_path, midi_path = self.paired_data[idx]
@@ -306,7 +382,7 @@ class EDM_MN_Dataset(Dataset):
             timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], 0.0)
             content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
             adsr_onset_pick, adsr_onset_list = self._get_onset(adsr_match_idx)
-            adsr_onset = self._get_onset_period(adsr_onset_pick, adsr_onset_list)
+            # adsr_onset = self._get_onset_period(adsr_onset_pick, adsr_onset_list)
             adsr_match = self._load_audio(self.paired_data[adsr_match_idx][3], adsr_onset_pick)
 
 
@@ -347,24 +423,22 @@ class EDM_MN_Dataset(Dataset):
 
         # 5. Pitch sequence
         target_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
+        adsr_pitch = self._map_midi_adsr_to_pitch(midi_path, target_audio, offset=offset_pick)
 
-
-        # 6. Get onset
-        cont_onset = self._get_onset_period(offset_pick, offset)
-
-        if mode in ["conv_adsr", "conv_both"]:
-            adsr_onset = self._get_onset_period(ref_offset_pick, ref_offset)
-        elif mode == "conv_timbre":
-            adsr_onset = cont_onset
+        # if mode in ["conv_adsr", "conv_both"]:
+        #     adsr_onset = self._get_onset_period(ref_offset_pick, ref_offset)
+        # elif mode == "conv_timbre":
+        #     adsr_onset = cont_onset
 
 
 
         return {
             'target': target_audio,         # T1, C1, A1
             'pitch': target_pitch,
+            'adsr_pitch': adsr_pitch,
 
-            'cont_onset': cont_onset,
-            'adsr_onset': adsr_onset,
+            # 'cont_onset': cont_onset,
+            # 'adsr_onset': adsr_onset,
 
             'timbre_match': timbre_match,   # T1, C2, A2
             'adsr_match': adsr_match,       # T3, C3, A1; no perturb --> T1, C1, A1
@@ -405,9 +479,10 @@ class EDM_MN_Dataset(Dataset):
         return {
             'target': AudioSignal.batch([item['target'] for item in batch]),
             'pitch': torch.stack([item['pitch'] for item in batch]),
+            'adsr_pitch': torch.stack([item['adsr_pitch'] for item in batch]),
 
-            'cont_onset': torch.stack([item['cont_onset'] for item in batch]),
-            'adsr_onset': torch.stack([item['adsr_onset'] for item in batch]),
+            # 'cont_onset': torch.stack([item['cont_onset'] for item in batch]),
+            # 'adsr_onset': torch.stack([item['adsr_onset'] for item in batch]),
 
             'timbre_match': AudioSignal.batch([item['timbre_match'] for item in batch]),
             'adsr_match': AudioSignal.batch([item['adsr_match'] for item in batch]),
@@ -4065,12 +4140,24 @@ def build_dataloader(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_mn.yaml")
+    config = yaml_config_hook("configs/config_mn_cross_attn_mlp_no_z_gt.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    # data_tmp = EDM_MN_Dataset(
+    data_tmp = EDM_MN_Dataset(
+        root_path=args.root_path,
+        midi_path=args.midi_path,
+        duration=args.duration,
+        sample_rate=args.sample_rate,
+        hop_length=args.hop_length,
+        split="train",
+        perturb_content=args.perturb_content,
+        perturb_adsr=args.perturb_adsr,
+        perturb_timbre=args.perturb_timbre,
+        disentanglement_mode=['reconstruction'], #args.disentanglement,
+    )
+    # data_tmp_val = EDM_MN_Val_Dataset(
     #     root_path=args.root_path,
     #     midi_path=args.midi_path,
     #     duration=args.duration,
@@ -4078,56 +4165,61 @@ if __name__ == "__main__":
     #     hop_length=args.hop_length,
     #     min_note=args.min_note,
     #     max_note=args.max_note,
-    #     split="train",
+    #     split="evaluation",
     #     perturb_content=args.perturb_content,
     #     perturb_adsr=args.perturb_adsr,
     #     perturb_timbre=args.perturb_timbre,
-    #     disentanglement_mode=["conv_timbre"], #args.disentanglement,
+    #     disentanglement_mode=args.disentanglement,
     # )
-    data_tmp_val = EDM_MN_Val_Dataset(
-        root_path=args.root_path,
-        midi_path=args.midi_path,
-        duration=args.duration,
-        sample_rate=args.sample_rate,
-        hop_length=args.hop_length,
-        min_note=args.min_note,
-        max_note=args.max_note,
-        split="evaluation",
-        perturb_content=args.perturb_content,
-        perturb_adsr=args.perturb_adsr,
-        perturb_timbre=args.perturb_timbre,
-        disentanglement_mode=args.disentanglement,
-    )
-    # dt0 = data_tmp[0]
-    dt0 = data_tmp_val[0]
+    dt0 = data_tmp[0]
+    # dt0 = data_tmp_val[0]
 
-    # target = AudioSignal(dt0['target'].audio_data, 44100)
-    # cm = AudioSignal(dt0['content_match'].audio_data, 44100)
-    # tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
-    # am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
+    target = AudioSignal(dt0['target'].audio_data, 44100)
+    cm = AudioSignal(dt0['content_match'].audio_data, 44100)
+    tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
+    am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
 
-    # target.write("testtest/target.wav")
-    # cm.write("testtest/content_match.wav")
-    # tm.write("testtest/timbre_match.wav")
-    # am.write("testtest/adsr_match.wav")
+    target.write("testtest/target.wav")
+    cm.write("testtest/content_match.wav")
+    tm.write("testtest/timbre_match.wav")
+    am.write("testtest/adsr_match.wav")
 
     # print(json.dumps(dt0['metadata'], indent=2))
     # print(dt0['cont_onset'])
     # print(dt0['adsr_onset'])
 
-    orig_audio = AudioSignal(dt0['orig_audio'].audio_data, 44100)
-    ref_audio = AudioSignal(dt0['ref_audio'].audio_data, 44100)
-    tt = AudioSignal(dt0['target_timbre'].audio_data, 44100)
-    ta = AudioSignal(dt0['target_adsr'].audio_data, 44100)
-    tb = AudioSignal(dt0['target_both'].audio_data, 44100)
-    orig_onset = dt0['orig_onset']
-    ref_onset = dt0['ref_onset']
+    # orig_audio = AudioSignal(dt0['orig_audio'].audio_data, 44100)
+    # ref_audio = AudioSignal(dt0['ref_audio'].audio_data, 44100)
+    # tt = AudioSignal(dt0['target_timbre'].audio_data, 44100)
+    # ta = AudioSignal(dt0['target_adsr'].audio_data, 44100)
+    # tb = AudioSignal(dt0['target_both'].audio_data, 44100)
+    # orig_onset = dt0['orig_onset']
+    # ref_onset = dt0['ref_onset']
 
-    orig_audio.write("testtest/orig_audio.wav")
-    ref_audio.write("testtest/ref_audio.wav")
-    tt.write("testtest/target_timbre.wav")
-    ta.write("testtest/target_adsr.wav")
-    tb.write("testtest/target_both.wav")
-    print(orig_onset)
-    print(ref_onset)
-    print(json.dumps(dt0['metadata'], indent=2))
+    # orig_audio.write("testtest/orig_audio.wav")
+    # ref_audio.write("testtest/ref_audio.wav")
+    # tt.write("testtest/target_timbre.wav")
+    # ta.write("testtest/target_adsr.wav")
+    # tb.write("testtest/target_both.wav")
+    # print(orig_onset)
+    # print(ref_onset)
+    # print(json.dumps(dt0['metadata'], indent=2))
+
+    plt.figure(figsize=(10, 6))
+    plt.imshow(dt0['pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
+    plt.colorbar(label='Activation')
+    plt.title("MIDI Pitch Activations")
+    plt.xlabel("Frame")
+    plt.ylabel("MIDI Note")
+    plt.savefig("testtest/pitch_activations.png")
+    plt.close()
+
+
+    plt.figure(figsize=(10, 6))
+    plt.imshow(dt0['adsr_pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
+    plt.colorbar(label='Activation')
+    plt.title("MIDI Pitch Activations")
+    plt.xlabel("Frame")
+    plt.ylabel("MIDI Note")
+    plt.savefig("testtest/adsr_activations.png")
+    plt.close()
