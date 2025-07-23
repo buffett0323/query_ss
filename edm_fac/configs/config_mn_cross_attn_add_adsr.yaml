@@ -1,7 +1,7 @@
 # path: /mnt/gestalt/home/buffett # NTU
 path: /home/buffett/nas_data # Sinica
-postfix: "0723_mn_cross_attn_direct2dac"
-note: "Cross attention output directly to DAC Decoder, No other losses (Original Loss)" # adding ADSR Embedding (ADSR Encoder V4)"
+postfix: "0723_mn_cross_attn_add_adsr"
+note: "Cross attention output add ADSR Embedding, No other losses (Original Loss)" # adding ADSR Embedding (ADSR Encoder V4)"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"]
 convert_type: ["both", "adsr", "timbre"]
 
@@ -58,7 +58,7 @@ use_z_gt: False #True
 use_env_loss: False #True
 use_z_mlp_loss: False #True
 adsr_enc_ver: "V4" #"V1", "V3", "V4"
-adsr_enc_dim: 64
+adsr_enc_dim: 256 # 64
 
 # DAC:
 encoder_dim: 64

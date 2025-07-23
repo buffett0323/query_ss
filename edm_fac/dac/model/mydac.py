@@ -507,16 +507,17 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T')
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
-        # 4. Soft-align adsr by content's query
-        # adsr_stream = repeat_adsr_by_onset(adsr_z, cont_onset)
+        # 4. Cross-attention: Soft-align adsr by content's query
+        # adsr_stream = self.adsr_content_align(cont_z, adsr_z) # repeat_adsr_by_onset(adsr_z, cont_onset)
         adsr_stream = self.adsr_content_align(cont_z, adsr_z)
 
         # 5. Fuse content + ADSR using FiLM
         if self.use_FiLM:
             z_mlp = self.adsr_film(adsr_stream, cont_z) # (B, D=256, T)
         else:
-            z_mlp = cont_z + adsr_stream # (B, D=256, T)
-            # Note: Can try concat cont_z and adsr_stream
+            # z_mlp = cont_z + adsr_stream # (B, D=256, T)
+            # Experiment of Adding ADSR Embedding directly with Cross Attn result
+            z_mlp = adsr_z + adsr_stream
 
         # 5.1 MLP: z -> z_mlp
         # z_mlp = self.adsr_content_mlp(z_mlp)
@@ -661,16 +662,17 @@ class MyDAC(BaseModel, CodecMixin):
         timbre_match_z = timbre_match_z.transpose(1, 2) # (B, D, T')
         timbre_match_z = torch.mean(timbre_match_z, dim=2) # (B, D)
 
-        # 4. Soft-align adsr by content's query
-        # adsr_stream = repeat_adsr_by_onset(adsr_z, cont_onset)
+        # 4. Cross-attention: Soft-align adsr by content's query
+        # adsr_stream = self.adsr_content_align(cont_z, adsr_z) # repeat_adsr_by_onset(adsr_z, cont_onset)
         adsr_stream = self.adsr_content_align(cont_z, adsr_z)
-        # adsr_stream = adsr_z
 
         # 5. Fuse content + ADSR using FiLM
         if self.use_FiLM:
             z_mlp = self.adsr_film(adsr_stream, cont_z) # (B, D=256, T)
         else:
-            z_mlp = cont_z + adsr_stream # (B, D=256, T)
+            # z_mlp = cont_z + adsr_stream # (B, D=256, T)
+            # Experiment of Adding ADSR Embedding directly with Cross Attn result
+            z_mlp = adsr_z + adsr_stream
 
         # 5.1 MLP: z -> z_mlp
         # z_mlp = self.adsr_content_mlp(z_mlp)

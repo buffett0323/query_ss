@@ -338,6 +338,7 @@ class ADSREncoderV4(nn.Module):
                  channels: int = 64,
                  hop: int = 512):
         super().__init__()
+        print(f"Initializing ADSR encoder V4 with channels={channels}")
         self.hop = hop
         self.eps = 1e-7
         self.backbone = DSBackbone(pre_ch=1, ch=channels)
