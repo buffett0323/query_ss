@@ -1,7 +1,7 @@
 path: /mnt/gestalt/home/buffett # NTU
 # path: /home/buffett/nas_data # Sinica
 postfix: "0723_ss_no_mlp"
-note: "BS=4, No MLP, Main Difference: Cross-Attn + Encoder V4"
+note: "BS=4, No MLP"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"]
 convert_type: ["both", "adsr", "timbre"]
 
@@ -51,11 +51,11 @@ perturb_adsr: True #True
 
 # ADSR
 rule_based_adsr_folding: False
-use_FiLM: False # True
+use_FiLM: True # True 
 use_z_gt: False #True
 use_env_loss: True #True
 use_z_mlp_loss: False #True
-adsr_enc_ver: "V4" #"V1", "V3", "V4"
+adsr_enc_ver: "V1" #"V1", "V3", "V4"
 adsr_enc_dim: 64
 
 # DAC:

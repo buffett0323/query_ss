@@ -286,7 +286,7 @@ class MyDAC(BaseModel, CodecMixin):
         use_gr_content: bool = True,
         use_gr_adsr: bool = True,
         use_gr_timbre: bool = True,
-        use_FiLM: bool = True,
+        use_FiLM: bool = False,
         adsr_enc_ver: str = "V4",
         rule_based_adsr_folding: bool = False,
         use_z_gt: bool = False, # True
@@ -331,19 +331,19 @@ class MyDAC(BaseModel, CodecMixin):
 
 
         # Cross-attention between content and adsr
-        self.adsr_content_align = ADSR_Content_Align(
-            content_dim=latent_dim,
-            adsr_dim=adsr_enc_dim,
-            hidden_dim=256, # 512
-            num_heads=4, # 8
-        )
+        # self.adsr_content_align = ADSR_Content_Align(
+        #     content_dim=latent_dim,
+        #     adsr_dim=adsr_enc_dim,
+        #     hidden_dim=256, # 512
+        #     num_heads=4, # 8
+        # )
 
-        # MLP between content and adsr
-        self.adsr_content_mlp = ADSR_Content_MLP(
-            dim=latent_dim, # 256
-            hidden=256, # 512
-            n_layers=8, # 10
-        )
+        # # MLP between content and adsr
+        # self.adsr_content_mlp = ADSR_Content_MLP(
+        #     dim=latent_dim, # 256
+        #     hidden=256, # 512
+        #     n_layers=8, # 10
+        # )
 
 
         # FiLM between content and adsr
@@ -428,7 +428,7 @@ class MyDAC(BaseModel, CodecMixin):
         version = version.lower()
 
         if version == 'v1':
-            self.adsr_encoder = ADSREncoderV1(**kwargs)
+            self.adsr_encoder = ADSREncoderV1()
         elif version == 'v3':
             self.adsr_encoder = ADSREncoderV3(**kwargs)
         elif version == 'v4':
@@ -519,7 +519,7 @@ class MyDAC(BaseModel, CodecMixin):
             # Note: Can try concat cont_z and adsr_stream
 
         # 5.1 MLP: z -> z_mlp
-        z_mlp = self.adsr_content_mlp(z_mlp)
+        # z_mlp = self.adsr_content_mlp(z_mlp)
 
         # 5.2 Use z_gt for supervising Z-loss
         if self.use_z_gt:
@@ -652,6 +652,7 @@ class MyDAC(BaseModel, CodecMixin):
         # 4. Soft-align adsr by content's query
         # adsr_stream = repeat_adsr_by_onset(adsr_z, cont_onset)
         adsr_stream = self.adsr_content_align(cont_z, adsr_z)
+        # adsr_stream = adsr_z
 
         # 5. Fuse content + ADSR using FiLM
         if self.use_FiLM:
@@ -660,7 +661,7 @@ class MyDAC(BaseModel, CodecMixin):
             z_mlp = cont_z + adsr_stream # (B, D=256, T)
 
         # 5.1 MLP: z -> z_mlp
-        z_mlp = self.adsr_content_mlp(z_mlp)
+        # z_mlp = self.adsr_content_mlp(z_mlp)
 
         # Predictors
         # timbre_match_z = F.normalize(timbre_match_z, dim=-1)

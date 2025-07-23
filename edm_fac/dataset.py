@@ -1854,7 +1854,9 @@ class EDM_Single_Shot_Dataset(Dataset):
 
         # Data
         with open(f'{self.root_path}/metadata.json', 'r') as f:
-            self.metadata = json.load(f)["files"]
+            self.metadata = json.load(f)#["files"]
+            # Shuffle metadata
+            random.shuffle(self.metadata)
 
         # Get envelopes metadata
         with open(f'info/envelopes_{split}_new.json', 'r') as f:
@@ -2003,10 +2005,7 @@ class EDM_Single_Shot_Dataset(Dataset):
 
     def __getitem__(self, idx):
         # 0. Choose a mode to determine which style gonna train
-        # if self.split == "train":
         mode = random.choice(self.disentanglement_mode)
-        # else:
-        #     mode = self.disentanglement_mode[idx % len(self.disentanglement_mode)]
 
         # 1. Original: T1, C1, A1
         timbre_id, midi_id, adsr_id, wav_path = self.paired_data[idx]
@@ -2045,7 +2044,7 @@ class EDM_Single_Shot_Dataset(Dataset):
                 timbre_match = ref_audio
 
 
-        # TODO: Get Gradient Reversal Indexes
+        # Get Gradient Reversal Indexes
         rev_timbre_id = timbre_id
         rev_adsr_id = adsr_id
 
@@ -2096,29 +2095,6 @@ class EDM_Single_Shot_Dataset(Dataset):
                     'adsr_id': adsr_id,
                     'path': str(self.paired_data[target_idx][3]),
                 },
-                # 'idxs': {
-                #     'original': idx,
-                #     'ref': ref_idx,
-                #     'target': target_idx,
-                # }
-                # 'content_match': {
-                #     'timbre_id': self.paired_data[content_match_idx][0],
-                #     'content_id': self.paired_data[content_match_idx][1],
-                #     'adsr_id': self.paired_data[content_match_idx][2],
-                #     'path': str(self.paired_data[content_match_idx][3])
-                # },
-                # 'timbre_match': {
-                #     'timbre_id': self.paired_data[timbre_match_idx][0],
-                #     'content_id': self.paired_data[timbre_match_idx][1],
-                #     'adsr_id': self.paired_data[timbre_match_idx][2],
-                #     'path': str(self.paired_data[timbre_match_idx][3])
-                # },
-                # 'adsr_match':{
-                #     'timbre_id': self.paired_data[adsr_match_idx][0],
-                #     'content_id': self.paired_data[adsr_match_idx][1],
-                #     'adsr_id': self.paired_data[adsr_match_idx][2],
-                #     'path': str(self.paired_data[adsr_match_idx][3])
-                # }
             }
         }
 
@@ -2138,7 +2114,6 @@ class EDM_Single_Shot_Dataset(Dataset):
 
             'rev_timbre_id': torch.tensor([item['rev_timbre_id'] for item in batch], dtype=torch.long),
             'rev_adsr_id': torch.tensor([item['rev_adsr_id'] for item in batch], dtype=torch.long),
-            # 'rev_midi_id': torch.tensor([item['rev_midi_id'] for item in batch], dtype=torch.long),
 
             'metadata': [item['metadata'] for item in batch]
         }
@@ -2168,7 +2143,7 @@ class EDM_Single_Shot_Val_Dataset(Dataset):
 
         # Data
         with open(f'{self.root_path}/metadata.json', 'r') as f:
-            self.metadata = json.load(f)["files"]
+            self.metadata = json.load(f)#["files"]
 
         # Get envelopes metadata
         with open(f'info/envelopes_{split}_new.json', 'r') as f:
@@ -4140,23 +4115,36 @@ def build_dataloader(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_mn_cross_attn_mlp_no_z_gt.yaml")
+    config = yaml_config_hook("configs/config_ss.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    data_tmp = EDM_MN_Dataset(
+    train_paired_data = EDM_Single_Shot_Dataset(
         root_path=args.root_path,
-        midi_path=args.midi_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="train",
+        n_notes=args.n_notes,
         perturb_content=args.perturb_content,
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
-        disentanglement_mode=['reconstruction'], #args.disentanglement,
+        disentanglement_mode=args.disentanglement,
     )
+    print(train_paired_data[0]['metadata'])
+    # data_tmp = EDM_MN_Dataset(
+    #     root_path=args.root_path,
+    #     midi_path=args.midi_path,
+    #     duration=args.duration,
+    #     sample_rate=args.sample_rate,
+    #     hop_length=args.hop_length,
+    #     split="train",
+    #     perturb_content=args.perturb_content,
+    #     perturb_adsr=args.perturb_adsr,
+    #     perturb_timbre=args.perturb_timbre,
+    #     disentanglement_mode=['reconstruction'], #args.disentanglement,
+    # )
     # data_tmp_val = EDM_MN_Val_Dataset(
     #     root_path=args.root_path,
     #     midi_path=args.midi_path,
@@ -4171,18 +4159,18 @@ if __name__ == "__main__":
     #     perturb_timbre=args.perturb_timbre,
     #     disentanglement_mode=args.disentanglement,
     # )
-    dt0 = data_tmp[0]
+    # dt0 = data_tmp[0]
     # dt0 = data_tmp_val[0]
 
-    target = AudioSignal(dt0['target'].audio_data, 44100)
-    cm = AudioSignal(dt0['content_match'].audio_data, 44100)
-    tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
-    am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
+    # target = AudioSignal(dt0['target'].audio_data, 44100)
+    # cm = AudioSignal(dt0['content_match'].audio_data, 44100)
+    # tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
+    # am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
 
-    target.write("testtest/target.wav")
-    cm.write("testtest/content_match.wav")
-    tm.write("testtest/timbre_match.wav")
-    am.write("testtest/adsr_match.wav")
+    # target.write("testtest/target.wav")
+    # cm.write("testtest/content_match.wav")
+    # tm.write("testtest/timbre_match.wav")
+    # am.write("testtest/adsr_match.wav")
 
     # print(json.dumps(dt0['metadata'], indent=2))
     # print(dt0['cont_onset'])
@@ -4205,21 +4193,21 @@ if __name__ == "__main__":
     # print(ref_onset)
     # print(json.dumps(dt0['metadata'], indent=2))
 
-    plt.figure(figsize=(10, 6))
-    plt.imshow(dt0['pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
-    plt.colorbar(label='Activation')
-    plt.title("MIDI Pitch Activations")
-    plt.xlabel("Frame")
-    plt.ylabel("MIDI Note")
-    plt.savefig("testtest/pitch_activations.png")
-    plt.close()
+    # plt.figure(figsize=(10, 6))
+    # plt.imshow(dt0['pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
+    # plt.colorbar(label='Activation')
+    # plt.title("MIDI Pitch Activations")
+    # plt.xlabel("Frame")
+    # plt.ylabel("MIDI Note")
+    # plt.savefig("testtest/pitch_activations.png")
+    # plt.close()
 
 
-    plt.figure(figsize=(10, 6))
-    plt.imshow(dt0['adsr_pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
-    plt.colorbar(label='Activation')
-    plt.title("MIDI Pitch Activations")
-    plt.xlabel("Frame")
-    plt.ylabel("MIDI Note")
-    plt.savefig("testtest/adsr_activations.png")
-    plt.close()
+    # plt.figure(figsize=(10, 6))
+    # plt.imshow(dt0['adsr_pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
+    # plt.colorbar(label='Activation')
+    # plt.title("MIDI Pitch Activations")
+    # plt.xlabel("Frame")
+    # plt.ylabel("MIDI Note")
+    # plt.savefig("testtest/adsr_activations.png")
+    # plt.close()

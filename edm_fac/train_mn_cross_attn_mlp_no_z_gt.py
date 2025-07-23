@@ -89,25 +89,25 @@ class Wrapper:
         self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
         self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.rev_timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
-        
+
         # Z-loss
         if args.use_z_gt:
             self.z_l1_loss = nn.L1Loss(reduction='mean').to(accelerator.device) # Designed for Tensor
-            
+
         if args.use_env_loss:
             self.env_loss = nn.L1Loss(reduction='mean').to(accelerator.device) # Designed for Tensor
-        
+
         # Loss lambda parameters
         self.params = {
             "gen/mel-loss": 15.0,
             "gen/l1-loss": 15.0,
-            
+
             "adv/loss_feature": 2.0,
             "adv/loss_g": 1.0,
-            
+
             "vq/commitment_loss": 0.25,
             "vq/codebook_loss": 1.0,
-            
+
             "pred/timbre_loss": 5.0,
             "pred/content_loss": 5.0,
             "pred/adsr_loss": 5.0, # 1.0,
@@ -120,7 +120,7 @@ class Wrapper:
             self.params["rev/adsr_loss"] = 5.0
         if args.use_gr_timbre:
             self.params["rev/timbre_loss"] = 5.0
-        
+
         # Other Losses
         if args.use_z_gt:
             self.params["z/l1-loss"] = 10.0
@@ -131,7 +131,7 @@ class Wrapper:
 
         # Val dataset
         self.val_paired_data = val_paired_data
-        
+
         # Print params
         print({k: v for k, v in sorted(self.params.items())})
 
@@ -351,7 +351,7 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
     output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
     output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-    
+
     # Envelope Loss
     if args.use_env_loss:
         recons_env = log_rms(recons.audio_data, hop=args.hop_length)
@@ -432,11 +432,11 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
         output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
         output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-        
+
         # Z-Loss
         if args.use_z_gt:
             output["z/l1-loss"] = wrapper.z_l1_loss(out["z_mlp"], out["z_gt"])
-            
+
         # Envelope Loss
         if args.use_env_loss:
             recons_env = log_rms(recons.audio_data, hop=args.hop_length)
@@ -458,7 +458,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], timbre_id)
         output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch)
         output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], adsr_id)
-        
+
         if args.use_z_mlp_loss:
             output["pred/z_mlp_loss"] = wrapper.z_mlp_loss(out["pred_z_mlp_pitch"], adsr_pitch)
 
