@@ -51,7 +51,7 @@ perturb_adsr: True #True
 
 # ADSR
 rule_based_adsr_folding: False
-use_FiLM: True # True 
+use_FiLM: True # True
 use_z_gt: False #True
 use_env_loss: True #True
 use_z_mlp_loss: False #True

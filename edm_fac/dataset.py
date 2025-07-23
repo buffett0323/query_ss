@@ -863,11 +863,6 @@ class EDM_MN_Val_Dataset(Dataset):
 
 # Mixed training for one-shot and multi-notes
 class EDM_SS_MN_Dataset(Dataset):
-    """
-    Use RMS Curve to analyze the ADSR
-    Please follow the order of the dataset:
-        Timbre, Content, ADSR
-    """
     def __init__(
         self,
         ss_root_path: str,
@@ -903,8 +898,11 @@ class EDM_SS_MN_Dataset(Dataset):
         # Pre-load metadata
         with open(f'{self.ss_root_path}/metadata.json', 'r') as f:
             self.ss_metadata = json.load(f)
+            random.shuffle(self.ss_metadata)
+
         with open(f'{self.mn_root_path}/metadata.json', 'r') as f:
             self.mn_metadata = json.load(f)
+            random.shuffle(self.mn_metadata)
 
         with open(f'{self.mn_root_path}/midi_files.json', 'r') as f:
             self.midi_metadata = json.load(f)
@@ -994,10 +992,6 @@ class EDM_SS_MN_Dataset(Dataset):
 
 
     def _build_paired_index(self):
-
-        # Shuffle metadata
-        random.shuffle(self.ss_metadata)
-        random.shuffle(self.mn_metadata)
 
         # Build paired index for SS
         counter = 0
@@ -1188,12 +1182,35 @@ class EDM_SS_MN_Dataset(Dataset):
             content_match_idx = idx
 
         if self.perturb_adsr: # T3, C3, A1
-            # adsr_match_idx = self._get_random_match_adsr(timbre_id, midi_id, adsr_id)
             adsr_match_idx = self._get_random_match_adsr_from_ss(adsr_id)
         else:
             adsr_match_idx = idx
 
         return timbre_match_idx, content_match_idx, adsr_match_idx
+
+
+    def _get_onset(self, idx: int):
+        _, midi_id, _, _, _ = self.mn_paired_data[idx]
+        midi_map = self.midi_metadata[f"C{midi_id:03d}"]
+        onset_pick = np.random.choice(midi_map['onset_seconds'])
+        onset_list = midi_map['onset_all_seconds']
+        return onset_pick, onset_list
+
+
+    def _get_onset_period(self, onset_pick: float, onset_list: List[float]):
+        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
+        onset = torch.zeros(n_frames, dtype=torch.float)
+
+        # Get onset times within the selected duration window
+        onset_times = [t-onset_pick for t in onset_list if onset_pick <= t < onset_pick + self.duration]
+
+        # Convert onset times to frame indices and set to 1
+        for onset_time in onset_times:
+            frame_idx = int(onset_time * self.sample_rate / self.hop_length)
+            if 0 <= frame_idx < n_frames:
+                onset[frame_idx] = 1.0
+
+        return onset
 
 
     def __len__(self):
@@ -1209,16 +1226,14 @@ class EDM_SS_MN_Dataset(Dataset):
 
         # 1. Original: T1, C1, A1
         timbre_id, midi_id, adsr_id, wav_path, midi_path = self.mn_paired_data[idx]
-        offset = self.midi_metadata[f"C{midi_id:03d}"]['onset_seconds']
-        offset_pick = np.random.choice(offset)
+        offset_pick, offset = self._get_onset(idx)
         orig_audio = self._load_audio(wav_path, offset_pick)
 
 
         # 2. Reference for conversion tasks
         ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
         ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path, _ = self.mn_paired_data[ref_idx]
-        ref_offset = self.midi_metadata[f"C{ref_midi_id:03d}"]['onset_seconds']
-        ref_offset_pick = np.random.choice(ref_offset)
+        ref_offset_pick, ref_offset = self._get_onset(ref_idx)
 
         # 3. Encoders' input
         if mode == "reconstruction": # Reconstruction
@@ -1226,15 +1241,13 @@ class EDM_SS_MN_Dataset(Dataset):
                 self._get_encoder_input(timbre_id, midi_id, adsr_id, idx)
 
             # Load audio
-            timbre_match = self._load_audio(self.mn_paired_data[timbre_match_idx][3], offset_pick)
+            timbre_match = self._load_audio(self.mn_paired_data[timbre_match_idx][3], 0.0)
             content_match = self._load_audio(self.mn_paired_data[content_match_idx][3], offset_pick)
-            # adsr_match = self._load_audio(self.mn_paired_data[adsr_match_idx][3], offset_pick)
             adsr_match = self._load_audio(self.ss_paired_data[adsr_match_idx][3], 0.0)
 
         else:
             timbre_match = orig_audio
             content_match = orig_audio
-            # adsr_match = orig_audio
             adsr_match_idx = self._get_random_match_adsr_from_ss(adsr_id)
             adsr_match = self._load_audio(self.ss_paired_data[adsr_match_idx][3], 0.0)
 
@@ -1243,13 +1256,11 @@ class EDM_SS_MN_Dataset(Dataset):
             if mode == "conv_both":
                 timbre_id, adsr_id = ref_timbre_id, ref_adsr_id
                 timbre_match = ref_audio
-                # adsr_match = ref_audio
                 adsr_match_idx = self._get_random_match_adsr_from_ss(ref_adsr_id)
                 adsr_match = self._load_audio(self.ss_paired_data[adsr_match_idx][3], 0.0)
 
             elif mode == "conv_adsr":
                 adsr_id = ref_adsr_id
-                # adsr_match = ref_audio
                 adsr_match_idx = self._get_random_match_adsr_from_ss(ref_adsr_id)
                 adsr_match = self._load_audio(self.ss_paired_data[adsr_match_idx][3], 0.0)
 
@@ -1268,34 +1279,16 @@ class EDM_SS_MN_Dataset(Dataset):
             target_audio = orig_audio
         else:
             target_idx = self.mn_ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
-            target_audio = self._load_audio(self.mn_paired_data[target_idx][3])
+            target_audio = self._load_audio(self.mn_paired_data[target_idx][3], offset_pick)
 
 
         # 5. Pitch sequence
-        # target_pitch = self._get_midi_from_adsr(midi_id, adsr_id)
         target_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
-
-
-        # 6. Get onset
-        # TODO: Use librosa onset detection
-        # Convert onset times to a 1-D vector in time frames
-        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
-        onset_vector = torch.zeros(n_frames, dtype=torch.float)
-
-        # Get onset times within the selected duration window
-        onset_times = [t-offset_pick for t in offset if offset_pick <= t < offset_pick + self.duration]
-
-        # Convert onset times to frame indices and set to 1
-        for onset_time in onset_times:
-            frame_idx = int(onset_time * self.sample_rate / self.hop_length)
-            if 0 <= frame_idx < n_frames:
-                onset_vector[frame_idx] = 1.0
 
 
         return {
             'target': target_audio,         # T1, C1, A1
             'pitch': target_pitch,
-            'onset': onset_vector,
 
             'timbre_match': timbre_match,   # T1, C2, A2
             'adsr_match': adsr_match,       # T3, C3, A1; no perturb --> T1, C1, A1
@@ -1336,7 +1329,6 @@ class EDM_SS_MN_Dataset(Dataset):
         return {
             'target': AudioSignal.batch([item['target'] for item in batch]),
             'pitch': torch.stack([item['pitch'] for item in batch]),
-            'onset': torch.stack([item['onset'] for item in batch]),
             'timbre_match': AudioSignal.batch([item['timbre_match'] for item in batch]),
             'adsr_match': AudioSignal.batch([item['adsr_match'] for item in batch]),
             'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
@@ -1390,8 +1382,11 @@ class EDM_SS_MN_Val_Dataset(Dataset):
         # Pre-load metadata
         with open(f'{self.ss_root_path}/metadata.json', 'r') as f:
             self.ss_metadata = json.load(f)
+            random.shuffle(self.ss_metadata)
+
         with open(f'{self.mn_root_path}/metadata.json', 'r') as f:
             self.mn_metadata = json.load(f)
+            random.shuffle(self.mn_metadata)
 
         with open(f'{self.mn_root_path}/midi_files.json', 'r') as f:
             self.midi_metadata = json.load(f)
@@ -1481,10 +1476,6 @@ class EDM_SS_MN_Val_Dataset(Dataset):
 
 
     def _build_paired_index(self):
-
-        # Shuffle metadata
-        random.shuffle(self.ss_metadata)
-        random.shuffle(self.mn_metadata)
 
         # Build paired index for SS
         counter = 0
@@ -1664,6 +1655,30 @@ class EDM_SS_MN_Val_Dataset(Dataset):
         return random.choice(possible_matches)
 
 
+    def _get_onset(self, idx: int):
+        _, midi_id, _, _, _ = self.mn_paired_data[idx]
+        midi_map = self.midi_metadata[f"C{midi_id:03d}"]
+        onset_pick = np.random.choice(midi_map['onset_seconds'])
+        onset_list = midi_map['onset_all_seconds']
+        return onset_pick, onset_list
+
+
+    def _get_onset_period(self, onset_pick: float, onset_list: List[float]):
+        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
+        onset = torch.zeros(n_frames, dtype=torch.float)
+
+        # Get onset times within the selected duration window
+        onset_times = [t-onset_pick for t in onset_list if onset_pick <= t < onset_pick + self.duration]
+
+        # Convert onset times to frame indices and set to 1
+        for onset_time in onset_times:
+            frame_idx = int(onset_time * self.sample_rate / self.hop_length)
+            if 0 <= frame_idx < n_frames:
+                onset[frame_idx] = 1.0
+
+        return onset
+
+
     def __len__(self):
         return len(self.mn_paired_data)
 
@@ -1671,15 +1686,13 @@ class EDM_SS_MN_Val_Dataset(Dataset):
     def __getitem__(self, idx):
         # 1. Original: T5, C6, ADSR5
         timbre_id, midi_id, adsr_id, wav_path, midi_path = self.mn_paired_data[idx]
-        offset = self.midi_metadata[f"C{midi_id:03d}"]['onset_seconds']
-        offset_pick = np.random.choice(offset)
+        offset_pick, offset = self._get_onset(idx)
         orig_audio = self._load_audio(wav_path, offset_pick)
 
         # 2. Reference: T3, C7, ADSR8
         ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
         ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path, ref_midi_path = self.mn_paired_data[ref_idx]
-        ref_offset = self.midi_metadata[f"C{ref_midi_id:03d}"]['onset_seconds']
-        ref_offset_pick = np.random.choice(ref_offset)
+        ref_offset_pick, ref_offset = self._get_onset(ref_idx)
         ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
 
 
@@ -1695,37 +1708,17 @@ class EDM_SS_MN_Val_Dataset(Dataset):
         Target_timbre: T3, C6, ADSR5
         Target_adsr: T5, C6, ADSR8
         """
-        target_content_idx = self.mn_ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{ref_midi_id:03d}"]
         target_timbre_idx = self.mn_ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
         target_adsr_idx = self.mn_ids_to_item_idx[f"T{timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
         target_both_idx = self.mn_ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
 
-        target_content = self._load_audio(self.mn_paired_data[target_content_idx][3], ref_offset_pick)
         target_timbre = self._load_audio(self.mn_paired_data[target_timbre_idx][3], offset_pick)
         target_adsr = self._load_audio(self.mn_paired_data[target_adsr_idx][3], offset_pick)
         target_both = self._load_audio(self.mn_paired_data[target_both_idx][3], offset_pick)
 
         # 4. Get target pitch
-        # orig_pitch = self._get_midi_from_adsr(midi_id, adsr_id)
-        # ref_pitch = self._get_midi_from_adsr(ref_midi_id, ref_adsr_id)
         orig_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
         ref_pitch = self._midi_to_pitch_sequence(ref_midi_path, self.duration, offset=ref_offset_pick)
-
-
-        # 5. Get onset
-        # TODO: Use librosa onset detection
-        # Convert onset times to a 1-D vector in time frames
-        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
-        onset_vector = torch.zeros(n_frames, dtype=torch.float)
-
-        # Get onset times within the selected duration window
-        onset_times = [t-offset_pick for t in offset if offset_pick <= t < offset_pick + self.duration]
-
-        # Convert onset times to frame indices and set to 1
-        for onset_time in onset_times:
-            frame_idx = int(onset_time * self.sample_rate / self.hop_length)
-            if 0 <= frame_idx < n_frames:
-                onset_vector[frame_idx] = 1.0
 
 
         return {
@@ -1733,8 +1726,6 @@ class EDM_SS_MN_Val_Dataset(Dataset):
             'ref_audio': ref_audio,
             'orig_adsr_audio': orig_adsr,
             'ref_adsr_audio': ref_adsr,
-
-            'onset': onset_vector,
 
             'orig_midi': midi_id,
             'ref_midi': ref_midi_id,
@@ -1746,7 +1737,6 @@ class EDM_SS_MN_Val_Dataset(Dataset):
             'orig_pitch': orig_pitch,
             'ref_pitch': ref_pitch,
 
-            'target_content': target_content,
             'target_timbre': target_timbre,
             'target_adsr': target_adsr,
             'target_both': target_both,
@@ -1763,12 +1753,6 @@ class EDM_SS_MN_Val_Dataset(Dataset):
                     'content_id': ref_midi_id,
                     'adsr_id': ref_adsr_id,
                     'path': str(ref_wav_path),
-                },
-                'target_content': {
-                    'timbre_id': self.mn_paired_data[target_content_idx][0],
-                    'content_id': self.mn_paired_data[target_content_idx][1],
-                    'adsr_id': self.mn_paired_data[target_content_idx][2],
-                    'path': str(self.mn_paired_data[target_content_idx][3]),
                 },
                 'target_timbre': {
                     'timbre_id': self.mn_paired_data[target_timbre_idx][0],
@@ -1803,15 +1787,12 @@ class EDM_SS_MN_Val_Dataset(Dataset):
             'orig_pitch': torch.stack([item['orig_pitch'] for item in batch]),
             'ref_pitch': torch.stack([item['ref_pitch'] for item in batch]),
 
-            'onset': torch.stack([item['onset'] for item in batch]),
-
             'orig_midi': torch.tensor([item['orig_midi'] for item in batch], dtype=torch.long),
             'ref_midi': torch.tensor([item['ref_midi'] for item in batch], dtype=torch.long),
             'orig_timbre': torch.tensor([item['orig_timbre'] for item in batch], dtype=torch.long),
             'ref_timbre': torch.tensor([item['ref_timbre'] for item in batch], dtype=torch.long),
             'orig_adsr': torch.tensor([item['orig_adsr'] for item in batch], dtype=torch.long),
             'ref_adsr': torch.tensor([item['ref_adsr'] for item in batch], dtype=torch.long),
-            'target_content': AudioSignal.batch([item['target_content'] for item in batch]),
             'target_timbre': AudioSignal.batch([item['target_timbre'] for item in batch]),
             'target_adsr': AudioSignal.batch([item['target_adsr'] for item in batch]),
             'target_both': AudioSignal.batch([item['target_both'] for item in batch]),
@@ -4115,24 +4096,24 @@ def build_dataloader(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_ss.yaml")
+    config = yaml_config_hook("configs/config_ss_mn.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
 
-    train_paired_data = EDM_Single_Shot_Dataset(
-        root_path=args.root_path,
+    train_paired_data = EDM_SS_MN_Val_Dataset(
+        ss_root_path=args.ss_root_path,
+        mn_root_path=args.mn_root_path,
+        midi_path=args.midi_path,
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
-        split="train",
-        n_notes=args.n_notes,
+        split="evaluation",
         perturb_content=args.perturb_content,
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         disentanglement_mode=args.disentanglement,
     )
-    print(train_paired_data[0]['metadata'])
     # data_tmp = EDM_MN_Dataset(
     #     root_path=args.root_path,
     #     midi_path=args.midi_path,
@@ -4159,6 +4140,7 @@ if __name__ == "__main__":
     #     perturb_timbre=args.perturb_timbre,
     #     disentanglement_mode=args.disentanglement,
     # )
+    dt0 = train_paired_data[0]
     # dt0 = data_tmp[0]
     # dt0 = data_tmp_val[0]
 
@@ -4166,15 +4148,29 @@ if __name__ == "__main__":
     # cm = AudioSignal(dt0['content_match'].audio_data, 44100)
     # tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
     # am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
+    orig_audio = AudioSignal(dt0['orig_audio'].audio_data, 44100)
+    ref_audio = AudioSignal(dt0['ref_audio'].audio_data, 44100)
+    orig_adsr_audio = AudioSignal(dt0['orig_adsr_audio'].audio_data, 44100)
+    ref_adsr_audio = AudioSignal(dt0['ref_adsr_audio'].audio_data, 44100)
+    target_timbre = AudioSignal(dt0['target_timbre'].audio_data, 44100)
+    target_adsr = AudioSignal(dt0['target_adsr'].audio_data, 44100)
+    target_both = AudioSignal(dt0['target_both'].audio_data, 44100)
 
+
+    os.makedirs("testtest", exist_ok=True)
     # target.write("testtest/target.wav")
     # cm.write("testtest/content_match.wav")
     # tm.write("testtest/timbre_match.wav")
     # am.write("testtest/adsr_match.wav")
+    orig_audio.write("testtest/orig_audio.wav")
+    ref_audio.write("testtest/ref_audio.wav")
+    orig_adsr_audio.write("testtest/orig_adsr_audio.wav")
+    ref_adsr_audio.write("testtest/ref_adsr_audio.wav")
+    target_timbre.write("testtest/target_timbre.wav")
+    target_adsr.write("testtest/target_adsr.wav")
+    target_both.write("testtest/target_both.wav")
 
-    # print(json.dumps(dt0['metadata'], indent=2))
-    # print(dt0['cont_onset'])
-    # print(dt0['adsr_onset'])
+    print(json.dumps(dt0['metadata'], indent=2))
 
     # orig_audio = AudioSignal(dt0['orig_audio'].audio_data, 44100)
     # ref_audio = AudioSignal(dt0['ref_audio'].audio_data, 44100)

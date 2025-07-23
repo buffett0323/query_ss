@@ -331,12 +331,12 @@ class MyDAC(BaseModel, CodecMixin):
 
 
         # Cross-attention between content and adsr
-        # self.adsr_content_align = ADSR_Content_Align(
-        #     content_dim=latent_dim,
-        #     adsr_dim=adsr_enc_dim,
-        #     hidden_dim=256, # 512
-        #     num_heads=4, # 8
-        # )
+        self.adsr_content_align = ADSR_Content_Align(
+            content_dim=latent_dim,
+            adsr_dim=adsr_enc_dim,
+            hidden_dim=256, # 512
+            num_heads=4, # 8
+        )
 
         # # MLP between content and adsr
         # self.adsr_content_mlp = ADSR_Content_MLP(
@@ -610,6 +610,8 @@ class MyDAC(BaseModel, CodecMixin):
         self,
         orig_audio: torch.Tensor,
         ref_audio: torch.Tensor,
+        orig_adsr_audio: torch.Tensor = None,
+        ref_adsr_audio: torch.Tensor = None,
         # orig_onset: torch.Tensor = None,
         # ref_onset: torch.Tensor = None,
         sample_rate: int = None,
@@ -621,6 +623,10 @@ class MyDAC(BaseModel, CodecMixin):
         # 0. Preprocess
         orig_audio = self.preprocess(orig_audio, sample_rate)
         ref_audio = self.preprocess(ref_audio, sample_rate)
+        if orig_adsr_audio is not None:
+            orig_adsr_audio = self.preprocess(orig_adsr_audio, sample_rate)
+        if ref_adsr_audio is not None:
+            ref_adsr_audio = self.preprocess(ref_adsr_audio, sample_rate)
 
         # Perturbation's encoders
         orig_audio_z = self.encoder(orig_audio)
@@ -634,9 +640,15 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 2. Disentangle ADSR
         if convert_type in ["adsr", "both"]:
-            adsr_z = self.adsr_encoder(ref_audio)
+            if ref_adsr_audio is not None:
+                adsr_z = self.adsr_encoder(ref_adsr_audio)
+            else:
+                adsr_z = self.adsr_encoder(ref_audio)
         else:
-            adsr_z = self.adsr_encoder(orig_audio)
+            if orig_adsr_audio is not None:
+                adsr_z = self.adsr_encoder(orig_adsr_audio)
+            else:
+                adsr_z = self.adsr_encoder(orig_audio)
 
         # 3. Disentangle Timbre
         if convert_type in ["timbre", "both"]:

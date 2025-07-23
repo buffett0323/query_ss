@@ -19,7 +19,7 @@ from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
 from dataset import EDM_SS_MN_Dataset, EDM_SS_MN_Val_Dataset
-from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint
+from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint, log_rms
 import dac
 
 
@@ -42,6 +42,8 @@ class Wrapper:
             latent_dim=args.latent_dim,
             decoder_dim=args.decoder_dim,
             decoder_rates=args.decoder_rates,
+            adsr_enc_dim=args.adsr_enc_dim,
+            adsr_enc_ver=args.adsr_enc_ver, # ADSR Encoder Version
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
             adsr_classes=args.adsr_classes,
@@ -50,6 +52,9 @@ class Wrapper:
             use_gr_adsr=args.use_gr_adsr,
             use_gr_timbre=args.use_gr_timbre,
             use_FiLM=args.use_FiLM,
+            use_z_gt=args.use_z_gt,
+            use_z_mlp_loss=args.use_z_mlp_loss,
+            rule_based_adsr_folding=args.rule_based_adsr_folding,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
@@ -73,29 +78,41 @@ class Wrapper:
         self.l1_loss = L1Loss().to(accelerator.device)
         self.gan_loss = GANLoss(discriminator=self.discriminator).to(accelerator.device)
 
-        # ✅ Switched both to appropriate loss functions for classification
+        # Predictor losses
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # FocalLoss(gamma=2).to(device) # Multi-label for pitch
         self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
+        # Gradient reversal losses
         self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
         self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.rev_timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
+        # Z-loss
+        if args.use_z_gt:
+            self.z_l1_loss = nn.L1Loss(reduction='mean').to(accelerator.device) # Designed for Tensor
+
+        if args.use_env_loss:
+            self.env_loss = nn.L1Loss(reduction='mean').to(accelerator.device) # Designed for Tensor
+
+
         # Loss lambda parameters
         self.params = {
             "gen/mel-loss": 15.0,
+            "gen/l1-loss": 15.0,
+
             "adv/loss_feature": 2.0,
             "adv/loss_g": 1.0,
-            "vq/cont_commitment_loss": 0.25,
-            "vq/cont_codebook_loss": 1.0,
-            # "vq/adsr_commitment_loss": 0.25,
-            # "vq/adsr_codebook_loss": 1.0,
+
+            "vq/commitment_loss": 0.25,
+            "vq/codebook_loss": 1.0,
+
             "pred/timbre_loss": 5.0,
             "pred/content_loss": 5.0,
             "pred/adsr_loss": 5.0, # 1.0,
         }
 
+        # Gradient Reversal Losses
         if args.use_gr_content:
             self.params["rev/content_loss"] = 5.0
         if args.use_gr_adsr:
@@ -103,7 +120,19 @@ class Wrapper:
         if args.use_gr_timbre:
             self.params["rev/timbre_loss"] = 5.0
 
+        # Other Losses
+        if args.use_z_gt:
+            self.params["z/l1-loss"] = 10.0
+        if args.use_env_loss:
+            self.params["gen/env-loss"] = 10.0
+        if args.use_z_mlp_loss:
+            self.params["pred/z_mlp_loss"] = 10.0
+
+        # Val dataset
         self.val_paired_data = val_paired_data
+
+        # Print params
+        print({k: v for k, v in sorted(self.params.items())})
 
 
     @staticmethod
@@ -118,7 +147,7 @@ class Wrapper:
         acc = correct / total
         return acc
 
-# TODO
+
 @torch.no_grad()
 def save_samples(args, accelerator, tracker_step, wrapper):
     wrapper.generator.eval()
@@ -138,7 +167,6 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
-            onset_flags=batch['onset'],
             orig_adsr_audio=batch['orig_adsr_audio'].audio_data,
             ref_adsr_audio=batch['ref_adsr_audio'].audio_data,
             convert_type=conv_type,
@@ -312,7 +340,6 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
-            onset_flags=batch['onset'],
             orig_adsr_audio=batch['orig_adsr_audio'].audio_data,
             ref_adsr_audio=batch['ref_adsr_audio'].audio_data,
             convert_type=conv_type,
@@ -325,10 +352,17 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
     output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
+    # Envelope Loss
+    if args.use_env_loss:
+        recons_env = log_rms(recons.audio_data, hop=args.hop_length)
+        target_env = log_rms(target_audio.audio_data, hop=args.hop_length)
+        output["gen/env-loss"] = wrapper.env_loss(recons_env, target_env)
+
+
     # Timbre prediction loss and accuracy
     pitch_gt = batch['ref_pitch'] if conv_type == "content" else batch['orig_pitch']
     timbre_gt = batch['ref_timbre'] if conv_type in ["timbre", "both"] else batch['orig_timbre']
-    # adsr_gt = batch['ref_adsr'] if disentanglement == "adsr" else batch['orig_adsr']
+
     output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch_gt)
     output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_gt)
     # output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_gt)
@@ -346,7 +380,7 @@ def train_step(args, accelerator, batch, wrapper, current_iter):
 
 # @timer
 def train_step_paired(args, accelerator, batch, wrapper, current_iter):
-    time.time()
+    train_start_time = time.time()
     wrapper.generator.train()
 
     # Only train discriminator after discriminator_iter_start
@@ -363,10 +397,10 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         content_match_data = batch['content_match']
         timbre_match_data = batch['timbre_match']
         adsr_match_data = batch['adsr_match']
+
         timbre_id = batch['timbre_id']
         adsr_id = batch['adsr_id']
         pitch = batch['pitch']
-        onset_vec = batch['onset']
 
     # DAC Model
     with accelerator.autocast():
@@ -375,7 +409,6 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
             content_match=content_match_data.audio_data,
             timbre_match=timbre_match_data.audio_data,
             adsr_match=adsr_match_data.audio_data,
-            onset_flags=onset_vec,
         )
 
         recons = AudioSignal(out["audio"], args.sample_rate)
@@ -400,6 +433,12 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
         output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
         output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
 
+        # Envelope Loss
+        if args.use_env_loss:
+            recons_env = log_rms(recons.audio_data, hop=args.hop_length)
+            target_env = log_rms(target_audio.audio_data, hop=args.hop_length)
+            output["gen/env-loss"] = wrapper.env_loss(recons_env, target_env)
+
         # Only compute adversarial losses if discriminator is being trained
         if current_iter >= args.discriminator_iter_start:
             output["adv/loss_g"], output["adv/loss_feature"] = wrapper.gan_loss.generator_loss(recons, target_audio)
@@ -408,25 +447,14 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
             output["adv/loss_g"] = torch.tensor(0.0, device=accelerator.device)
             output["adv/loss_feature"] = torch.tensor(0.0, device=accelerator.device)
 
-        output["vq/cont_commitment_loss"] = out["vq/cont_commitment_loss"]
-        output["vq/cont_codebook_loss"] = out["vq/cont_codebook_loss"]
-        # output["vq/adsr_commitment_loss"] = out["vq/adsr_commitment_loss"]
-        # output["vq/adsr_codebook_loss"] = out["vq/adsr_codebook_loss"]
+        output["vq/commitment_loss"] = out["vq/commitment_loss"]
+        output["vq/codebook_loss"] = out["vq/codebook_loss"]
 
         # Added predictor losses
         output["pred/timbre_loss"] = wrapper.timbre_loss(out["pred_timbre_id"], timbre_id)
         output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch)
         output["pred/adsr_loss"] = wrapper.adsr_loss(out["pred_adsr_id"], adsr_id)
 
-        # Added gradient reversal losses
-        # if args.use_gr_content:
-        #     output["rev/content_loss"] = wrapper.rev_content_loss(out["rev_cont_pred"], batch['rev_content_id'])
-
-        if args.use_gr_adsr:
-            output["rev/adsr_loss"] = wrapper.rev_adsr_loss(out["rev_adsr_pred"], batch['rev_adsr_id'])
-
-        if args.use_gr_timbre:
-            output["rev/timbre_loss"] = wrapper.rev_timbre_loss(out["rev_timbre_pred"], batch['rev_timbre_id'])
 
         # Total Loss
         output["loss_gen_all"] = sum([v * output[k] for k, v in wrapper.params.items() if k in output])
@@ -441,10 +469,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
     accelerator.update()
 
     # Logging
-    # output["other/learning_rate"] = wrapper.optimizer_g.param_groups[0]["lr"]
-    # output["other/grad_norm_g"] = grad_norm_g
-    # output["other/grad_norm_d"] = grad_norm_d
-    # output["other/time_per_step"] = time.time() - train_start_time
+    output["time/per_step"] = time.time() - train_start_time
 
     return {k: v for k, v in sorted(output.items())}
 
