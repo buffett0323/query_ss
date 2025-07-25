@@ -298,7 +298,7 @@ class MyDAC(BaseModel, CodecMixin):
         self.encoder_rates = encoder_rates
         self.decoder_dim = decoder_dim
         self.decoder_rates = decoder_rates
-        self.sample_rate = sample_rate
+        self.adsr_enc_dim = adsr_enc_dim
         self.latent_dim = latent_dim
         self.sample_rate = sample_rate
         self.use_gr_content = use_gr_content
@@ -428,7 +428,7 @@ class MyDAC(BaseModel, CodecMixin):
         version = version.lower()
 
         if version == 'v1':
-            self.adsr_encoder = ADSREncoderV1()
+            self.adsr_encoder = ADSREncoderV1(embed_channels=self.adsr_enc_dim)
         elif version == 'v3':
             self.adsr_encoder = ADSREncoderV3(**kwargs)
         elif version == 'v4':

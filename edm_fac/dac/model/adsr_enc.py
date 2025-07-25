@@ -158,6 +158,7 @@ class ADSREncoderV1(nn.Module):
                  lstm_layers: int = 2,
                  lstm_hidden: int = 32):
         super().__init__()
+        print(f"Initializing ADSR encoder V1 with embed_channels={embed_channels}")
         self.hop = hop                        # frame hop in samples
         self.eps = 1.0e-7
 

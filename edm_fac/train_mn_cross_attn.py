@@ -2,6 +2,7 @@ import sys
 import warnings
 import argparse
 import os
+import json
 import time
 import torch
 import logging
@@ -79,18 +80,26 @@ class Wrapper:
 
         # Predictor losses
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
-        self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)  # FocalLoss(gamma=2).to(device) # Multi-label for pitch
         self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        if args.get_midi_only_from_onset:
+            self.content_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(20.0, device=accelerator.device))
+            # self.content_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(20.0)).to(accelerator.device)
+        else:
+            self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device) # FocalLoss(gamma=2).to(device) # Multi-label for pitch
 
         # Gradient reversal losses
-        self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
-        self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
-        self.rev_timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        if args.use_gr_content:
+            self.rev_content_loss = nn.BCEWithLogitsLoss().to(accelerator.device)
+        if args.use_gr_adsr:
+            self.rev_adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
+        if args.use_gr_timbre:
+            self.rev_timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
 
         # Z-loss
         if args.use_z_gt:
             self.z_l1_loss = nn.L1Loss(reduction='mean').to(accelerator.device) # Designed for Tensor
 
+        # Envelope loss
         if args.use_env_loss:
             self.env_loss = nn.L1Loss(reduction='mean').to(accelerator.device) # Designed for Tensor
 
@@ -128,7 +137,7 @@ class Wrapper:
         self.val_paired_data = val_paired_data
 
         # Print params
-        print({k: v for k, v in sorted(self.params.items())})
+        print(json.dumps({k: v for k, v in sorted(self.params.items())}, indent=2))
 
 
     @staticmethod
@@ -227,6 +236,7 @@ def main(args, accelerator):
         perturb_content=args.perturb_content,
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
+        get_midi_only_from_onset=args.get_midi_only_from_onset,
         disentanglement_mode=args.disentanglement,
     )
 
@@ -240,6 +250,7 @@ def main(args, accelerator):
         perturb_content=args.perturb_content,
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
+        get_midi_only_from_onset=args.get_midi_only_from_onset,
         disentanglement_mode=args.disentanglement,
     )
 
@@ -476,7 +487,8 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_mn_cross_attn_add_adsr.yaml")
+    # config = yaml_config_hook("configs/config_mn_cross_attn_content_onset_only.yaml")
+    config = yaml_config_hook("configs/config_mn_cross_attn_enc_v1.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
