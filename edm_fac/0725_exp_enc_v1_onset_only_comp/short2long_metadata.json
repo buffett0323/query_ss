@@ -1,0 +1,10 @@
+{
+    "original_audio_path": "/home/buffett/nas_data/EDM_FAC_NEW_DATA/rendered_mn_t_adsr_c/evaluation/T000_ADSR000_C000.wav",
+    "reference_audio_path": "/home/buffett/nas_data/EDM_FAC_NEW_DATA/rendered_mn_t_adsr_c/evaluation/T010_ADSR001_C028.wav",
+    "ground_truth_audio_path": "/home/buffett/nas_data/EDM_FAC_NEW_DATA/rendered_mn_t_adsr_c/evaluation/T010_ADSR001_C000.wav",
+    "output_dir": "0725_exp_enc_v1_onset_only_comp/",
+    "convert_type": "both",
+    "stft_loss": 10.217272758483887,
+    "mel_loss": 8.844375610351562,
+    "l1_loss": 0.10448817908763885
+}

@@ -515,8 +515,6 @@ class MyDAC(BaseModel, CodecMixin):
         if self.use_FiLM:
             z_mlp = self.adsr_film(adsr_stream, cont_z) # (B, D=256, T)
         else:
-            # z_mlp = cont_z + adsr_stream # (B, D=256, T)
-            # Experiment of Adding ADSR Embedding directly with Cross Attn result
             z_mlp = adsr_z + adsr_stream
 
         # 5.1 MLP: z -> z_mlp
@@ -670,10 +668,7 @@ class MyDAC(BaseModel, CodecMixin):
         if self.use_FiLM:
             z_mlp = self.adsr_film(adsr_stream, cont_z) # (B, D=256, T)
         else:
-            # z_mlp = cont_z + adsr_stream # (B, D=256, T)
-            # TODO: Experiment of Adding ADSR Embedding directly with Cross Attn result
             z_mlp = adsr_z + adsr_stream
-            # z_mlp = adsr_stream
 
         # 5.1 MLP: z -> z_mlp
         # z_mlp = self.adsr_content_mlp(z_mlp)
