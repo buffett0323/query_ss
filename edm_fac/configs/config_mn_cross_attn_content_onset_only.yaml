@@ -1,6 +1,6 @@
-# path: /mnt/gestalt/home/buffett # NTU
-path: /home/buffett/nas_data # Sinica
-postfix: "0725_mn_cross_attn_enc_v1_onset_only"
+path: /mnt/gestalt/home/buffett # NTU
+# path: /home/buffett/nas_data # Sinica
+postfix: "0729_mn_cross_attn_enc_v1_onset_only"
 note: "Content only learn onset and pitch, Cross attention output add ADSR Embedding, No other losses (Original Loss), Change Encoder back to V1" # adding ADSR Embedding (ADSR Encoder V4)"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"] # ["reconstruction"]
 convert_type: ["both", "adsr", "timbre"]
@@ -13,7 +13,7 @@ ckpt_path: ${path}/EDM_FAC_LOG/${postfix}/ckpt
 root_path: ${path}/EDM_FAC_NEW_DATA/rendered_mn_t_adsr_c
 midi_path: ${path}/EDM_FAC_NEW_DATA/midi_files
 
-batch_size: 4 #8
+batch_size: 8
 save_interval: 10000
 sample_freq: 2000
 validate_interval: 2000
@@ -57,7 +57,9 @@ use_FiLM: False #True
 use_z_gt: False #True
 use_env_loss: False #True
 use_z_mlp_loss: False #True
-get_midi_only_from_onset: True #False
+val_load_f0: False #True
+get_midi_only_from_onset: True # True #False
+mask_delay_frames: 3 # 30ms
 adsr_enc_ver: "V1" #"V1", "V3", "V4"
 adsr_enc_dim: 256 # 64
 

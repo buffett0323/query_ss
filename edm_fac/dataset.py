@@ -38,6 +38,7 @@ class EDM_MN_Dataset(Dataset):
         hop_length: int = 512,
         min_note: int = 21,
         max_note: int = 108,
+        mask_delay_frames: int = 3, # About 3 frames
         split: str = "train",
         perturb_content: bool = True,
         perturb_adsr: bool = True,
@@ -52,6 +53,8 @@ class EDM_MN_Dataset(Dataset):
         self.hop_length = hop_length
         self.min_note = min_note
         self.max_note = max_note
+        self.mask_delay_frames = mask_delay_frames
+        self.mask_delay = round(self.mask_delay_frames * hop_length / sample_rate, 4)
         self.n_notes = max_note - min_note + 1
         self.split = split
         self.perturb_content = perturb_content
@@ -60,6 +63,9 @@ class EDM_MN_Dataset(Dataset):
         self.get_midi_only_from_onset = get_midi_only_from_onset
         self.disentanglement_mode = disentanglement_mode
         self.eps = 1e-7
+
+        if self.get_midi_only_from_onset:
+            print(f"Mask onset after: {self.mask_delay} seconds")
 
 
         # Pre-load metadata
@@ -258,6 +264,65 @@ class EDM_MN_Dataset(Dataset):
             print(f"Error processing MIDI file {midi_path}: {e}")
             n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
             return torch.zeros((n_frames, self.n_notes))
+
+
+    def _load_audio_with_note_masking(self, audio_path: Path, midi_path: Path, offset: float = 0.0) -> AudioSignal:
+        """ Load audio and mask it out 30ms after each note starts. """
+        # Load the audio
+        signal, _ = sf.read(
+            audio_path,
+            start=int(offset * self.sample_rate),
+            frames=int(self.duration * self.sample_rate)
+        )
+
+        # Load MIDI file to get note timing information
+        pm = pretty_midi.PrettyMIDI(str(midi_path))
+
+        # Create a mask tensor (1 = keep, 0 = mask out)
+        n_samples = len(signal)
+        mask = np.ones(n_samples, dtype=bool)
+
+        # Process each note in the MIDI file
+        for instrument in pm.instruments:
+            for note in instrument.notes:
+                # Adjust note timing by subtracting offset
+                note_start = note.start - offset
+                note_end = note.end - offset
+
+                # Skip notes that end before our offset window starts
+                if note_end <= 0:
+                    continue
+
+                # Skip notes that start after our duration window ends
+                if note_start >= self.duration:
+                    continue
+
+                # Clamp note timing to our duration window
+                note_start = max(0, note_start)
+                note_end = min(self.duration, note_end)
+
+                # Calculate the masking start time (30ms after note start)
+                mask_start = note_start + self.mask_delay
+
+                # Only apply masking if the mask start is within our duration
+                if mask_start < self.duration:
+                    # Convert time to sample indices
+                    mask_start_sample = int(mask_start * self.sample_rate)
+                    mask_end_sample = int(note_end * self.sample_rate)
+
+                    # Clamp to valid sample range
+                    mask_start_sample = max(0, min(mask_start_sample, n_samples - 1))
+                    mask_end_sample = max(0, min(mask_end_sample, n_samples - 1))
+
+                    # Apply masking (set to 0) for the specified range
+                    if mask_start_sample <= mask_end_sample:
+                        mask[mask_start_sample:mask_end_sample + 1] = False
+
+        # Apply the mask to the audio signal
+        masked_signal = signal * mask
+
+        # Return new AudioSignal with masked audio
+        return AudioSignal(masked_signal, self.sample_rate)
 
 
     def _pad(self, wav: torch.Tensor) -> torch.Tensor:
@@ -400,7 +465,6 @@ class EDM_MN_Dataset(Dataset):
         offset_pick, offset = self._get_onset(idx)
         orig_audio = self._load_audio(wav_path, offset_pick)
 
-
         # 2. Reference for conversion tasks
         if mode == "reconstruction":
             ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = \
@@ -417,7 +481,10 @@ class EDM_MN_Dataset(Dataset):
 
             # Load audio
             timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], 0.0)
-            content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
+            if self.get_midi_only_from_onset:
+                content_match = self._load_audio_with_note_masking(self.paired_data[content_match_idx][3], self.paired_data[content_match_idx][4], offset_pick)
+            else:
+                content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
             adsr_onset_pick, adsr_onset_list = self._get_onset(adsr_match_idx)
             # adsr_onset = self._get_onset_period(adsr_onset_pick, adsr_onset_list)
             adsr_match = self._load_audio(self.paired_data[adsr_match_idx][3], adsr_onset_pick)
@@ -425,8 +492,12 @@ class EDM_MN_Dataset(Dataset):
 
         else:
             timbre_match = orig_audio
-            content_match = orig_audio
             adsr_match = orig_audio
+
+            if self.get_midi_only_from_onset:
+                content_match = self._load_audio_with_note_masking(wav_path, midi_path, offset_pick)
+            else:
+                content_match = orig_audio
 
             ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
 
@@ -464,7 +535,6 @@ class EDM_MN_Dataset(Dataset):
         else:
             target_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
 
-        # adsr_pitch = self._map_midi_adsr_to_pitch(midi_path, target_audio, offset=offset_pick)
 
 
         return {
@@ -539,6 +609,7 @@ class EDM_MN_Val_Dataset(Dataset):
         hop_length: int = 512,
         min_note: int = 21,
         max_note: int = 108,
+        mask_delay_frames: int = 3, # About 3 frames
         split: str = "train",
         perturb_content: bool = True,
         perturb_adsr: bool = True,
@@ -553,6 +624,8 @@ class EDM_MN_Val_Dataset(Dataset):
         self.hop_length = hop_length
         self.min_note = min_note
         self.max_note = max_note
+        self.mask_delay_frames = mask_delay_frames
+        self.mask_delay = round(self.mask_delay_frames * hop_length / sample_rate, 4)
         self.n_notes = max_note - min_note + 1
         self.split = split
         self.perturb_content = perturb_content
@@ -560,6 +633,10 @@ class EDM_MN_Val_Dataset(Dataset):
         self.perturb_timbre = perturb_timbre
         self.get_midi_only_from_onset = get_midi_only_from_onset
         self.disentanglement_mode = disentanglement_mode
+
+        if self.get_midi_only_from_onset:
+            print(f"Mask onset after: {self.mask_delay} seconds")
+
 
 
         # Pre-load metadata
@@ -761,6 +838,65 @@ class EDM_MN_Val_Dataset(Dataset):
             return torch.zeros((n_frames, self.n_notes))
 
 
+    def _load_audio_with_note_masking(self, audio_path: Path, midi_path: Path, offset: float = 0.0) -> AudioSignal:
+        """ Load audio and mask it out 30ms after each note starts. """
+        # Load the audio
+        signal, _ = sf.read(
+            audio_path,
+            start=int(offset * self.sample_rate),
+            frames=int(self.duration * self.sample_rate)
+        )
+
+        # Load MIDI file to get note timing information
+        pm = pretty_midi.PrettyMIDI(str(midi_path))
+
+        # Create a mask tensor (1 = keep, 0 = mask out)
+        n_samples = len(signal)
+        mask = np.ones(n_samples, dtype=bool)
+
+        # Process each note in the MIDI file
+        for instrument in pm.instruments:
+            for note in instrument.notes:
+                # Adjust note timing by subtracting offset
+                note_start = note.start - offset
+                note_end = note.end - offset
+
+                # Skip notes that end before our offset window starts
+                if note_end <= 0:
+                    continue
+
+                # Skip notes that start after our duration window ends
+                if note_start >= self.duration:
+                    continue
+
+                # Clamp note timing to our duration window
+                note_start = max(0, note_start)
+                note_end = min(self.duration, note_end)
+
+                # Calculate the masking start time (30ms after note start)
+                mask_start = note_start + self.mask_delay
+
+                # Only apply masking if the mask start is within our duration
+                if mask_start < self.duration:
+                    # Convert time to sample indices
+                    mask_start_sample = int(mask_start * self.sample_rate)
+                    mask_end_sample = int(note_end * self.sample_rate)
+
+                    # Clamp to valid sample range
+                    mask_start_sample = max(0, min(mask_start_sample, n_samples - 1))
+                    mask_end_sample = max(0, min(mask_end_sample, n_samples - 1))
+
+                    # Apply masking (set to 0) for the specified range
+                    if mask_start_sample <= mask_end_sample:
+                        mask[mask_start_sample:mask_end_sample + 1] = False
+
+        # Apply the mask to the audio signal
+        masked_signal = signal * mask
+
+        # Return new AudioSignal with masked audio
+        return AudioSignal(masked_signal, self.sample_rate)
+
+
     # From validation
     def _get_random_match_total(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
         possible_matches = [
@@ -807,14 +943,14 @@ class EDM_MN_Val_Dataset(Dataset):
         timbre_id, midi_id, adsr_id, wav_path, midi_path = self.paired_data[idx]
         offset_pick, offset_list = self._get_onset(idx)
         orig_audio = self._load_audio(wav_path, offset_pick)
-        orig_onset = self._get_onset_period(offset_pick, offset_list)
+        # orig_onset = self._get_onset_period(offset_pick, offset_list)
 
         # 2. Reference: T3, C7, ADSR8
         ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
         ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path, _ = self.paired_data[ref_idx]
         ref_offset_pick, ref_offset = self._get_onset(ref_idx)
         ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
-        ref_onset = self._get_onset_period(ref_offset_pick, ref_offset)
+        # ref_onset = self._get_onset_period(ref_offset_pick, ref_offset)
 
         # 3. Get target content, timbre, and adsr transfer ground truth
         """
@@ -839,13 +975,19 @@ class EDM_MN_Val_Dataset(Dataset):
             orig_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
         # ref_pitch = self._midi_to_pitch_sequence(ref_midi_path, self.duration, offset=ref_offset_pick)
 
+        # 5. Content match --> Mask out 30ms after each note starts
+        if self.get_midi_only_from_onset:
+            content_match = self._load_audio_with_note_masking(wav_path, midi_path, offset=offset_pick)
+        else:
+            content_match = orig_audio
 
         return {
             'orig_audio': orig_audio,
             'ref_audio': ref_audio,
+            'content_match': content_match,
 
-            'orig_onset': orig_onset,
-            'ref_onset': ref_onset,
+            # 'orig_onset': orig_onset,
+            # 'ref_onset': ref_onset,
 
             'orig_midi': midi_id,
             'ref_midi': ref_midi_id,
@@ -902,12 +1044,13 @@ class EDM_MN_Val_Dataset(Dataset):
         return {
             'orig_audio': AudioSignal.batch([item['orig_audio'] for item in batch]),
             'ref_audio': AudioSignal.batch([item['ref_audio'] for item in batch]),
+            'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
 
             'orig_pitch': torch.stack([item['orig_pitch'] for item in batch]),
             # 'ref_pitch': torch.stack([item['ref_pitch'] for item in batch]),
 
-            'orig_onset': torch.stack([item['orig_onset'] for item in batch]),
-            'ref_onset': torch.stack([item['ref_onset'] for item in batch]),
+            # 'orig_onset': torch.stack([item['orig_onset'] for item in batch]),
+            # 'ref_onset': torch.stack([item['ref_onset'] for item in batch]),
 
             'orig_midi': torch.tensor([item['orig_midi'] for item in batch], dtype=torch.long),
             'ref_midi': torch.tensor([item['ref_midi'] for item in batch], dtype=torch.long),
@@ -3710,7 +3853,7 @@ class EDM_Simple_Dataset(Dataset):
             # 'input': AudioSignal.batch([item['input'] for item in batch]),
             'target': AudioSignal.batch([item['target'] for item in batch]),
             'pitch': torch.stack([item['pitch'] for item in batch]),
-            'timbre_id': torch.tensor([item['timbre_id'] for item in batch]),
+            'timbre_id': torch.tensor([item['timbre_id'] for item in batch], dtype=torch.long),
             'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
             # 'content_pitch': torch.stack([item['content_pitch'] for item in batch]),
             'timbre_converted': AudioSignal.batch([item['timbre_converted'] for item in batch]),
@@ -4174,7 +4317,7 @@ if __name__ == "__main__":
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         get_midi_only_from_onset=args.get_midi_only_from_onset,
-        load_data_as_disentanglement=args.load_data_as_disentanglement,
+        mask_delay_frames=args.mask_delay_frames,
         disentanglement_mode=args.disentanglement,
     )
     # val_paired_data = EDM_MN_Val_Dataset(
@@ -4193,27 +4336,27 @@ if __name__ == "__main__":
     dt0 = train_paired_data[0]
 
 
-    # target = AudioSignal(dt0['target'].audio_data, 44100)
-    # cm = AudioSignal(dt0['content_match'].audio_data, 44100)
-    # tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
-    # am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
-    orig_audio = AudioSignal(dt0['orig_audio'].audio_data, 44100)
-    ref_audio = AudioSignal(dt0['ref_audio'].audio_data, 44100)
-    target_timbre = AudioSignal(dt0['target_timbre'].audio_data, 44100)
-    target_adsr = AudioSignal(dt0['target_adsr'].audio_data, 44100)
-    target_both = AudioSignal(dt0['target_both'].audio_data, 44100)
+    target = AudioSignal(dt0['target'].audio_data, 44100)
+    cm = AudioSignal(dt0['content_match'].audio_data, 44100)
+    tm = AudioSignal(dt0['timbre_match'].audio_data, 44100)
+    am = AudioSignal(dt0['adsr_match'].audio_data, 44100)
+    # orig_audio = AudioSignal(dt0['orig_audio'].audio_data, 44100)
+    # ref_audio = AudioSignal(dt0['ref_audio'].audio_data, 44100)
+    # target_timbre = AudioSignal(dt0['target_timbre'].audio_data, 44100)
+    # target_adsr = AudioSignal(dt0['target_adsr'].audio_data, 44100)
+    # target_both = AudioSignal(dt0['target_both'].audio_data, 44100)
 
 
     os.makedirs("testtest", exist_ok=True)
-    # target.write("testtest/target.wav")
-    # cm.write("testtest/content_match.wav")
-    # tm.write("testtest/timbre_match.wav")
-    # am.write("testtest/adsr_match.wav")
-    orig_audio.write("testtest/orig_audio.wav")
-    ref_audio.write("testtest/ref_audio.wav")
-    target_timbre.write("testtest/target_timbre.wav")
-    target_adsr.write("testtest/target_adsr.wav")
-    target_both.write("testtest/target_both.wav")
+    target.write("testtest/target.wav")
+    cm.write("testtest/content_match.wav")
+    tm.write("testtest/timbre_match.wav")
+    am.write("testtest/adsr_match.wav")
+    # orig_audio.write("testtest/orig_audio.wav")
+    # ref_audio.write("testtest/ref_audio.wav")
+    # target_timbre.write("testtest/target_timbre.wav")
+    # target_adsr.write("testtest/target_adsr.wav")
+    # target_both.write("testtest/target_both.wav")
 
     print(json.dumps(dt0['metadata'], indent=2))
 
@@ -4234,14 +4377,14 @@ if __name__ == "__main__":
     # print(ref_onset)
     # print(json.dumps(dt0['metadata'], indent=2))
 
-    # plt.figure(figsize=(10, 6))
-    # plt.imshow(dt0['orig_pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
-    # plt.colorbar(label='Activation')
-    # plt.title("MIDI Pitch Activations")
-    # plt.xlabel("Frame")
-    # plt.ylabel("MIDI Note")
-    # plt.savefig("testtest/pitch_activations.png")
-    # plt.close()
+    plt.figure(figsize=(10, 6))
+    plt.imshow(dt0['pitch'].transpose(0, 1).cpu().numpy(), aspect='auto', origin='lower')
+    plt.colorbar(label='Activation')
+    plt.title("MIDI Pitch Activations")
+    plt.xlabel("Frame")
+    plt.ylabel("MIDI Note")
+    plt.savefig("testtest/pitch_activations.png")
+    plt.close()
 
 
     # plt.figure(figsize=(10, 6))

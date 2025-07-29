@@ -20,7 +20,10 @@ from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
 from dataset import EDM_MN_Dataset, EDM_MN_Val_Dataset
-from utils import yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint, log_rms
+from utils import (
+    yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint, log_rms,
+    extract_f0_from_audio, calculate_f0_error_rate
+)
 import dac
 
 
@@ -82,7 +85,7 @@ class Wrapper:
         self.timbre_loss = nn.CrossEntropyLoss().to(accelerator.device)
         self.adsr_loss = nn.CrossEntropyLoss().to(accelerator.device)
         if args.get_midi_only_from_onset:
-            self.content_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(20.0, device=accelerator.device))
+            self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device) #(pos_weight=torch.tensor(20.0, device=accelerator.device))
             # self.content_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(20.0)).to(accelerator.device)
         else:
             self.content_loss = nn.BCEWithLogitsLoss().to(accelerator.device) # FocalLoss(gamma=2).to(device) # Multi-label for pitch
@@ -237,6 +240,7 @@ def main(args, accelerator):
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         get_midi_only_from_onset=args.get_midi_only_from_onset,
+        mask_delay_frames=args.mask_delay_frames,
         disentanglement_mode=args.disentanglement,
     )
 
@@ -251,6 +255,7 @@ def main(args, accelerator):
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         get_midi_only_from_onset=args.get_midi_only_from_onset,
+        mask_delay_frames=args.mask_delay_frames,
         disentanglement_mode=args.disentanglement,
     )
 
@@ -372,6 +377,21 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
     output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_gt)
     # output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_gt)
 
+    # F0 Error Rate - only calculate for content conversion where pitch accuracy matters
+    if args.val_load_f0:
+        output["pred/f0_error_rate"] = 0.0
+        output["pred/f0_mean_error"] = 0.0
+
+        for i in range(len(recons.audio_data)):
+            f0_pred = extract_f0_from_audio(recons.audio_data[i], args.sample_rate)
+            f0_target = extract_f0_from_audio(target_audio.audio_data[i], args.sample_rate)
+            f0_error_rate, f0_mean_error = calculate_f0_error_rate(f0_pred, f0_target)
+            output["pred/f0_error_rate"] += f0_error_rate
+            output["pred/f0_mean_error"] += f0_mean_error
+
+        output["pred/f0_error_rate"] /= len(recons.audio_data)
+        output["pred/f0_mean_error"] /= len(recons.audio_data)
+
     return {k: v for k, v in sorted(output.items())}
 
 
@@ -487,8 +507,8 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    # config = yaml_config_hook("configs/config_mn_cross_attn_content_onset_only.yaml")
-    config = yaml_config_hook("configs/config_mn_cross_attn_enc_v1.yaml")
+    config = yaml_config_hook("configs/config_mn_cross_attn_content_onset_only.yaml")
+    # config = yaml_config_hook("configs/config_mn_cross_attn_enc_v1.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()

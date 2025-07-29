@@ -4,11 +4,10 @@ import librosa
 import numpy as np
 import scipy.signal
 import pretty_midi
-import json
 import torch
 import torch.nn.functional as F
+from audiotools import AudioSignal
 
-from multiprocessing import Pool
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
@@ -324,79 +323,6 @@ def print_model_info(wrapper):
     print(f"{'='*50}\n")
 
 
-if __name__ == "__main__":
-    # get_timbre_names("/home/buffett/dataset/EDM_FAC_DATA/train")
-    # get_midi_names("/home/buffett/dataset/EDM_FAC_DATA/train", "train")
-    # get_midi_names("/home/buffett/dataset/EDM_FAC_DATA/evaluation", "evaluation")
-
-
-    # train_path = "/home/buffett/dataset/EDM_FAC_DATA/single_note_midi/train/midi"
-    # eval_path = "/home/buffett/dataset/EDM_FAC_DATA/single_note_midi/evaluation/midi"
-    # train_midis = []
-    # eval_midis = []
-
-    # with open("info/midi_names_mixed_train.txt", "r") as f:
-    #     for line in f:
-    #         train_midis.append(os.path.join(train_path, line.strip() + ".mid"))
-
-    # with open("info/midi_names_mixed_evaluation.txt", "r") as f:
-    #     for line in f:
-    #         eval_midis.append(os.path.join(eval_path, line.strip() + ".mid"))
-
-    # onset_records_train = {}
-    # onset_records_eval = {}
-
-    # for midi_file in tqdm(train_midis):
-    #     m = midi_file.split("/")[-1].split(".mid")[0]
-    #     onset_times = get_onset_from_midi(midi_file)
-    #     onset_records_train[m] = onset_times
-
-    # for midi_file in tqdm(eval_midis):
-    #     m = midi_file.split("/")[-1].split(".mid")[0]
-    #     onset_times = get_onset_from_midi(midi_file)
-    #     onset_records_eval[m] = onset_times
-
-    # with open("/home/buffett/dataset/EDM_FAC_DATA/json/onset_records_mixed_train.json", "w") as f:
-    #     json.dump(onset_records_train, f, indent=4)
-
-    # with open("/home/buffett/dataset/EDM_FAC_DATA/json/onset_records_mixed_evaluation.json", "w") as f:
-    #     json.dump(onset_records_eval, f, indent=4)
-
-    beatport_path = "/home/buffett/dataset/EDM_FAC_DATA/beatport/"
-
-    for split in ["evaluation", "train"]:
-        split_path = os.path.join(beatport_path, split)
-
-        # Prepare list of files to process
-        file_infos = []
-        for file in os.listdir(split_path):
-            if file.endswith(".wav"):
-                file_path = os.path.join(split_path, file)
-                file_infos.append((file_path, file))
-
-        print(f"Processing {len(file_infos)} files for {split} split...")
-
-        # Use multiprocessing to process files in parallel
-        num_processes = min(16, os.cpu_count())  # Use up to 8 processes or CPU count
-        print(f"Using {num_processes} processes")
-
-        with Pool(processes=num_processes) as pool:
-            # Process files with progress bar
-            results = list(tqdm(
-                pool.imap(process_beatport_file, file_infos),
-                total=len(file_infos),
-                desc=f"Processing {split}"
-            ))
-
-        # Convert results to dictionary
-        peak_records = {file_name: peaks for file_name, peaks in results}
-
-        # Save results to JSON
-        with open(f"/home/buffett/dataset/EDM_FAC_DATA/json/beatport_peak_records_{split}.json", "w") as f:
-            json.dump(peak_records, f, indent=4)
-
-        print(f"Saved {len(peak_records)} peak records for {split} split")
-
 
 def log_rms(wav, hop=512, eps=1e-7):
     """Return log-RMS envelope. wav: (B, 1, T_samples)."""
@@ -404,3 +330,86 @@ def log_rms(wav, hop=512, eps=1e-7):
         F.avg_pool1d(wav ** 2, kernel_size=hop, stride=hop) + eps
     )
     return torch.log(rms + eps).squeeze(1)        # (B, T_frames)
+
+
+
+def extract_f0_from_audio(audio_signal, sample_rate=44100, fmin=50, fmax=2000):
+    """
+    Extract F0 from audio signal using librosa.pyin
+
+    Args:
+        audio_signal: AudioSignal object or tensor
+        sample_rate: Sample rate of the audio
+        fmin: Minimum frequency for F0 detection
+        fmax: Maximum frequency for F0 detection
+
+    Returns:
+        f0: F0 values in Hz, with NaN for unvoiced frames
+    """
+    if isinstance(audio_signal, AudioSignal):
+        audio_data = audio_signal.audio_data.squeeze().cpu().numpy()
+    elif isinstance(audio_signal, torch.Tensor):
+        audio_data = audio_signal.squeeze().cpu().numpy()
+    else:
+        audio_data = audio_signal
+
+    # Ensure audio is mono
+    if len(audio_data.shape) > 1:
+        audio_data = np.mean(audio_data, axis=0)
+
+    # Extract F0 using pYIN
+    f0, voiced_flag, voiced_probs = librosa.pyin(
+        audio_data,
+        fmin=fmin,
+        fmax=fmax,
+        sr=sample_rate,
+        hop_length=512  # Use same hop length as the model
+    )
+
+    return f0
+
+def calculate_f0_error_rate(f0_pred, f0_target, threshold=0.5):
+    """
+    Calculate F0 error rate between predicted and target F0
+
+    Args:
+        f0_pred: Predicted F0 values
+        f0_target: Target F0 values
+        threshold: Threshold for considering frames as voiced (in Hz)
+
+    Returns:
+        error_rate: Percentage of frames with F0 error
+        mean_error: Mean absolute F0 error in Hz
+    """
+    # Convert to numpy arrays
+    if isinstance(f0_pred, torch.Tensor):
+        f0_pred = f0_pred.cpu().numpy()
+    if isinstance(f0_target, torch.Tensor):
+        f0_target = f0_target.cpu().numpy()
+
+    # Find voiced frames in both predicted and target
+    voiced_pred = ~np.isnan(f0_pred) & (f0_pred > threshold)
+    voiced_target = ~np.isnan(f0_target) & (f0_target > threshold)
+
+    # Only consider frames that are voiced in both
+    voiced_both = voiced_pred & voiced_target
+
+    if np.sum(voiced_both) == 0:
+        return 0.0, 0.0
+
+    # Calculate F0 error for voiced frames
+    f0_pred_voiced = f0_pred[voiced_both]
+    f0_target_voiced = f0_target[voiced_both]
+
+    # Calculate absolute error
+    abs_error = np.abs(f0_pred_voiced - f0_target_voiced)
+
+    # Calculate error rate (percentage of frames with error > threshold)
+    error_threshold = 50  # Hz
+    error_frames = np.sum(abs_error > error_threshold)
+    error_rate = (error_frames / len(abs_error)) * 100
+
+    # Calculate mean error
+    mean_error = np.mean(abs_error)
+
+    return error_rate, mean_error

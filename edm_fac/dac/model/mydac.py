@@ -611,6 +611,7 @@ class MyDAC(BaseModel, CodecMixin):
         ref_audio: torch.Tensor,
         orig_adsr_audio: torch.Tensor = None,
         ref_adsr_audio: torch.Tensor = None,
+        content_match: torch.Tensor = None,
         # orig_onset: torch.Tensor = None,
         # ref_onset: torch.Tensor = None,
         sample_rate: int = None,
@@ -632,9 +633,15 @@ class MyDAC(BaseModel, CodecMixin):
         ref_audio_z = self.encoder(ref_audio)
 
         # 1. Disentangle Content
-        cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
-            orig_audio_z, n_quantizers
-        )
+        if content_match is not None:
+            content_match_z = self.encoder(content_match)
+            cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
+                content_match_z, n_quantizers
+            )
+        else:
+            cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(
+                orig_audio_z, n_quantizers
+            )
 
 
         # 2. Disentangle ADSR
