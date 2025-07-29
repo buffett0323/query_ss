@@ -58,6 +58,7 @@ class Wrapper:
             use_FiLM=args.use_FiLM,
             rule_based_adsr_folding=args.rule_based_adsr_folding,
             use_z_gt=args.use_z_gt,
+            use_cross_attn=args.use_cross_attn,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
@@ -175,6 +176,7 @@ def save_samples(args, accelerator, tracker_step, wrapper):
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
+            content_match=batch['content_match'].audio_data,
             convert_type=conv_type,
         )
 
@@ -353,6 +355,7 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
         out = wrapper.generator.conversion(
             orig_audio=batch['orig_audio'].audio_data,
             ref_audio=batch['ref_audio'].audio_data,
+            content_match=batch['content_match'].audio_data,
             convert_type=conv_type,
         )
     output = {}

@@ -291,6 +291,7 @@ class MyDAC(BaseModel, CodecMixin):
         rule_based_adsr_folding: bool = False,
         use_z_gt: bool = False, # True
         use_z_mlp_loss: bool = False, # True
+        use_cross_attn: bool = True,
     ):
         super().__init__()
 
@@ -309,6 +310,7 @@ class MyDAC(BaseModel, CodecMixin):
         self.rule_based_adsr_folding = rule_based_adsr_folding
         self.use_z_gt = use_z_gt
         self.use_z_mlp_loss = use_z_mlp_loss
+        self.use_cross_attn = use_cross_attn
 
         self.hop_length = np.prod(encoder_rates)
         self.encoder = Encoder(encoder_dim, encoder_rates, latent_dim, causal=causal, lstm=lstm)
@@ -509,7 +511,10 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 4. Cross-attention: Soft-align adsr by content's query
         # adsr_stream = self.adsr_content_align(cont_z, adsr_z) # repeat_adsr_by_onset(adsr_z, cont_onset)
-        adsr_stream = self.adsr_content_align(cont_z, adsr_z)
+        if self.use_cross_attn:
+            adsr_stream = self.adsr_content_align(cont_z, adsr_z)
+        else:
+            adsr_stream = cont_z
 
         # 5. Fuse content + ADSR using FiLM
         if self.use_FiLM:
@@ -623,10 +628,13 @@ class MyDAC(BaseModel, CodecMixin):
         # 0. Preprocess
         orig_audio = self.preprocess(orig_audio, sample_rate)
         ref_audio = self.preprocess(ref_audio, sample_rate)
+        
         if orig_adsr_audio is not None:
             orig_adsr_audio = self.preprocess(orig_adsr_audio, sample_rate)
         if ref_adsr_audio is not None:
             ref_adsr_audio = self.preprocess(ref_adsr_audio, sample_rate)
+        if content_match is not None:
+            content_match = self.preprocess(content_match, sample_rate)
 
         # Perturbation's encoders
         orig_audio_z = self.encoder(orig_audio)
@@ -669,7 +677,10 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 4. Cross-attention: Soft-align adsr by content's query
         # adsr_stream = self.adsr_content_align(cont_z, adsr_z) # repeat_adsr_by_onset(adsr_z, cont_onset)
-        adsr_stream = self.adsr_content_align(cont_z, adsr_z)
+        if self.use_cross_attn:
+            adsr_stream = self.adsr_content_align(cont_z, adsr_z)
+        else:
+            adsr_stream = cont_z
 
         # 5. Fuse content + ADSR using FiLM
         if self.use_FiLM:

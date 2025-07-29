@@ -4301,7 +4301,7 @@ def build_dataloader(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_mn_cross_attn_content_onset_only.yaml")
+    config = yaml_config_hook("configs/config_mn.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
