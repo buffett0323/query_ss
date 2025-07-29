@@ -628,7 +628,7 @@ class MyDAC(BaseModel, CodecMixin):
         # 0. Preprocess
         orig_audio = self.preprocess(orig_audio, sample_rate)
         ref_audio = self.preprocess(ref_audio, sample_rate)
-        
+
         if orig_adsr_audio is not None:
             orig_adsr_audio = self.preprocess(orig_adsr_audio, sample_rate)
         if ref_adsr_audio is not None:
