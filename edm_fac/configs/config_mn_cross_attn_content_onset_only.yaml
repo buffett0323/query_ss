@@ -1,6 +1,6 @@
-path: /mnt/gestalt/home/buffett # NTU
-# path: /home/buffett/nas_data # Sinica
-postfix: "0729_mn_cross_attn_enc_v1_onset_only"
+# path: /mnt/gestalt/home/buffett # NTU
+path: /home/buffett/nas_data # Sinica
+postfix: "0730_mn_cross_attn_enc_v1_onset_only_mask_p0_5"
 note: "Content only learn onset and pitch, Cross attention output add ADSR Embedding, No other losses (Original Loss), Change Encoder back to V1" # adding ADSR Embedding (ADSR Encoder V4)"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"] # ["reconstruction"]
 convert_type: ["both", "adsr", "timbre"]
@@ -63,6 +63,7 @@ get_midi_only_from_onset: True # True #False
 mask_delay_frames: 3 # 30ms
 adsr_enc_ver: "V1" #"V1", "V3", "V4"
 adsr_enc_dim: 256 # 64
+mask_prob: 0.5 # 0.7
 
 # DAC:
 encoder_dim: 64

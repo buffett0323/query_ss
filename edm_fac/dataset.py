@@ -44,6 +44,7 @@ class EDM_MN_Dataset(Dataset):
         perturb_adsr: bool = True,
         perturb_timbre: bool = True,
         get_midi_only_from_onset: bool = False,
+        mask_prob: float = 0.0,
         disentanglement_mode: List[str] = ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"],
     ):
         self.root_path = Path(os.path.join(root_path, split))
@@ -61,6 +62,7 @@ class EDM_MN_Dataset(Dataset):
         self.perturb_adsr = perturb_adsr
         self.perturb_timbre = perturb_timbre
         self.get_midi_only_from_onset = get_midi_only_from_onset
+        self.mask_prob = mask_prob
         self.disentanglement_mode = disentanglement_mode
         self.eps = 1e-7
 
@@ -482,11 +484,14 @@ class EDM_MN_Dataset(Dataset):
             # Load audio
             timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], 0.0)
             if self.get_midi_only_from_onset:
-                content_match = self._load_audio_with_note_masking(self.paired_data[content_match_idx][3], self.paired_data[content_match_idx][4], offset_pick)
+                if random.random() < self.mask_prob:
+                    content_match = self._load_audio_with_note_masking(self.paired_data[content_match_idx][3], self.paired_data[content_match_idx][4], offset_pick)
+                else:
+                    content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
             else:
                 content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
-            adsr_onset_pick, adsr_onset_list = self._get_onset(adsr_match_idx)
-            # adsr_onset = self._get_onset_period(adsr_onset_pick, adsr_onset_list)
+
+            adsr_onset_pick, _ = self._get_onset(adsr_match_idx)
             adsr_match = self._load_audio(self.paired_data[adsr_match_idx][3], adsr_onset_pick)
 
 
@@ -495,7 +500,10 @@ class EDM_MN_Dataset(Dataset):
             adsr_match = orig_audio
 
             if self.get_midi_only_from_onset:
-                content_match = self._load_audio_with_note_masking(wav_path, midi_path, offset_pick)
+                if random.random() < self.mask_prob:
+                    content_match = self._load_audio_with_note_masking(wav_path, midi_path, offset_pick)
+                else:
+                    content_match = orig_audio
             else:
                 content_match = orig_audio
 
