@@ -61,6 +61,8 @@ class EDMFACInference:
             use_gr_timbre=self.args.use_gr_timbre,
             use_FiLM=self.args.use_FiLM,
             rule_based_adsr_folding=self.args.rule_based_adsr_folding,
+            use_z_gt=self.args.use_z_gt,
+            use_cross_attn=self.args.use_cross_attn,
         ).to(self.device)
 
         # Load checkpoint
@@ -174,8 +176,8 @@ class EDMFACInference:
         ref_audio_cpu = AudioSignal(ref_audio.audio_data.cpu(), self.args.sample_rate)
         gt_audio_cpu = AudioSignal(gt_audio.audio_data.cpu(), self.args.sample_rate)
 
-        orig_audio_cpu.write(os.path.join(output_dir, "orig.wav")) #f"{prefix}orig.wav"))
-        ref_audio_cpu.write(os.path.join(output_dir, "ref.wav")) #f"{prefix}ref_{convert_type}.wav"))
+        orig_audio_cpu.write(os.path.join(output_dir, f"{prefix}orig.wav"))
+        ref_audio_cpu.write(os.path.join(output_dir, f"{prefix}ref.wav"))
         converted_audio.write(os.path.join(output_dir, f"{prefix}conv_{convert_type}.wav"))
         gt_audio_cpu.write(os.path.join(output_dir, f"{prefix}gt.wav"))
 

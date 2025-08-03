@@ -201,7 +201,7 @@ def save_samples(args, accelerator, tracker_step, wrapper):
             single_orig.write(orig_path)
             single_ref.write(ref_path)
 
-    
+
     # With Mask
     for conv_type in wrapper.convert_type:
         os.makedirs(os.path.join(args.save_path, 'sample_audio', f'iter_{tracker_step}', f'mask_conv_{conv_type}'), exist_ok=True)
