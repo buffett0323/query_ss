@@ -289,8 +289,6 @@ class MyDAC(BaseModel, CodecMixin):
         use_FiLM: bool = False,
         adsr_enc_ver: str = "V4",
         rule_based_adsr_folding: bool = False,
-        use_z_gt: bool = False, # True
-        use_z_mlp_loss: bool = False, # True
         use_cross_attn: bool = True,
     ):
         super().__init__()
@@ -308,8 +306,6 @@ class MyDAC(BaseModel, CodecMixin):
         self.use_FiLM = use_FiLM
         self.adsr_enc_ver = adsr_enc_ver
         self.rule_based_adsr_folding = rule_based_adsr_folding
-        self.use_z_gt = use_z_gt
-        self.use_z_mlp_loss = use_z_mlp_loss
         self.use_cross_attn = use_cross_attn
 
         self.hop_length = np.prod(encoder_rates)
@@ -339,13 +335,6 @@ class MyDAC(BaseModel, CodecMixin):
             hidden_dim=256, # 512
             num_heads=4, # 8
         )
-
-        # # MLP between content and adsr
-        # self.adsr_content_mlp = ADSR_Content_MLP(
-        #     dim=latent_dim, # 256
-        #     hidden=256, # 512
-        #     n_layers=8, # 10
-        # )
 
 
         # FiLM between content and adsr
@@ -384,11 +373,6 @@ class MyDAC(BaseModel, CodecMixin):
         self.pitch_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
         self.timbre_predictor = CNNLSTM(latent_dim, timbre_classes, head=1, global_pred=True)
         self.adsr_predictor = CNNLSTM(adsr_enc_dim, adsr_classes, head=1, global_pred=True)
-
-        if self.use_z_mlp_loss:
-            self.z_mlp_predictor = CNNLSTM(latent_dim, pitch_nums, head=1, global_pred=False)
-        else:
-            self.z_mlp_predictor = None
 
 
         # Gradient Reversal
@@ -522,39 +506,14 @@ class MyDAC(BaseModel, CodecMixin):
         else:
             z_mlp = adsr_z + adsr_stream
 
-        # 5.1 MLP: z -> z_mlp
-        # z_mlp = self.adsr_content_mlp(z_mlp)
-
-        # 5.2 Use z_gt for supervising Z-loss
-        if self.use_z_gt:
-            audio_data = self.preprocess(audio_data, sample_rate)
-            target_z = self.encoder(audio_data)
-            # Content
-            target_cont_z, _, _, _, _ = self.quantizer(
-                target_z, n_quantizers
-            )
-            # ADSR
-            target_adsr_z = self.adsr_encoder(audio_data)
-            target_adsr_stream = self.adsr_content_align(target_cont_z, target_adsr_z)
-
-            # Concat
-            z_gt = target_cont_z + target_adsr_stream # (B, D=256, T)
-            z_gt = self.adsr_content_mlp(z_gt).detach() # Ensure no gradients for z_gt
-        else:
-            z_gt = None
-
-        # Predictors
+        # 6-1. Predictors
         # timbre_match_z = F.normalize(timbre_match_z, dim=-1)
         pred_pitch     = self.pitch_predictor(cont_z)[0]
         pred_timbre_id = self.timbre_predictor(timbre_match_z.unsqueeze(-1))[0]
         pred_adsr_id   = self.adsr_predictor(adsr_z)[0]
-        if self.use_z_mlp_loss:
-            pred_z_mlp_pitch = self.z_mlp_predictor(z_mlp)[0]
-        else:
-            pred_z_mlp_pitch = None
 
 
-        # 6. Gradient Reversal
+        # 6-2. Gradient Reversal
         # 1). Gradient Reversal: ADSR --> Content
         if self.use_gr_content and self.rev_content_predictor is not None:
             rev_cont_pred = self.rev_content_predictor(adsr_z)[0]
@@ -590,18 +549,15 @@ class MyDAC(BaseModel, CodecMixin):
         return {
             "audio": x[..., :length],
             "z_mlp": z_mlp,
-            "z_gt": z_gt,
+            # "z_gt": z_gt,
             # "codes": cont_codes,
             # "latents": cont_latents,
             "vq/commitment_loss": cont_commitment_loss,
             "vq/codebook_loss": cont_codebook_loss,
-            # "vq/adsr_commitment_loss": adsr_commitment_loss,
-            # "vq/adsr_codebook_loss": adsr_codebook_loss,
 
             "pred_timbre_id": pred_timbre_id,
             "pred_adsr_id": pred_adsr_id,
             "pred_pitch": pred_pitch,
-            "pred_z_mlp_pitch": pred_z_mlp_pitch,
 
             "rev_cont_pred": rev_cont_pred,
             "rev_adsr_pred": rev_adsr_pred,
@@ -688,8 +644,6 @@ class MyDAC(BaseModel, CodecMixin):
         else:
             z_mlp = adsr_z + adsr_stream
 
-        # 5.1 MLP: z -> z_mlp
-        # z_mlp = self.adsr_content_mlp(z_mlp)
 
         # Predictors
         # timbre_match_z = F.normalize(timbre_match_z, dim=-1)
