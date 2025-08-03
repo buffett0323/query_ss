@@ -81,7 +81,7 @@ class EDM_MN_Dataset(Dataset):
 
 
         # Get envelopes metadata
-        with open(f'info/envelopes_{split}_new.json', 'r') as f:
+        with open(f'info/envelopes_{split}_final.json', 'r') as f:
             envelopes = json.load(f)
 
         self.envelopes = {}
@@ -459,8 +459,15 @@ class EDM_MN_Dataset(Dataset):
         else:
             mode = self.disentanglement_mode[0]
 
-        # # 0.5. Get onset
-        # adsr_onset = None
+        # 0.5. Get onset
+        if self.get_midi_only_from_onset:
+            rand = random.random()
+            if rand < self.mask_prob:
+                load_mask = True
+            else:
+                load_mask = False
+        else:
+            load_mask = False
 
         # 1. Original: T1, C1, A1
         timbre_id, midi_id, adsr_id, wav_path, midi_path = self.paired_data[idx]
@@ -484,7 +491,7 @@ class EDM_MN_Dataset(Dataset):
             # Load audio
             timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], 0.0)
             if self.get_midi_only_from_onset:
-                if random.random() < self.mask_prob:
+                if load_mask:
                     content_match = self._load_audio_with_note_masking(self.paired_data[content_match_idx][3], self.paired_data[content_match_idx][4], offset_pick)
                 else:
                     content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
@@ -500,7 +507,7 @@ class EDM_MN_Dataset(Dataset):
             adsr_match = orig_audio
 
             if self.get_midi_only_from_onset:
-                if random.random() < self.mask_prob:
+                if load_mask:
                     content_match = self._load_audio_with_note_masking(wav_path, midi_path, offset_pick)
                 else:
                     content_match = orig_audio
@@ -563,6 +570,7 @@ class EDM_MN_Dataset(Dataset):
 
             'metadata': {
                 'mode': mode,
+                'load_mask': load_mask,
                 'origin': {
                     'timbre_id': self.paired_data[idx][0],
                     'content_id': self.paired_data[idx][1],
@@ -657,7 +665,7 @@ class EDM_MN_Val_Dataset(Dataset):
             self.midi_metadata = json.load(f)
 
         # Get envelopes metadata
-        with open(f'info/envelopes_{split}_new.json', 'r') as f:
+        with open(f'info/envelopes_{split}_final.json', 'r') as f:
             envelopes = json.load(f)
 
         self.envelopes = {}
@@ -4309,7 +4317,7 @@ def build_dataloader(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_mn.yaml")
+    config = yaml_config_hook("configs/config_proposed.yaml")
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
     args = parser.parse_args()
@@ -4326,6 +4334,7 @@ if __name__ == "__main__":
         perturb_timbre=args.perturb_timbre,
         get_midi_only_from_onset=args.get_midi_only_from_onset,
         mask_delay_frames=args.mask_delay_frames,
+        mask_prob=args.mask_prob,
         disentanglement_mode=args.disentanglement,
     )
     # val_paired_data = EDM_MN_Val_Dataset(
