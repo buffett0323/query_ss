@@ -548,7 +548,7 @@ class MyDAC(BaseModel, CodecMixin):
 
         return {
             "audio": x[..., :length],
-            "z_mlp": z_mlp,
+            # "z_mlp": z_mlp,
             # "z_gt": z_gt,
             # "codes": cont_codes,
             # "latents": cont_latents,

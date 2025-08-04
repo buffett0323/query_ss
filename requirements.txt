@@ -39,3 +39,4 @@ pickle5
 autoflake
 h5py
 pedalboard
+deepspeed
