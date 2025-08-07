@@ -24,7 +24,7 @@ adsr_classes: 120
 n_notes: 88
 min_note: 21
 max_note: 108
-resume: False #True
+resume: True #True
 
 
 num_workers: 8

@@ -481,8 +481,8 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    # config = yaml_config_hook("configs/config_proposed.yaml")
-    config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
+    config = yaml_config_hook("configs/config_proposed.yaml")
+    # config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
 
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
