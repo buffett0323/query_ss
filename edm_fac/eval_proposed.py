@@ -11,9 +11,10 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from audiotools import AudioSignal
 from utils import yaml_config_hook
-from evaluate_metrics import MultiScaleSTFTLoss, LogRMSEnvelopeLoss
+from evaluate_metrics import MultiScaleSTFTLoss, LogRMSEnvelopeLoss, F0Metrics, eval_f0_from_files, eval_f0_batch, aggregate_f0_metrics
 from dataset import EDM_MN_Val_Dataset
 from dac.nn.loss import MelSpectrogramLoss, L1Loss
+from typing import List, Tuple, Dict
 
 # Filter out specific warnings
 warnings.filterwarnings("ignore", message="stft_data changed shape")
@@ -73,10 +74,10 @@ class EDMFACInference:
         # Load losses for evaluation
         # 1) Multi-scale STFT Loss
         self.stft_loss = MultiScaleSTFTLoss().to(self.device)
-        
+
         # 2) Envelope L1 Loss (Log-RMS envelope)
         self.envelope_loss = LogRMSEnvelopeLoss().to(self.device)
-        
+
         # 3) Mel-Spectrogram Loss (match training settings)
         self.mel_loss = MelSpectrogramLoss(
             n_mels=[5, 10, 20, 40, 80, 160, 320],
@@ -86,7 +87,7 @@ class EDMFACInference:
             pow=1.0,
             mag_weight=0.0,
         ).to(self.device)
-        
+
         # 4) L1 waveform loss
         self.l1_eval_loss = L1Loss().to(self.device)
 
@@ -183,7 +184,11 @@ class EDMFACInference:
                 overall["mel"] += float(mel_val.item()) * bs
                 overall["env"] += float(env_val.item()) * bs
                 overall["num"] += bs
-                
+
+                # F0 Metrics
+
+
+
         # Compute means
         per_type = {}
         for ct, met in sums.items():
@@ -216,6 +221,47 @@ class EDMFACInference:
         return results
 
 
+    def evaluate_f0_batch(
+        self,
+        file_pairs: List[Tuple[str, str]],
+        output_dir: str,
+        save_plots: bool = False,
+        **kwargs
+    ) -> Dict:
+        """
+        Evaluate F0 metrics for multiple file pairs in batch.
+
+        Args:
+            file_pairs: List of (pred_path, ref_path) tuples
+            output_dir: Directory to save results
+            save_plots: Whether to save F0 contour plots
+            **kwargs: Additional arguments passed to eval_f0_batch
+
+        Returns:
+            Dictionary containing evaluation results
+        """
+
+        # Create output directory
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Run batch F0 evaluation
+        results = eval_f0_batch(
+            file_pairs=file_pairs,
+            output_dir=output_dir,
+            sr=self.args.sample_rate,
+            fmin=getattr(self.args, 'fmin', 50.0),
+            fmax=getattr(self.args, 'fmax', 2000.0),
+            hop_length=self.args.hop_length,
+            frame_length=self.args.frame_length,
+            cents_threshold=getattr(self.args, 'cents_threshold', 50.0),
+            assume_all_voiced=getattr(self.args, 'assume_all_voiced', True),
+            silence_db=getattr(self.args, 'silence_db', -45),
+            save_plots=save_plots,
+            **kwargs
+        )
+
+        return results
+
 
 def main():
     parser = argparse.ArgumentParser(description="EDM-FAC Evaluation on Validation/Test Loader")
@@ -229,12 +275,12 @@ def main():
 
     # Parse initial arguments to get config path
     initial_args, _ = parser.parse_known_args()
-    
+
     # Load config and add config parameters as arguments
     config = yaml_config_hook(initial_args.config)
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
-    
+
     # Parse all arguments including config parameters
     args = parser.parse_args()
 

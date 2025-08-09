@@ -19,10 +19,9 @@ import torch.nn.functional as F
 
 
 from dataclasses import dataclass, asdict
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 from audiotools import AudioSignal
 from audiotools import STFTParams
-from typing import List
 from torch import nn
 
 
@@ -119,10 +118,10 @@ class MultiScaleSTFTLoss(nn.Module):
 # 2. LogRMS Envelope Loss (L1)
 class LogRMSEnvelopeLoss(nn.Module):
     """Computes the L1 loss between log RMS envelopes of audio signals.
-    
+
     This loss measures the difference between the RMS energy envelopes
     of predicted and target audio signals in the log domain.
-    
+
     Parameters
     ----------
     frame_length : int, optional
@@ -132,7 +131,7 @@ class LogRMSEnvelopeLoss(nn.Module):
     weight : float, optional
         Weight of this loss, by default 1.0
     """
-    
+
     def __init__(
         self,
         frame_length: int = 2048,
@@ -143,17 +142,17 @@ class LogRMSEnvelopeLoss(nn.Module):
         self.frame_length = frame_length
         self.hop_length = hop_length
         self.weight = weight
-        
+
     def forward(self, x: AudioSignal, y: AudioSignal):
         """Computes L1 loss between log RMS envelopes.
-        
+
         Parameters
         ----------
         x : AudioSignal
             Predicted signal
         y : AudioSignal
             Target signal
-            
+
         Returns
         -------
         torch.Tensor
@@ -162,40 +161,40 @@ class LogRMSEnvelopeLoss(nn.Module):
         # Extract audio tensors
         x_audio = x.audio_data.squeeze()  # Remove batch dimension if present
         y_audio = y.audio_data.squeeze()
-        
+
         # Ensure we have 1D tensors
         if x_audio.dim() > 1:
             x_audio = x_audio.mean(dim=0)  # Average across channels if stereo
         if y_audio.dim() > 1:
             y_audio = y_audio.mean(dim=0)
-            
+
         # Pad signals to ensure they have the same length
         max_length = max(x_audio.shape[-1], y_audio.shape[-1])
         x_audio = F.pad(x_audio, (0, max_length - x_audio.shape[-1]))
         y_audio = F.pad(y_audio, (0, max_length - y_audio.shape[-1]))
-        
+
         # Compute RMS envelopes
         x_rms = self._compute_rms_envelope(x_audio)
         y_rms = self._compute_rms_envelope(y_audio)
-        
+
         # Apply log transformation with small epsilon to avoid log(0)
         eps = 1e-8
         x_log_rms = torch.log(x_rms + eps)
         y_log_rms = torch.log(y_rms + eps)
-        
+
         # Compute L1 loss
         loss = F.l1_loss(x_log_rms, y_log_rms)
-        
+
         return self.weight * loss
-    
+
     def _compute_rms_envelope(self, audio: torch.Tensor) -> torch.Tensor:
         """Compute RMS envelope of audio signal using sliding windows.
-        
+
         Parameters
         ----------
         audio : torch.Tensor
             Input audio signal (1D tensor)
-            
+
         Returns
         -------
         torch.Tensor
@@ -203,10 +202,10 @@ class LogRMSEnvelopeLoss(nn.Module):
         """
         # Use unfold to create overlapping frames
         frames = audio.unfold(0, self.frame_length, self.hop_length)
-        
+
         # Compute RMS for each frame
         rms_values = torch.sqrt(torch.mean(frames ** 2, dim=1))
-        
+
         return rms_values
 
 
@@ -421,10 +420,10 @@ def compute_metrics(
 def eval_f0_from_files(
     pred_path: str,
     ref_path: str,
-    sr: int = 24000,
+    sr: int = 44100,
     fmin: float = 50.0,
     fmax: float = 2000.0,
-    hop_length: int = 256,
+    hop_length: int = 512,
     frame_length: int = 2048,
     cents_threshold: float = 50.0,
     plot_path: Optional[str] = None,
@@ -478,6 +477,344 @@ def eval_f0_from_files(
     return result
 
 
+def eval_f0_batch(
+    file_pairs: List[Tuple[str, str]],
+    output_dir: Optional[str] = None,
+    sr: int = 44100,
+    fmin: float = 50.0,
+    fmax: float = 2000.0,
+    hop_length: int = 512,
+    frame_length: int = 2048,
+    cents_threshold: float = 50.0,
+    assume_all_voiced: bool = False,
+    silence_db: Optional[float] = None,
+    save_plots: bool = False,
+    save_individual_results: bool = True,
+    aggregate_results: bool = True,
+    progress_bar: bool = True,
+) -> Dict:
+    """
+    Evaluate F0 metrics for multiple file pairs in batch.
+
+    Args:
+        file_pairs: List of (pred_path, ref_path) tuples
+        output_dir: Directory to save results and plots (optional)
+        sr: Sample rate
+        fmin: Minimum frequency for F0 extraction
+        fmax: Maximum frequency for F0 extraction
+        hop_length: Hop length for F0 extraction
+        frame_length: Frame length for F0 extraction
+        cents_threshold: Threshold for pitch accuracy metrics
+        assume_all_voiced: Whether to assume all frames with finite F0 are voiced
+        silence_db: Silence threshold in dB (optional)
+        save_plots: Whether to save F0 contour plots
+        save_individual_results: Whether to save individual file results
+        aggregate_results: Whether to compute aggregated statistics
+        progress_bar: Whether to show progress bar
+
+    Returns:
+        Dictionary containing individual results and aggregated statistics
+    """
+    import os
+    from tqdm import tqdm
+    import json
+
+    if output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
+        if save_plots:
+            plots_dir = os.path.join(output_dir, "plots")
+            os.makedirs(plots_dir, exist_ok=True)
+
+    results = {
+        "individual_results": [],
+        "aggregated_results": None,
+        "file_pairs": file_pairs,
+        "parameters": {
+            "sr": sr,
+            "fmin": fmin,
+            "fmax": fmax,
+            "hop_length": hop_length,
+            "frame_length": frame_length,
+            "cents_threshold": cents_threshold,
+            "assume_all_voiced": assume_all_voiced,
+            "silence_db": silence_db,
+        }
+    }
+
+    # Process each file pair
+    iterator = tqdm(file_pairs, desc="Evaluating F0") if progress_bar else file_pairs
+
+    for i, (pred_path, ref_path) in enumerate(iterator):
+        try:
+            # Determine plot path if saving plots
+            plot_path = None
+            if save_plots and output_dir is not None:
+                pred_name = os.path.splitext(os.path.basename(pred_path))[0]
+                ref_name = os.path.splitext(os.path.basename(ref_path))[0]
+                plot_path = os.path.join(plots_dir, f"{pred_name}_vs_{ref_name}_f0.png")
+
+            # Evaluate F0 metrics
+            metrics = eval_f0_from_files(
+                pred_path=pred_path,
+                ref_path=ref_path,
+                sr=sr,
+                fmin=fmin,
+                fmax=fmax,
+                hop_length=hop_length,
+                frame_length=frame_length,
+                cents_threshold=cents_threshold,
+                plot_path=plot_path,
+                assume_all_voiced=assume_all_voiced,
+                silence_db=silence_db,
+            )
+
+            # Add file information
+            file_result = {
+                "pred_path": pred_path,
+                "ref_path": ref_path,
+                "metrics": metrics,
+                "success": True,
+                "error": None
+            }
+
+            results["individual_results"].append(file_result)
+
+        except Exception as e:
+            # Handle errors gracefully
+            file_result = {
+                "pred_path": pred_path,
+                "ref_path": ref_path,
+                "metrics": None,
+                "success": False,
+                "error": str(e)
+            }
+            results["individual_results"].append(file_result)
+
+            if progress_bar:
+                print(f"Error processing {pred_path} vs {ref_path}: {e}")
+
+    # Save individual results if requested
+    if save_individual_results and output_dir is not None:
+        individual_results_path = os.path.join(output_dir, "individual_results.json")
+        with open(individual_results_path, "w") as f:
+            json.dump(results["individual_results"], f, indent=2)
+
+    # Compute aggregated statistics if requested
+    if aggregate_results:
+        successful_results = [r for r in results["individual_results"] if r["success"]]
+
+        if successful_results:
+            aggregated = aggregate_f0_metrics(successful_results)
+            results["aggregated_results"] = aggregated
+
+            # Save aggregated results
+            if output_dir is not None:
+                aggregated_path = os.path.join(output_dir, "aggregated_results.json")
+                with open(aggregated_path, "w") as f:
+                    json.dump(aggregated, f, indent=2)
+        else:
+            results["aggregated_results"] = None
+
+    # Save complete results
+    if output_dir is not None:
+        complete_results_path = os.path.join(output_dir, "complete_results.json")
+        with open(complete_results_path, "w") as f:
+            json.dump(results, f, indent=2)
+
+    return results
+
+
+def aggregate_f0_metrics(individual_results: List[Dict]) -> Dict:
+    """
+    Aggregate F0 metrics from individual results.
+
+    Args:
+        individual_results: List of individual result dictionaries
+
+    Returns:
+        Dictionary containing aggregated statistics
+    """
+    if not individual_results:
+        return None
+
+    # Extract all metrics
+    metrics_list = [r["metrics"] for r in individual_results if r["success"]]
+
+    # Initialize aggregators
+    numeric_fields = [
+        "va", "vr", "vfa", "rpa_50c", "rca_50c", "oa_50c", "octave_error_rate",
+        "mae_cents", "rmse_cents", "mean_cents", "median_cents", "std_cents",
+        "median_abs_cents", "mae_hz", "rmse_hz", "pearson_r_logf0",
+        "gpe_50c_rate", "gpe_20pct_rate", "fpe_mean_cents", "fpe_std_cents"
+    ]
+
+    integer_fields = [
+        "total_frames", "ref_voiced_frames", "ref_unvoiced_frames",
+        "pred_voiced_frames", "pred_unvoiced_frames"
+    ]
+
+    aggregated = {
+        "num_files": len(metrics_list),
+        "summary_stats": {},
+        "per_file_results": []
+    }
+
+    # Collect valid values for each metric
+    valid_values = {field: [] for field in numeric_fields}
+
+    for i, metrics in enumerate(metrics_list):
+        file_summary = {"file_index": i}
+
+        # Process numeric fields
+        for field in numeric_fields:
+            value = metrics.get(field)
+            if value is not None and not np.isnan(value):
+                valid_values[field].append(value)
+                file_summary[field] = value
+            else:
+                file_summary[field] = None
+
+        # Process integer fields
+        for field in integer_fields:
+            value = metrics.get(field)
+            if value is not None:
+                file_summary[field] = value
+            else:
+                file_summary[field] = None
+
+        aggregated["per_file_results"].append(file_summary)
+
+    # Compute summary statistics
+    for field, values in valid_values.items():
+        if values:
+            values = np.array(values)
+            aggregated["summary_stats"][field] = {
+                "mean": float(np.mean(values)),
+                "std": float(np.std(values)),
+                "median": float(np.median(values)),
+                "min": float(np.min(values)),
+                "max": float(np.max(values)),
+                "num_valid": len(values),
+                "num_total": len(metrics_list)
+            }
+        else:
+            aggregated["summary_stats"][field] = {
+                "mean": None,
+                "std": None,
+                "median": None,
+                "min": None,
+                "max": None,
+                "num_valid": 0,
+                "num_total": len(metrics_list)
+            }
+
+    return aggregated
+
+
+def find_audio_file_pairs(
+    pred_dir: str,
+    ref_dir: str,
+    pred_suffix: str = "",
+    ref_suffix: str = "",
+    audio_extensions: List[str] = None
+) -> List[Tuple[str, str]]:
+    """
+    Find matching audio file pairs between prediction and reference directories.
+
+    Args:
+        pred_dir: Directory containing prediction files
+        ref_dir: Directory containing reference files
+        pred_suffix: Suffix to add to prediction filenames
+        ref_suffix: Suffix to add to reference filenames
+        audio_extensions: List of audio file extensions to consider
+
+    Returns:
+        List of (pred_path, ref_path) tuples
+    """
+    import os
+    import glob
+
+    if audio_extensions is None:
+        audio_extensions = [".wav", ".mp3", ".flac", ".m4a", ".ogg"]
+
+    # Get all audio files in reference directory
+    ref_files = []
+    for ext in audio_extensions:
+        ref_files.extend(glob.glob(os.path.join(ref_dir, f"*{ext}")))
+        ref_files.extend(glob.glob(os.path.join(ref_dir, f"*{ext.upper()}")))
+
+    file_pairs = []
+
+    for ref_file in ref_files:
+        # Extract base filename
+        ref_basename = os.path.basename(ref_file)
+        ref_name, ref_ext = os.path.splitext(ref_basename)
+
+        # Remove reference suffix if present
+        if ref_suffix and ref_name.endswith(ref_suffix):
+            ref_name = ref_name[:-len(ref_suffix)]
+
+        # Add prediction suffix
+        pred_name = ref_name + pred_suffix
+
+        # Look for corresponding prediction file
+        for ext in audio_extensions:
+            pred_file = os.path.join(pred_dir, f"{pred_name}{ext}")
+            if os.path.exists(pred_file):
+                file_pairs.append((pred_file, ref_file))
+                break
+            pred_file = os.path.join(pred_dir, f"{pred_name}{ext.upper()}")
+            if os.path.exists(pred_file):
+                file_pairs.append((pred_file, ref_file))
+                break
+
+    return file_pairs
+
+
+def eval_f0_from_directory(
+    pred_dir: str,
+    ref_dir: str,
+    output_dir: str,
+    pred_suffix: str = "",
+    ref_suffix: str = "",
+    audio_extensions: List[str] = None,
+    **kwargs
+) -> Dict:
+    """
+    Evaluate F0 metrics for all matching audio files in two directories.
+
+    Args:
+        pred_dir: Directory containing prediction files
+        ref_dir: Directory containing reference files
+        output_dir: Directory to save results
+        pred_suffix: Suffix to add to prediction filenames
+        ref_suffix: Suffix to add to reference filenames
+        audio_extensions: List of audio file extensions to consider
+        **kwargs: Additional arguments passed to eval_f0_batch
+
+    Returns:
+        Dictionary containing evaluation results
+    """
+    # Find matching file pairs
+    file_pairs = find_audio_file_pairs(
+        pred_dir, ref_dir, pred_suffix, ref_suffix, audio_extensions
+    )
+
+    if not file_pairs:
+        raise ValueError(f"No matching audio files found between {pred_dir} and {ref_dir}")
+
+    print(f"Found {len(file_pairs)} matching file pairs")
+
+    # Run batch evaluation
+    results = eval_f0_batch(
+        file_pairs=file_pairs,
+        output_dir=output_dir,
+        **kwargs
+    )
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compute F0 evaluation metrics for monophonic audio (music/synth-friendly).")
     parser.add_argument("--pred", required=True, help="Path to predicted audio (wav)")
@@ -485,7 +822,7 @@ def main():
     parser.add_argument("--sr", type=int, default=24000, help="Target sample rate for loading")
     parser.add_argument("--fmin", type=float, default=50.0, help="Minimum F0 in Hz")
     parser.add_argument("--fmax", type=float, default=2000.0, help="Maximum F0 in Hz")
-    parser.add_argument("--hop_length", type=int, default=256, help="Hop length for analysis")
+    parser.add_argument("--hop_length", type=int, default=512, help="Hop length for analysis")
     parser.add_argument("--frame_length", type=int, default=2048, help="Frame length for analysis")
     parser.add_argument("--cents_threshold", type=float, default=50.0, help="Threshold (in cents) for accuracy metrics")
     parser.add_argument("--out_prefix", default="f0_eval", help="Prefix for output files (JSON/CSV)")
