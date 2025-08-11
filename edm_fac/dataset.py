@@ -1082,6 +1082,97 @@ class EDM_MN_Val_Dataset(Dataset):
 
 
 
+
+
+class EDM_MN_Test_Dataset(Dataset):
+    def __init__(
+        self,
+        root_path: str,
+        duration: float = 1.0,
+        sample_rate: int = 44100,
+        hop_length: int = 512,
+        split: str = "train",
+        recon: bool = False,
+    ):
+        self.root_path = Path(os.path.join(root_path, split))
+        self.duration = duration
+        self.sample_rate = sample_rate
+        self.hop_length = hop_length
+        self.recon = recon
+
+        # Storing names
+        self.paired_data = [] # (Origin Path, Ref Path, Ground Truth Path)
+        self._build_paired_index()
+
+
+
+    def _build_paired_index(self):
+        t_amount, adsr_amount, c_amount = 25, 20, 10
+
+        if self.recon:
+            for c in range(c_amount):
+                for t in range(t_amount):
+                    for a in range(adsr_amount):
+                        orig_path = f"{self.root_path}/T{t:03d}_ADSR{a:03d}_C{c:03d}.wav"
+                        self.paired_data.append((orig_path, orig_path, orig_path))
+
+        else:
+            for c1 in range(c_amount):
+                # for c2 in range(c_amount):
+                for t1 in range(t_amount):
+                    for t2 in range(t_amount):
+                        for a1 in range(adsr_amount):
+                            for a2 in range(adsr_amount):
+
+                                if t1 == t2 or a1 == a2:
+                                    continue
+
+                                c2 = random.randint(0, c_amount-1)
+                                orig_path = f"{self.root_path}/T{t1:03d}_ADSR{a1:03d}_C{c1:03d}.wav"
+                                ref_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c2:03d}.wav"
+                                gt_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c1:03d}.wav"
+                                self.paired_data.append((orig_path, ref_path, gt_path))
+
+        print(f"Total data: {len(self.paired_data)}")
+
+
+    def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
+        signal, _ = sf.read(
+            file_path,
+            start=int(offset*self.sample_rate),
+            frames=int(self.duration*self.sample_rate)
+        )
+        # signal = signal.mean(axis=1, keepdims=False)
+        return AudioSignal(signal, self.sample_rate)
+
+
+    def __len__(self):
+        return len(self.paired_data)
+
+
+    def __getitem__(self, idx):
+        # 1. Original: T5, C6, ADSR5
+        orig_path, ref_path, gt_path = self.paired_data[idx]
+        orig_audio = self._load_audio(orig_path, offset=0.0)
+        ref_audio = self._load_audio(ref_path, offset=0.0)
+        gt_audio = self._load_audio(gt_path, offset=0.0)
+
+        return {
+            'orig_audio': orig_audio,
+            'ref_audio': ref_audio,
+            'gt_audio': gt_audio,
+        }
+
+    @staticmethod
+    def collate(batch: List[Dict]) -> Dict:
+        """Custom collate function for batching"""
+        return {
+            'orig_audio': AudioSignal.batch([item['orig_audio'] for item in batch]),
+            'ref_audio': AudioSignal.batch([item['ref_audio'] for item in batch]),
+            'gt_audio': AudioSignal.batch([item['gt_audio'] for item in batch]),
+        }
+
+
 # Mixed training for one-shot and multi-notes
 class EDM_SS_MN_Dataset(Dataset):
     def __init__(

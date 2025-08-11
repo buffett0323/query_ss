@@ -438,7 +438,7 @@ class ABL_DAC(BaseModel, CodecMixin):
     def conversion(
         self,
         orig_audio: torch.Tensor,
-        ref_audio: torch.Tensor,
+        ref_audio: torch.Tensor = None,
         sample_rate: int = None,
         n_quantizers: int = None,
         convert_type: str = "timbre",
@@ -447,11 +447,13 @@ class ABL_DAC(BaseModel, CodecMixin):
 
         # 0. Preprocess
         orig_audio = self.preprocess(orig_audio, sample_rate)
-        ref_audio = self.preprocess(ref_audio, sample_rate)
+        if ref_audio is not None:
+            ref_audio = self.preprocess(ref_audio, sample_rate)
 
         # Perturbation's encoders
         orig_audio_z = self.encoder(orig_audio)
-        ref_audio_z = self.encoder(ref_audio)
+        if ref_audio is not None:
+            ref_audio_z = self.encoder(ref_audio)
 
         # 1. Disentangle Content
         cont_z, _, _, cont_commitment_loss, cont_codebook_loss = self.quantizer(

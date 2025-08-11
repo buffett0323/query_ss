@@ -569,7 +569,7 @@ class MyDAC(BaseModel, CodecMixin):
     def conversion(
         self,
         orig_audio: torch.Tensor,
-        ref_audio: torch.Tensor,
+        ref_audio: torch.Tensor = None,
         orig_adsr_audio: torch.Tensor = None,
         ref_adsr_audio: torch.Tensor = None,
         content_match: torch.Tensor = None,
@@ -583,7 +583,8 @@ class MyDAC(BaseModel, CodecMixin):
 
         # 0. Preprocess
         orig_audio = self.preprocess(orig_audio, sample_rate)
-        ref_audio = self.preprocess(ref_audio, sample_rate)
+        if ref_audio is not None:
+            ref_audio = self.preprocess(ref_audio, sample_rate)
 
         if orig_adsr_audio is not None:
             orig_adsr_audio = self.preprocess(orig_adsr_audio, sample_rate)
@@ -594,7 +595,9 @@ class MyDAC(BaseModel, CodecMixin):
 
         # Perturbation's encoders
         orig_audio_z = self.encoder(orig_audio)
-        ref_audio_z = self.encoder(ref_audio)
+
+        if ref_audio is not None:
+            ref_audio_z = self.encoder(ref_audio)
 
         # 1. Disentangle Content
         if content_match is not None:

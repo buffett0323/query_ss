@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Loop through checkpoints from 100000 to 320000 in steps of 10000
-for checkpoint in $(seq 100000 10000 320000); do
+# Loop through checkpoints from 100000 to 400000 in steps of 10000
+for checkpoint in $(seq 100000 10000 400000); do
     echo "Evaluating checkpoint: ${checkpoint}"
 
     python eval_proposed.py \
