@@ -9,8 +9,6 @@ import warnings
 import mir_eval
 import numpy as np
 import multiprocessing as mp
-from functools import partial
-import time
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -96,29 +94,29 @@ def compute_mir_melody_scores(
 
 def compute_f0_worker(args_tuple):
     """Worker function for multiprocessing F0 computation.
-    
+
     Args:
         args_tuple: Tuple containing (pred_y, ref_y, sr, hop_length, frame_length, fmin, fmax, cent_tolerance)
-    
+
     Returns:
         Dictionary with F0 metrics
     """
     pred_y, ref_y, sr, hop_length, frame_length, fmin, fmax, cent_tolerance = args_tuple
-    
+
     try:
         # Input validation
         if pred_y is None or ref_y is None:
             raise ValueError("Audio data is None")
-        
+
         if len(pred_y) == 0 or len(ref_y) == 0:
             raise ValueError("Audio data is empty")
-        
+
         # Ensure audio data is 1D
         if pred_y.ndim > 1:
             pred_y = pred_y.squeeze()
         if ref_y.ndim > 1:
             ref_y = ref_y.squeeze()
-        
+
         scores = compute_mir_melody_scores(
             pred_y=pred_y,
             ref_y=ref_y,
@@ -314,7 +312,7 @@ class EDMFACInference:
             # tgt_np = target_audio.audio_data.detach().cpu().numpy()  # (B, 1, T)
 
             # batch_size = recon_np.shape[0]
-            
+
             # # Prepare arguments for multiprocessing
             # f0_args_list = []
             # for i in range(batch_size):
@@ -322,13 +320,13 @@ class EDMFACInference:
             #     ref_y = tgt_np[i].squeeze()
             #     args_tuple = (pred_y, ref_y, self.args.sample_rate, hop_length, frame_length, fmin, fmax, cent_tol)
             #     f0_args_list.append(args_tuple)
-            
+
             # # Use multiprocessing to compute F0 metrics
             # use_multiprocessing = getattr(self.args, 'use_f0_multiprocessing', True)
             # min_batch_for_multiprocessing = getattr(self.args, 'min_batch_for_multiprocessing', 4)  # Only use MP for batches >= 4
-            
+
             # start_time = time.time()
-            
+
             # if use_multiprocessing and batch_size >= min_batch_for_multiprocessing:
             #     num_workers = min(mp.cpu_count(), batch_size, getattr(self.args, 'max_f0_workers', 8))
             #     if num_workers > 1:
@@ -346,11 +344,11 @@ class EDMFACInference:
             # else:
             #     # Sequential processing for small batches or when MP is disabled
             #     f0_scores_list = [compute_f0_worker(args) for args in f0_args_list]
-            
+
             # elapsed_time = time.time() - start_time
             # if batch_size >= min_batch_for_multiprocessing and use_multiprocessing:
             #     print(f"F0 computation completed in {elapsed_time:.2f}s for {batch_size} samples")
-            
+
             # # Aggregate F0 metrics from multiprocessing results
             # for scores in f0_scores_list:
             #     va = float(scores.get("Voicing Recall", 0.0))
@@ -435,7 +433,7 @@ def main():
     parser.add_argument("--checkpoint", type=str, default="/home/buffett/nas_data/EDM_FAC_LOG/0804_proposed/ckpt/checkpoint_latest.pt", help="Path to model checkpoint")
     parser.add_argument("--config", type=str, default="configs/config_proposed.yaml", help="Path to config file")
     parser.add_argument("--output_dir", type=str, default="/home/buffett/nas_data/EDM_FAC_LOG/final_eval/0804_proposed/detail", help="Output directory for results/metadata")
-    
+
     # F0 Multiprocessing options
     parser.add_argument("--use_f0_multiprocessing", action="store_true", default=True, help="Enable multiprocessing for F0 computation")
     parser.add_argument("--max_f0_workers", type=int, default=8, help="Maximum number of F0 computation workers")
@@ -474,7 +472,7 @@ def main():
         pin_memory=True,
         drop_last=False,
     )
-    
+
     test_dataset = EDM_MN_Test_Dataset(
         root_path=args.root_path,
         duration=args.duration,
@@ -501,7 +499,7 @@ def main():
     print(f"Available CPU cores: {mp.cpu_count()}")
 
     # Perform evaluation over loader and save metadata
-    # results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, recon=True)
+    results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, recon=True)
     results = model.evaluate_loader(test_loader, args.output_dir, recon=False)
     print("Evaluation completed!")
 
