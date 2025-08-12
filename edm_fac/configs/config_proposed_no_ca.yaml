@@ -1,5 +1,5 @@
-path: /mnt/gestalt/home/buffett # NTU
-# path: /home/buffett/nas_data # Sinica
+# path: /mnt/gestalt/home/buffett # NTU
+path: /home/buffett/nas_data # Sinica
 postfix: "0804_proposed_no_ca"
 note: "Proposed model: Masked Content P=0.5 for 5 frames, No Cross Attention, Content Add ADSR Embedding"
 disentanglement: ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"] # ["reconstruction"]
