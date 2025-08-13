@@ -8,9 +8,9 @@ Final metrics for evaluating the model.
 
 import typing
 import torch
-import argparse
-import json
 import librosa
+import torchcrepe
+import torchaudio
 
 import numpy as np
 import pandas as pd
@@ -18,11 +18,12 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 
 
-from dataclasses import dataclass, asdict
-from typing import Dict, Optional, Tuple, List
+from typing import List
 from audiotools import AudioSignal
 from audiotools import STFTParams
 from torch import nn
+import multiprocessing as mp
+from typing import List
 
 
 # 1. MSTFT Loss
@@ -209,657 +210,618 @@ class LogRMSEnvelopeLoss(nn.Module):
         return rms_values
 
 
-@dataclass
-class F0Metrics:
-    total_frames: int
-    ref_voiced_frames: int
-    ref_unvoiced_frames: int
-    pred_voiced_frames: int
-    pred_unvoiced_frames: int
+# 3. F0 Evaluation Loss
+class F0EvalLoss(nn.Module):
+    """Computes F0 correlation and RMSE metrics between reference and estimated audio signals.
 
-    va: float
-    vr: float
-    vfa: float
+    This loss measures the pitch accuracy between predicted and target audio signals
+    using the CREPE model for F0 extraction and computes correlation and RMSE metrics.
 
-    rpa_50c: float
-    rca_50c: float
-    oa_50c: float
-    octave_error_rate: float  # RCA-correct but RPA-incorrect (wrong octave) / voiced ref frames
+    Parameters
+    ----------
+    hop_length : int, optional
+        Number of samples between consecutive F0 frames, by default 160
+    fmin : float, optional
+        Minimum frequency for F0 detection, by default 50.0 Hz
+    fmax : float, optional
+        Maximum frequency for F0 detection, by default 1100.0 Hz
+    model_size : str, optional
+        CREPE model size ('tiny' or 'full'), by default 'full'
+    voicing_thresh : float, optional
+        Confidence threshold for voicing detection, by default 0.5
+    weight : float, optional
+        Weight of this loss, by default 1.0
+    """
 
-    mae_cents: Optional[float]
-    rmse_cents: Optional[float]
-    mean_cents: Optional[float]
-    median_cents: Optional[float]
-    std_cents: Optional[float]
-    median_abs_cents: Optional[float]
-    mae_hz: Optional[float]
-    rmse_hz: Optional[float]
-    pearson_r_logf0: Optional[float]
+    def __init__(
+        self,
+        hop_length: int = 512,
+        fmin: float = 50.0,
+        fmax: float = 1100.0,
+        model_size: str = 'full',
+        voicing_thresh: float = 0.5,
+        weight: float = 1.0,
+        device: torch.device = torch.device('cpu'),
+        sr_in: int = 44100,
+        sr_out: int = 16000,
+        resample_to_16k: bool = True,
+    ):
+        super().__init__()
+        self.hop_length = hop_length
+        self.fmin = fmin
+        self.fmax = fmax
+        self.model_size = model_size
+        self.voicing_thresh = voicing_thresh
+        self.weight = weight
+        self.sr_in = sr_in
+        self.sr_out = sr_out
+        self.resampler = torchaudio.transforms.Resample(orig_freq=sr_in, new_freq=sr_out).to(device)
+        self.resample_to_16k = resample_to_16k
 
-    gpe_50c_rate: Optional[float]
-    gpe_20pct_rate: Optional[float]
-    fpe_mean_cents: Optional[float]
-    fpe_std_cents: Optional[float]
+    def _validate_audio_signals(self, x: AudioSignal, y: AudioSignal) -> bool:
+        """Validate audio signals before F0 processing.
 
+        Returns
+        -------
+        bool
+            True if signals are valid for F0 processing
+        """
+        x_audio = x.audio_data.squeeze()
+        y_audio = y.audio_data.squeeze()
 
-def hz_to_cents(hz: np.ndarray) -> np.ndarray:
-    hz = np.asarray(hz, dtype=float)
-    cents = np.full_like(hz, np.nan, dtype=float)
-    valid = hz > 0
-    cents[valid] = 1200.0 * np.log2(hz[valid])
-    return cents
+        # Check if signals are too short
+        min_length = self.hop_length * 4  # Need at least 4 frames
+        if x_audio.shape[-1] < min_length or y_audio.shape[-1] < min_length:
+            return False
 
+        # Check if signals are too quiet (likely silence)
+        x_rms = torch.sqrt(torch.mean(x_audio ** 2))
+        y_rms = torch.sqrt(torch.mean(y_audio ** 2))
 
-def cents_diff(pred_hz: np.ndarray, ref_hz: np.ndarray) -> np.ndarray:
-    return hz_to_cents(pred_hz) - hz_to_cents(ref_hz)
+        if x_rms < 1e-6 or y_rms < 1e-6:
+            return False
 
+        return True
 
-def cents_mod_interval(diff_cents: np.ndarray, period: float = 1200.0) -> np.ndarray:
-    x = (diff_cents + period / 2.0) % period - period / 2.0
-    return np.abs(x)
+    def forward(self, x: AudioSignal, y: AudioSignal):
+        """Computes F0 correlation and RMSE between predicted and target signals.
 
+        Parameters
+        ----------
+        x : AudioSignal
+            Predicted signal
+        y : AudioSignal
+            Target signal
 
-def extract_f0(
-    y: np.ndarray,
-    sr: int,
-    fmin: float,
-    fmax: float,
-    frame_length: int,
-    hop_length: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-    try:
-        f0, voiced_flag, _ = librosa.pyin(
-            y,
-            fmin=fmin,
-            fmax=fmax,
-            sr=sr,
-            frame_length=frame_length,
-            hop_length=hop_length,
-            center=True,
+        Returns
+        -------
+        torch.Tensor
+            F0 evaluation loss (negative correlation + RMSE penalty)
+        """
+        # Validate audio signals first
+        if not self._validate_audio_signals(x, y):
+            # Return high penalty for invalid signals
+            device = x.audio_data.device
+            return torch.tensor(1.0, device=device, requires_grad=True)
+
+        # Extract audio tensors and ensure they're on the same device
+        device = x.audio_data.device
+        x_audio = x.audio_data.squeeze()  # Remove batch dimension if present
+        y_audio = y.audio_data.squeeze()
+
+        # Ensure we have 1D tensors
+        if x_audio.dim() > 1:
+            x_audio = x_audio.mean(dim=0)  # Average across channels if stereo
+        if y_audio.dim() > 1:
+            y_audio = y_audio.mean(dim=0)
+
+        # Pad signals to ensure they have the same length
+        max_length = max(x_audio.shape[-1], y_audio.shape[-1])
+        x_audio = F.pad(x_audio, (0, max_length - x_audio.shape[-1]))
+        y_audio = F.pad(y_audio, (0, max_length - y_audio.shape[-1]))
+
+        # Add batch dimension for processing
+        x_batch = x_audio.unsqueeze(0)  # (1, T)
+        y_batch = y_audio.unsqueeze(0)  # (1, T)
+
+        # Compute F0 metrics
+        per_sample, summary = self._compute_f0_metrics(x_batch, y_batch, device)
+
+        # Extract metrics for loss computation
+        f0_corr = summary["F0CORR_mean"]
+        f0_rmse = summary["F0RMSE_cents_mean"]
+
+        # Convert to tensors and handle NaN values
+        if np.isnan(f0_corr) or np.isnan(f0_rmse):
+            # Return zero loss if metrics are invalid
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        # Convert to tensors
+        f0_corr_tensor = torch.tensor(f0_corr, device=device, dtype=torch.float32)
+        f0_rmse_tensor = torch.tensor(f0_rmse, device=device, dtype=torch.float32)
+
+        # Compute loss: negative correlation (higher correlation = lower loss) + RMSE penalty
+        # Normalize RMSE to reasonable range (typical RMSE is 0-100 cents)
+        normalized_rmse = f0_rmse_tensor / 100.0
+
+        # Loss = -correlation + RMSE penalty
+        # Higher correlation reduces loss, higher RMSE increases loss
+        loss = -f0_corr_tensor + normalized_rmse
+
+        return self.weight * loss
+
+    @torch.no_grad()
+    def _compute_f0_metrics(
+        self,
+        ref_wavs: torch.Tensor,
+        est_wavs: torch.Tensor,
+        device: torch.device,
+    ):
+        """Compute F0 correlation and RMSE metrics efficiently."""
+        assert ref_wavs.shape == est_wavs.shape, "ref/est shape must match (B,T)"
+        B, T = ref_wavs.shape
+
+        # Combine both ref and est into single batch for single CREPE processing
+        combined_wavs = torch.cat([ref_wavs, est_wavs], dim=0)  # (2B, T)
+
+        # Process combined batch in one pass - much more efficient
+        f0_combined = self._extract_f0_batch(
+            combined_wavs,
+            device=device,
         )
-        return np.asarray(f0), np.asarray(voiced_flag, dtype=bool)
-    except Exception:
-        # Fallback: YIN + simple RMS thresholding for voicing
-        f0 = librosa.yin(
-            y,
-            fmin=fmin,
-            fmax=fmax,
-            sr=sr,
-            frame_length=frame_length,
-            hop_length=hop_length,
-            center=True,
-        )
-        rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length, center=True).squeeze()
-        thr = np.percentile(rms, 10.0)
-        voiced_flag = rms > thr
-        f0 = np.asarray(f0, dtype=float)
-        f0[~voiced_flag] = np.nan
-        return f0, voiced_flag
 
+        # Split results back to ref and est
+        f0_ref = f0_combined[:B]
+        f0_est = f0_combined[B:]
 
-def align_lengths(a: np.ndarray, b: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    n = min(len(a), len(b))
-    return a[:n], b[:n]
+        # Calculate metrics efficiently
+        per_sample = []
+        corr_vals, rmse_vals = [], []
 
+        for i in range(B):
+            # Length alignment to shortest
+            L = min(len(f0_ref[i]), len(f0_est[i]))
+            r, e = f0corr_rmse_from_hz(f0_ref[i][:L], f0_est[i][:L])
+            per_sample.append({"idx": i, "F0CORR": r, "F0RMSE_cents": e})
+            if not (np.isnan(r) or np.isnan(e)):
+                corr_vals.append(r)
+                rmse_vals.append(e)
 
-def apply_silence_mask(y: np.ndarray, sr: int, hop_length: int, frame_length: int, silence_db: Optional[float]) -> np.ndarray:
-    if silence_db is None:
-        return None
-    rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length, center=True).squeeze()
-    # Convert to dBFS-like scale relative to max RMS
-    eps = 1e-12
-    rms_db = 20.0 * np.log10(np.maximum(rms, eps) / (np.max(rms) + eps))
-    return rms_db < silence_db  # True where silence (mark unvoiced)
-
-
-def compute_metrics(
-    ref_f0: np.ndarray,
-    ref_voiced: np.ndarray,
-    pred_f0: np.ndarray,
-    pred_voiced: np.ndarray,
-    cents_threshold: float = 50.0,
-) -> F0Metrics:
-    ref_f0, pred_f0 = align_lengths(ref_f0, pred_f0)
-    ref_voiced, pred_voiced = align_lengths(ref_voiced.astype(bool), pred_voiced.astype(bool))
-
-    N = len(ref_f0)
-    voiced_ref = ref_voiced
-    unvoiced_ref = ~ref_voiced
-    voiced_pred = pred_voiced
-    unvoiced_pred = ~pred_voiced
-
-    va = np.mean(ref_voiced == pred_voiced) if N > 0 else np.nan
-    vr = np.sum(voiced_ref & voiced_pred) / max(1, np.sum(voiced_ref))
-    vfa = np.sum(unvoiced_ref & voiced_pred) / max(1, np.sum(unvoiced_ref))
-
-    both_voiced = voiced_ref & voiced_pred
-    idx_both = np.where(both_voiced)[0]
-    mae_cents = rmse_cents = mean_cents = median_cents = std_cents = median_abs_cents = mae_hz = rmse_hz = pearson_r = np.nan
-    gpe_50c_rate = gpe_20pct_rate = fpe_mean_cents = fpe_std_cents = np.nan
-
-    if idx_both.size > 0:
-        diff_c = cents_diff(pred_f0[idx_both], ref_f0[idx_both])
-        abs_diff_c = np.abs(diff_c)
-        mae_cents = float(np.mean(abs_diff_c))
-        rmse_cents = float(np.sqrt(np.mean(diff_c ** 2)))
-        mean_cents = float(np.mean(diff_c))
-        median_cents = float(np.median(diff_c))
-        std_cents = float(np.std(diff_c))
-        median_abs_cents = float(np.median(abs_diff_c))
-
-        diff_hz = pred_f0[idx_both] - ref_f0[idx_both]
-        mae_hz = float(np.mean(np.abs(diff_hz)))
-        rmse_hz = float(np.sqrt(np.mean(diff_hz ** 2)))
-
-        log_ref = np.log(ref_f0[idx_both])
-        log_pred = np.log(pred_f0[idx_both])
-        if np.std(log_ref) > 0 and np.std(log_pred) > 0:
-            pearson_r = float(np.corrcoef(log_ref, log_pred)[0, 1])
+        # Handle case where no valid metrics were computed
+        if not corr_vals:
+            # Provide fallback values instead of NaN
+            summary = {
+                "F0CORR_mean": 0.0,  # No correlation = 0
+                "F0RMSE_cents_mean": 100.0,  # High RMSE as penalty
+                "hop_ms": 1000 * self.hop_length / self.sr_out
+            }
         else:
-            pearson_r = np.nan
+            summary = {
+                "F0CORR_mean": float(np.mean(corr_vals)),
+                "F0RMSE_cents_mean": float(np.mean(rmse_vals)),
+                "hop_ms": 1000 * self.hop_length / self.sr_out
+            }
+        return per_sample, summary
 
-        gpe_50c_rate = float(np.mean(abs_diff_c > cents_threshold))
-        rel_err = np.abs((pred_f0[idx_both] - ref_f0[idx_both]) / ref_f0[idx_both])
-        gpe_20pct_rate = float(np.mean(rel_err > 0.2))
+    @torch.no_grad()
+    def _extract_f0_batch(
+        self,
+        wav_batch: torch.Tensor,
+        device: torch.device,
+    ):
+        """Extract F0 values from audio batch using CREPE."""
+        B, T = wav_batch.shape
+        wav_batch = wav_batch.to(device)
+        if self.resample_to_16k:
+            audio = self.resampler(wav_batch)
+        else:
+            audio = wav_batch
+        audio = audio.unsqueeze(1)
 
-        mask_fine = abs_diff_c <= cents_threshold
-        if np.any(mask_fine):
-            fpe_mean_cents = float(np.mean(diff_c[mask_fine]))
-            fpe_std_cents = float(np.std(diff_c[mask_fine]))
+        # Process all samples in batch for better GPU utilization
+        f0_list = []
 
-    denom_voiced = max(1, np.sum(voiced_ref))
-    denom_all = max(1, N)
+        for i in range(B):
+            # Check audio quality before processing
+            audio_i = audio[i]
+            audio_rms = torch.sqrt(torch.mean(audio_i ** 2))
 
-    cents_all = np.full(N, np.nan, dtype=float)
-    cents_all[both_voiced] = cents_diff(pred_f0[both_voiced], ref_f0[both_voiced])
+            # Skip F0 extraction if audio is too quiet (likely silence)
+            if audio_rms < 1e-6:
+                # Return all NaN for silent audio
+                print("silent")
+                n_frames = (T + self.hop_length - 1) // self.hop_length
+                f0_np = np.full(n_frames, np.nan, dtype=float)
+                f0_list.append(f0_np)
+                continue
 
-    correct_rpa = (both_voiced) & (np.abs(cents_all) <= cents_threshold)
-    rpa_50c = float(np.sum(correct_rpa) / denom_voiced)
-
-    cents_mod = cents_mod_interval(cents_all, period=1200.0)
-    correct_rca = (both_voiced) & (cents_mod <= cents_threshold)
-    rca_50c = float(np.sum(correct_rca) / denom_voiced)
-
-    # Octave error: right chroma but wrong absolute octave
-    octave_err = correct_rca & (~correct_rpa)
-    octave_error_rate = float(np.sum(octave_err) / denom_voiced)
-
-    correct_unvoiced = unvoiced_ref & unvoiced_pred
-    correct_voiced_pitch = correct_rpa
-    oa_50c = float((np.sum(correct_unvoiced) + np.sum(correct_voiced_pitch)) / denom_all)
-
-    return F0Metrics(
-        total_frames=N,
-        ref_voiced_frames=int(np.sum(voiced_ref)),
-        ref_unvoiced_frames=int(np.sum(unvoiced_ref)),
-        pred_voiced_frames=int(np.sum(voiced_pred)),
-        pred_unvoiced_frames=int(np.sum(unvoiced_pred)),
-        va=float(va),
-        vr=float(vr),
-        vfa=float(vfa),
-        rpa_50c=rpa_50c,
-        rca_50c=rca_50c,
-        oa_50c=oa_50c,
-        octave_error_rate=octave_error_rate,
-        mae_cents=None if np.isnan(mae_cents) else float(mae_cents),
-        rmse_cents=None if np.isnan(rmse_cents) else float(rmse_cents),
-        mean_cents=None if np.isnan(mean_cents) else float(mean_cents),
-        median_cents=None if np.isnan(median_cents) else float(median_cents),
-        std_cents=None if np.isnan(std_cents) else float(std_cents),
-        median_abs_cents=None if np.isnan(median_abs_cents) else float(median_abs_cents),
-        mae_hz=None if np.isnan(mae_hz) else float(mae_hz),
-        rmse_hz=None if np.isnan(rmse_hz) else float(rmse_hz),
-        pearson_r_logf0=None if np.isnan(pearson_r) else float(pearson_r),
-        gpe_50c_rate=None if np.isnan(gpe_50c_rate) else float(gpe_50c_rate),
-        gpe_20pct_rate=None if np.isnan(gpe_20pct_rate) else float(gpe_20pct_rate),
-        fpe_mean_cents=None if np.isnan(fpe_mean_cents) else float(fpe_mean_cents),
-        fpe_std_cents=None if np.isnan(fpe_std_cents) else float(fpe_std_cents),
-    )
-
-
-def eval_f0_from_files(
-    pred_path: str,
-    ref_path: str,
-    sr: int = 44100,
-    fmin: float = 50.0,
-    fmax: float = 2000.0,
-    hop_length: int = 512,
-    frame_length: int = 2048,
-    cents_threshold: float = 50.0,
-    plot_path: Optional[str] = None,
-    assume_all_voiced: bool = False,
-    silence_db: Optional[float] = None,
-) -> Dict:
-    ref_y, _ = librosa.load(ref_path, sr=sr, mono=True)
-    pred_y, _ = librosa.load(pred_path, sr=sr, mono=True)
-
-    ref_f0, ref_voiced = extract_f0(ref_y, sr, fmin, fmax, frame_length, hop_length)
-    pred_f0, pred_voiced = extract_f0(pred_y, sr, fmin, fmax, frame_length, hop_length)
-
-    # Optional: treat finite-F0 frames as voiced (synths are often fully voiced)
-    if assume_all_voiced:
-        ref_voiced = np.isfinite(ref_f0)
-        pred_voiced = np.isfinite(pred_f0)
-
-    # Optional: override with silence gating (dB relative to max RMS)
-    if silence_db is not None:
-        ref_sil = apply_silence_mask(ref_y, sr, hop_length, frame_length, silence_db)
-        pred_sil = apply_silence_mask(pred_y, sr, hop_length, frame_length, silence_db)
-        if ref_sil is not None:
-            # align lengths with f0
-            n = min(len(ref_sil), len(ref_f0))
-            ref_sil = ref_sil[:n]
-            ref_f0 = ref_f0[:n]
-            ref_voiced = ref_voiced[:n] & (~ref_sil)
-        if pred_sil is not None:
-            n = min(len(pred_sil), len(pred_f0))
-            pred_sil = pred_sil[:n]
-            pred_f0 = pred_f0[:n]
-            pred_voiced = pred_voiced[:n] & (~pred_sil)
-
-    metrics = compute_metrics(ref_f0, ref_voiced, pred_f0, pred_voiced, cents_threshold=cents_threshold)
-    result = asdict(metrics)
-
-    if plot_path is not None:
-        n = min(len(ref_f0), len(pred_f0))
-        t = librosa.frames_to_time(np.arange(n), sr=sr, hop_length=hop_length)
-        plt.figure()
-        plt.plot(t, ref_f0[:n], label="Ref F0 (Hz)")
-        plt.plot(t, pred_f0[:n], label="Pred F0 (Hz)")
-        plt.xlabel("Time (s)")
-        plt.ylabel("Frequency (Hz)")
-        plt.legend()
-        plt.title("F0 contours")
-        plt.tight_layout()
-        plt.savefig(plot_path, dpi=150)
-        plt.close()
-
-    return result
-
-
-def eval_f0_batch(
-    file_pairs: List[Tuple[str, str]],
-    output_dir: Optional[str] = None,
-    sr: int = 44100,
-    fmin: float = 50.0,
-    fmax: float = 2000.0,
-    hop_length: int = 512,
-    frame_length: int = 2048,
-    cents_threshold: float = 50.0,
-    assume_all_voiced: bool = False,
-    silence_db: Optional[float] = None,
-    save_plots: bool = False,
-    save_individual_results: bool = True,
-    aggregate_results: bool = True,
-    progress_bar: bool = True,
-) -> Dict:
-    """
-    Evaluate F0 metrics for multiple file pairs in batch.
-
-    Args:
-        file_pairs: List of (pred_path, ref_path) tuples
-        output_dir: Directory to save results and plots (optional)
-        sr: Sample rate
-        fmin: Minimum frequency for F0 extraction
-        fmax: Maximum frequency for F0 extraction
-        hop_length: Hop length for F0 extraction
-        frame_length: Frame length for F0 extraction
-        cents_threshold: Threshold for pitch accuracy metrics
-        assume_all_voiced: Whether to assume all frames with finite F0 are voiced
-        silence_db: Silence threshold in dB (optional)
-        save_plots: Whether to save F0 contour plots
-        save_individual_results: Whether to save individual file results
-        aggregate_results: Whether to compute aggregated statistics
-        progress_bar: Whether to show progress bar
-
-    Returns:
-        Dictionary containing individual results and aggregated statistics
-    """
-    import os
-    from tqdm import tqdm
-    import json
-
-    if output_dir is not None:
-        os.makedirs(output_dir, exist_ok=True)
-        if save_plots:
-            plots_dir = os.path.join(output_dir, "plots")
-            os.makedirs(plots_dir, exist_ok=True)
-
-    results = {
-        "individual_results": [],
-        "aggregated_results": None,
-        "file_pairs": file_pairs,
-        "parameters": {
-            "sr": sr,
-            "fmin": fmin,
-            "fmax": fmax,
-            "hop_length": hop_length,
-            "frame_length": frame_length,
-            "cents_threshold": cents_threshold,
-            "assume_all_voiced": assume_all_voiced,
-            "silence_db": silence_db,
-        }
-    }
-
-    # Process each file pair
-    iterator = tqdm(file_pairs, desc="Evaluating F0") if progress_bar else file_pairs
-
-    for i, (pred_path, ref_path) in enumerate(iterator):
-        try:
-            # Determine plot path if saving plots
-            plot_path = None
-            if save_plots and output_dir is not None:
-                pred_name = os.path.splitext(os.path.basename(pred_path))[0]
-                ref_name = os.path.splitext(os.path.basename(ref_path))[0]
-                plot_path = os.path.join(plots_dir, f"{pred_name}_vs_{ref_name}_f0.png")
-
-            # Evaluate F0 metrics
-            metrics = eval_f0_from_files(
-                pred_path=pred_path,
-                ref_path=ref_path,
-                sr=sr,
-                fmin=fmin,
-                fmax=fmax,
-                hop_length=hop_length,
-                frame_length=frame_length,
-                cents_threshold=cents_threshold,
-                plot_path=plot_path,
-                assume_all_voiced=assume_all_voiced,
-                silence_db=silence_db,
+            # predict returns (b, n_frames)
+            f0, pd = torchcrepe.predict(
+                audio_i,
+                sample_rate=self.sr_out,
+                hop_length=self.hop_length,
+                fmin=self.fmin,
+                fmax=self.fmax,
+                model=self.model_size,
+                batch_size=None,
+                device=device,
+                pad=True,
+                return_periodicity=True
             )
 
-            # Add file information
-            file_result = {
-                "pred_path": pred_path,
-                "ref_path": ref_path,
-                "metrics": metrics,
-                "success": True,
-                "error": None
+            # Apply voicing mask more carefully
+            # Only mask frames with very low confidence to avoid excessive NaN values
+            if self.voicing_thresh > 0.0:
+                mask = (pd < self.voicing_thresh)
+                f0 = f0.masked_fill(mask, float('nan'))
+
+            # Convert to numpy immediately to free GPU memory
+            f0_np = f0.detach().cpu().float().numpy()
+            f0_list.append(f0_np)
+
+        return f0_list
+
+    def get_metrics(self, x: AudioSignal, y: AudioSignal):
+        """Get detailed F0 metrics without computing loss.
+
+        Returns
+        -------
+        dict
+            Dictionary containing F0 correlation, RMSE, and other metrics
+        """
+        # Validate audio signals first
+        if not self._validate_audio_signals(x, y):
+            # Return fallback metrics for invalid signals
+            return {
+                "per_sample": [{"idx": 0, "F0CORR": 0.0, "F0RMSE_cents": 100.0}],
+                "summary": {
+                    "F0CORR_mean": 0.0,
+                    "F0RMSE_cents_mean": 100.0,
+                    "hop_ms": 1000 * self.hop_length / self.sr_out
+                },
+                "f0_corr": 0.0,
+                "f0_rmse": 100.0,
+                "hop_ms": 1000 * self.hop_length / self.sr_out
             }
 
-            results["individual_results"].append(file_result)
+        device = x.audio_data.device
+        x_audio = x.audio_data.squeeze()
+        y_audio = y.audio_data.squeeze()
+
+        # Ensure we have 1D tensors
+        if x_audio.dim() > 1:
+            x_audio = x_audio.mean(dim=0)
+        if y_audio.dim() > 1:
+            y_audio = y_audio.mean(dim=0)
+
+        # Pad signals to ensure they have the same length
+        max_length = max(x_audio.shape[-1], y_audio.shape[-1])
+        x_audio = F.pad(x_audio, (0, max_length - x_audio.shape[-1]))
+        y_audio = F.pad(y_audio, (0, max_length - y_audio.shape[-1]))
+
+        # Add batch dimension for processing
+        x_batch = x_audio.unsqueeze(0)
+        y_batch = y_audio.unsqueeze(0)
+
+        # Compute metrics
+        per_sample, summary = self._compute_f0_metrics(x_batch, y_batch, device)
+
+        return {
+            "per_sample": per_sample,
+            "summary": summary,
+            "f0_corr": summary["F0CORR_mean"],
+            "f0_rmse": summary["F0RMSE_cents_mean"],
+            "hop_ms": summary["hop_ms"]
+        }
+
+
+# ---------- F0 評估器類別 ----------
+
+def _f0_evaluation_worker(args_tuple):
+    """Worker function for multiprocessing F0 evaluation.
+
+    Args:
+        args_tuple: Tuple containing (ref_audio, est_audio, evaluator_params, use_dtw, idx)
+
+    Returns:
+        tuple: (idx, correlation, rmse_cents)
+    """
+    ref_audio, est_audio, evaluator_params, use_dtw, idx = args_tuple
+
+    # Create evaluator instance in worker process
+    evaluator = F0Evaluator(**evaluator_params)
+
+    # Evaluate single pair
+    corr, rmse = evaluator.evaluate_single(ref_audio, est_audio, use_dtw=use_dtw)
+
+    return idx, corr, rmse
+
+class F0Evaluator:
+    """F0 (fundamental frequency) evaluation class for AudioSignal objects"""
+
+    def __init__(
+        self,
+        ref_hz=440.0,
+        fmin=50,
+        fmax=1100,
+        frame_length=2048,
+        hop_length=512,
+    ):
+        """
+        Initialize F0Evaluator
+
+        Args:
+            ref_hz (float): Reference frequency in Hz for cents calculation
+            fmin (float): Minimum frequency for F0 extraction
+            fmax (float): Maximum frequency for F0 extraction
+            frame_length (int): Frame length for F0 extraction
+            hop_length (int): Hop length for F0 extraction
+        """
+        self.ref_hz = ref_hz
+        self.fmin = fmin
+        self.fmax = fmax
+        self.frame_length = frame_length
+        self.hop_length = hop_length
+        self.sample_rate = 44100
+
+    def hz_to_cents(self, f_hz):
+        """Convert Hz to cents relative to reference frequency"""
+        f = np.asarray(f_hz, dtype=float)
+        cents = np.full_like(f, np.nan, dtype=float)
+        m = np.isfinite(f) & (f > 0)
+        cents[m] = 1200.0 * np.log2(f[m] / self.ref_hz)
+        return cents
+
+    def extract_f0_pyin(self, wav):
+        """
+        Extract F0 using librosa.pyin from AudioSignal
+
+        Args:
+            wav: AudioSignal object, torch.Tensor, or numpy.ndarray
+
+        Returns:
+            1D F0 array in Hz, NaN for unvoiced frames
+        """
+        # Convert AudioSignal to numpy array
+        if isinstance(wav, AudioSignal):
+            wav = wav.audio_data.squeeze().cpu().numpy()
+        elif isinstance(wav, torch.Tensor):
+            wav = wav.squeeze().cpu().numpy()
+        elif not isinstance(wav, np.ndarray):
+            raise TypeError(f"Input wav must be AudioSignal, torch.Tensor or numpy.ndarray, got {type(wav)}")
+
+        f0, vflag, _ = librosa.pyin(
+            wav,
+            fmin=self.fmin, fmax=self.fmax, sr=self.sample_rate,
+            frame_length=self.frame_length, hop_length=self.hop_length
+        )
+        return f0.astype(np.float32)
+
+    def f0corr_rmse_from_hz(self, f_ref_hz, f_est_hz, use_dtw=False):
+        """
+        Calculate correlation and RMSE between reference and estimated F0
+
+        Args:
+            f_ref_hz: Reference F0 array in Hz
+            f_est_hz: Estimated F0 array in Hz
+            use_dtw (bool): Whether to use DTW alignment
+
+        Returns:
+            tuple: (correlation, rmse_cents)
+        """
+        x = self.hz_to_cents(f_ref_hz)
+        y = self.hz_to_cents(f_est_hz)
+
+        if use_dtw:
+            # DTW alignment on cents; interpolate NaN to avoid path collapse
+            def _interp_nan(a):
+                a = a.copy()
+                idx = np.isfinite(a)
+                if idx.sum() < 2:  # Almost all NaN
+                    return a
+                xp = np.flatnonzero(idx)
+                fp = a[idx]
+                xn = np.arange(len(a))
+                a[~idx] = np.interp(xn[~idx], xp, fp)
+                return a
+
+            xi = _interp_nan(x)
+            yi = _interp_nan(y)
+            _, wp = librosa.sequence.dtw(xi, yi, metric=lambda a, b: np.abs(a - b))
+            path = list(reversed(wp))
+            xr = x[[p[0] for p in path]]
+            yr = y[[p[1] for p in path]]
+            x, y = xr, yr
+
+        m = np.isfinite(x) & np.isfinite(y)
+        if m.sum() < 2:
+            return np.nan, np.nan
+
+        xv, yv = x[m], y[m]
+        if np.std(xv) < 1e-8 or np.std(yv) < 1e-8:
+            r = np.nan
+        else:
+            r = float(np.corrcoef(xv, yv)[0, 1])
+        rmse_cents = float(np.sqrt(np.mean((xv - yv) ** 2)))
+        return r, rmse_cents
+
+    def evaluate_single(self, ref_audio, est_audio, use_dtw=False):
+        """
+        Evaluate F0 correlation and RMSE for a single pair of audio signals
+
+        Args:
+            ref_audio: Reference AudioSignal object
+            est_audio: Estimated AudioSignal object
+            use_dtw (bool): Whether to use DTW alignment
+
+        Returns:
+            tuple: (correlation, rmse_cents)
+        """
+        f0_ref = self.extract_f0_pyin(ref_audio)
+        f0_est = self.extract_f0_pyin(est_audio)
+
+        # Length alignment (usually consistent under same hop, but trim to shortest for safety)
+        L = min(len(f0_ref), len(f0_est))
+        return self.f0corr_rmse_from_hz(f0_ref[:L], f0_est[:L], use_dtw=use_dtw)
+
+    def evaluate_batch(self, ref_audios, est_audios, use_dtw=False):
+        """
+        Evaluate F0 correlation and RMSE for batches of audio signals (sequential)
+
+        Args:
+            ref_audios: List of reference AudioSignal objects
+            est_audios: List of estimated AudioSignal objects
+            use_dtw (bool): Whether to use DTW alignment
+
+        Returns:
+            tuple: (per_sample_results, summary)
+                - per_sample_results: List of dicts with 'idx', 'F0CORR', 'F0RMSE_cents'
+                - summary: Dict with mean values and unit
+        """
+        assert len(ref_audios) == len(est_audios), "Reference and estimated audio lists must have same length"
+
+        per_sample = []
+        corr_list, rmse_list = [], []
+
+        for i in range(len(ref_audios)):
+            r, e = self.evaluate_single(ref_audios[i], est_audios[i], use_dtw=use_dtw)
+
+            per_sample.append({'idx': i, 'F0CORR': r, 'F0RMSE_cents': e})
+            if not (np.isnan(r) or np.isnan(e)):
+                corr_list.append(r)
+                rmse_list.append(e)
+
+        summary = {
+            'F0CORR_mean': float(np.mean(corr_list)) if corr_list else np.nan,
+            'F0RMSE_cents_mean': float(np.mean(rmse_list)) if corr_list else np.nan,
+            'unit': 'cents'
+        }
+        return per_sample, summary
+
+    def evaluate_batch_mp(self, ref_audios, est_audios, use_dtw=False,
+                         num_workers=None, min_batch_size=4):
+        """
+        Evaluate F0 correlation and RMSE for batches of audio signals using multiprocessing
+
+        Args:
+            ref_audios: List of reference AudioSignal objects
+            est_audios: List of estimated AudioSignal objects
+            use_dtw (bool): Whether to use DTW alignment
+            num_workers (int): Number of worker processes (default: min(cpu_count, batch_size))
+            min_batch_size (int): Minimum batch size to use multiprocessing
+
+        Returns:
+            tuple: (per_sample_results, summary)
+                - per_sample_results: List of dicts with 'idx', 'F0CORR', 'F0RMSE_cents'
+                - summary: Dict with mean values and unit
+        """
+        assert len(ref_audios) == len(est_audios), "Reference and estimated audio lists must have same length"
+
+        batch_size = len(ref_audios)
+
+        # Use sequential processing for small batches
+        if batch_size < min_batch_size:
+            return self.evaluate_batch(ref_audios, est_audios, use_dtw)
+
+        # Determine number of workers
+        if num_workers is None:
+            num_workers = min(mp.cpu_count(), batch_size)
+        num_workers = min(num_workers, batch_size)
+
+        # Prepare arguments for multiprocessing
+        evaluator_params = {
+            'ref_hz': self.ref_hz,
+            'fmin': self.fmin,
+            'fmax': self.fmax,
+            'frame_length': self.frame_length,
+            'hop_length': self.hop_length,
+        }
+
+        args_list = []
+        for i in range(batch_size):
+            args_tuple = (ref_audios[i], est_audios[i], evaluator_params, use_dtw, i)
+            args_list.append(args_tuple)
+
+        # Process with multiprocessing
+        per_sample = []
+        corr_list, rmse_list = [], []
+
+        try:
+            with mp.Pool(processes=num_workers) as pool:
+                results = pool.map(_f0_evaluation_worker, args_list)
+
+                # Sort results by index and collect
+                results.sort(key=lambda x: x[0])  # Sort by idx
+                for idx, corr, rmse in results:
+                    per_sample.append({'idx': idx, 'F0CORR': corr, 'F0RMSE_cents': rmse})
+                    if not (np.isnan(corr) or np.isnan(rmse)):
+                        corr_list.append(corr)
+                        rmse_list.append(rmse)
 
         except Exception as e:
-            # Handle errors gracefully
-            file_result = {
-                "pred_path": pred_path,
-                "ref_path": ref_path,
-                "metrics": None,
-                "success": False,
-                "error": str(e)
-            }
-            results["individual_results"].append(file_result)
+            print(f"Multiprocessing failed, falling back to sequential: {e}")
+            return self.evaluate_batch(ref_audios, est_audios, use_dtw)
 
-            if progress_bar:
-                print(f"Error processing {pred_path} vs {ref_path}: {e}")
-
-    # Save individual results if requested
-    if save_individual_results and output_dir is not None:
-        individual_results_path = os.path.join(output_dir, "individual_results.json")
-        with open(individual_results_path, "w") as f:
-            json.dump(results["individual_results"], f, indent=2)
-
-    # Compute aggregated statistics if requested
-    if aggregate_results:
-        successful_results = [r for r in results["individual_results"] if r["success"]]
-
-        if successful_results:
-            aggregated = aggregate_f0_metrics(successful_results)
-            results["aggregated_results"] = aggregated
-
-            # Save aggregated results
-            if output_dir is not None:
-                aggregated_path = os.path.join(output_dir, "aggregated_results.json")
-                with open(aggregated_path, "w") as f:
-                    json.dump(aggregated, f, indent=2)
-        else:
-            results["aggregated_results"] = None
-
-    # Save complete results
-    if output_dir is not None:
-        complete_results_path = os.path.join(output_dir, "complete_results.json")
-        with open(complete_results_path, "w") as f:
-            json.dump(results, f, indent=2)
-
-    return results
+        summary = {
+            'F0CORR_mean': float(np.mean(corr_list)) if corr_list else np.nan,
+            'F0RMSE_cents_mean': float(np.mean(rmse_list)) if corr_list else np.nan,
+            'unit': 'cents'
+        }
+        return per_sample, summary
 
 
-def aggregate_f0_metrics(individual_results: List[Dict]) -> Dict:
-    """
-    Aggregate F0 metrics from individual results.
+# ---------- 向後相容性函數 ----------
+def hz_to_cents(f_hz, ref_hz=440.0):
+    """Legacy function for backward compatibility"""
+    evaluator = F0Evaluator(ref_hz=ref_hz)
+    return evaluator.hz_to_cents(f_hz)
 
-    Args:
-        individual_results: List of individual result dictionaries
+def f0corr_rmse_from_hz(f_ref_hz, f_est_hz, use_dtw=False):
+    """Legacy function for backward compatibility"""
+    evaluator = F0Evaluator()
+    return evaluator.f0corr_rmse_from_hz(f_ref_hz, f_est_hz, use_dtw)
 
-    Returns:
-        Dictionary containing aggregated statistics
-    """
-    if not individual_results:
-        return None
+def extract_f0_pyin(wav, sr=44100, fmin=50, fmax=1100, frame_length=1024, hop_length=256):
+    """Legacy function for backward compatibility"""
+    evaluator = F0Evaluator(fmin=fmin, fmax=fmax, frame_length=frame_length, hop_length=hop_length)
+    # Create a mock AudioSignal-like object for compatibility
+    class MockAudioSignal:
+        def __init__(self, audio_data, sample_rate):
+            self.audio_data = audio_data
+            self.sample_rate = sample_rate
 
-    # Extract all metrics
-    metrics_list = [r["metrics"] for r in individual_results if r["success"]]
+    mock_signal = MockAudioSignal(wav, sr)
+    return evaluator.extract_f0_pyin(mock_signal)
 
-    # Initialize aggregators
-    numeric_fields = [
-        "va", "vr", "vfa", "rpa_50c", "rca_50c", "oa_50c", "octave_error_rate",
-        "mae_cents", "rmse_cents", "mean_cents", "median_cents", "std_cents",
-        "median_abs_cents", "mae_hz", "rmse_hz", "pearson_r_logf0",
-        "gpe_50c_rate", "gpe_20pct_rate", "fpe_mean_cents", "fpe_std_cents"
-    ]
+def f0corr_rmse_librosa_batch(
+    ref_wavs, est_wavs, sr=44100,
+    fmin=50, fmax=1100, frame_length=1024, hop_length=256,
+    use_dtw=False
+):
+    """Legacy function for backward compatibility"""
+    evaluator = F0Evaluator(fmin=fmin, fmax=fmax, frame_length=frame_length, hop_length=hop_length)
 
-    integer_fields = [
-        "total_frames", "ref_voiced_frames", "ref_unvoiced_frames",
-        "pred_voiced_frames", "pred_unvoiced_frames"
-    ]
+    # Create mock AudioSignal objects for compatibility
+    class MockAudioSignal:
+        def __init__(self, audio_data, sample_rate):
+            self.audio_data = audio_data
+            self.sample_rate = sample_rate
 
-    aggregated = {
-        "num_files": len(metrics_list),
-        "summary_stats": {},
-        "per_file_results": []
-    }
+    ref_audios = [MockAudioSignal(wav, sr) for wav in ref_wavs]
+    est_audios = [MockAudioSignal(wav, sr) for wav in est_wavs]
 
-    # Collect valid values for each metric
-    valid_values = {field: [] for field in numeric_fields}
+    return evaluator.evaluate_batch(ref_audios, est_audios, use_dtw)
 
-    for i, metrics in enumerate(metrics_list):
-        file_summary = {"file_index": i}
-
-        # Process numeric fields
-        for field in numeric_fields:
-            value = metrics.get(field)
-            if value is not None and not np.isnan(value):
-                valid_values[field].append(value)
-                file_summary[field] = value
-            else:
-                file_summary[field] = None
-
-        # Process integer fields
-        for field in integer_fields:
-            value = metrics.get(field)
-            if value is not None:
-                file_summary[field] = value
-            else:
-                file_summary[field] = None
-
-        aggregated["per_file_results"].append(file_summary)
-
-    # Compute summary statistics
-    for field, values in valid_values.items():
-        if values:
-            values = np.array(values)
-            aggregated["summary_stats"][field] = {
-                "mean": float(np.mean(values)),
-                "std": float(np.std(values)),
-                "median": float(np.median(values)),
-                "min": float(np.min(values)),
-                "max": float(np.max(values)),
-                "num_valid": len(values),
-                "num_total": len(metrics_list)
-            }
-        else:
-            aggregated["summary_stats"][field] = {
-                "mean": None,
-                "std": None,
-                "median": None,
-                "min": None,
-                "max": None,
-                "num_valid": 0,
-                "num_total": len(metrics_list)
-            }
-
-    return aggregated
-
-
-def find_audio_file_pairs(
-    pred_dir: str,
-    ref_dir: str,
-    pred_suffix: str = "",
-    ref_suffix: str = "",
-    audio_extensions: List[str] = None
-) -> List[Tuple[str, str]]:
-    """
-    Find matching audio file pairs between prediction and reference directories.
-
-    Args:
-        pred_dir: Directory containing prediction files
-        ref_dir: Directory containing reference files
-        pred_suffix: Suffix to add to prediction filenames
-        ref_suffix: Suffix to add to reference filenames
-        audio_extensions: List of audio file extensions to consider
-
-    Returns:
-        List of (pred_path, ref_path) tuples
-    """
-    import os
-    import glob
-
-    if audio_extensions is None:
-        audio_extensions = [".wav", ".mp3", ".flac", ".m4a", ".ogg"]
-
-    # Get all audio files in reference directory
-    ref_files = []
-    for ext in audio_extensions:
-        ref_files.extend(glob.glob(os.path.join(ref_dir, f"*{ext}")))
-        ref_files.extend(glob.glob(os.path.join(ref_dir, f"*{ext.upper()}")))
-
-    file_pairs = []
-
-    for ref_file in ref_files:
-        # Extract base filename
-        ref_basename = os.path.basename(ref_file)
-        ref_name, ref_ext = os.path.splitext(ref_basename)
-
-        # Remove reference suffix if present
-        if ref_suffix and ref_name.endswith(ref_suffix):
-            ref_name = ref_name[:-len(ref_suffix)]
-
-        # Add prediction suffix
-        pred_name = ref_name + pred_suffix
-
-        # Look for corresponding prediction file
-        for ext in audio_extensions:
-            pred_file = os.path.join(pred_dir, f"{pred_name}{ext}")
-            if os.path.exists(pred_file):
-                file_pairs.append((pred_file, ref_file))
-                break
-            pred_file = os.path.join(pred_dir, f"{pred_name}{ext.upper()}")
-            if os.path.exists(pred_file):
-                file_pairs.append((pred_file, ref_file))
-                break
-
-    return file_pairs
-
-
-def eval_f0_from_directory(
-    pred_dir: str,
-    ref_dir: str,
-    output_dir: str,
-    pred_suffix: str = "",
-    ref_suffix: str = "",
-    audio_extensions: List[str] = None,
-    **kwargs
-) -> Dict:
-    """
-    Evaluate F0 metrics for all matching audio files in two directories.
-
-    Args:
-        pred_dir: Directory containing prediction files
-        ref_dir: Directory containing reference files
-        output_dir: Directory to save results
-        pred_suffix: Suffix to add to prediction filenames
-        ref_suffix: Suffix to add to reference filenames
-        audio_extensions: List of audio file extensions to consider
-        **kwargs: Additional arguments passed to eval_f0_batch
-
-    Returns:
-        Dictionary containing evaluation results
-    """
-    # Find matching file pairs
-    file_pairs = find_audio_file_pairs(
-        pred_dir, ref_dir, pred_suffix, ref_suffix, audio_extensions
-    )
-
-    if not file_pairs:
-        raise ValueError(f"No matching audio files found between {pred_dir} and {ref_dir}")
-
-    print(f"Found {len(file_pairs)} matching file pairs")
-
-    # Run batch evaluation
-    results = eval_f0_batch(
-        file_pairs=file_pairs,
-        output_dir=output_dir,
-        **kwargs
-    )
-
-    return results
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Compute F0 evaluation metrics for monophonic audio (music/synth-friendly).")
-    parser.add_argument("--pred", required=True, help="Path to predicted audio (wav)")
-    parser.add_argument("--ref", required=True, help="Path to reference/ground-truth audio (wav)")
-    parser.add_argument("--sr", type=int, default=24000, help="Target sample rate for loading")
-    parser.add_argument("--fmin", type=float, default=50.0, help="Minimum F0 in Hz")
-    parser.add_argument("--fmax", type=float, default=2000.0, help="Maximum F0 in Hz")
-    parser.add_argument("--hop_length", type=int, default=512, help="Hop length for analysis")
-    parser.add_argument("--frame_length", type=int, default=2048, help="Frame length for analysis")
-    parser.add_argument("--cents_threshold", type=float, default=50.0, help="Threshold (in cents) for accuracy metrics")
-    parser.add_argument("--out_prefix", default="f0_eval", help="Prefix for output files (JSON/CSV)")
-    parser.add_argument("--plot", action="store_true", help="If set, saves an F0 overlay plot PNG")
-    parser.add_argument("--assume_all_voiced", action="store_true", help="Treat finite-F0 frames as voiced (good for sustained synths)")
-    parser.add_argument("--silence_db", type=float, default=None, help="Mark frames below this dB (relative to max RMS) as unvoiced, e.g., -40")
-
-    args = parser.parse_args()
-
-    plot_path = f"{args.out_prefix}.png" if args.plot else None
-    metrics = eval_f0_from_files(
-        pred_path=args.pred,
-        ref_path=args.ref,
-        sr=args.sr,
-        fmin=args.fmin,
-        fmax=args.fmax,
-        hop_length=args.hop_length,
-        frame_length=args.frame_length,
-        cents_threshold=args.cents_threshold,
-        plot_path=plot_path,
-        assume_all_voiced=args.assume_all_voiced,
-        silence_db=args.silence_db,
-    )
-
-    json_path = f"{args.out_prefix}.json"
-    csv_path = f"{args.out_prefix}.csv"
-
-    with open(json_path, "w") as f:
-        json.dump(metrics, f, indent=2)
-
-    df = pd.DataFrame([metrics])
-    df.to_csv(csv_path, index=False)
-
-    print(f"Saved metrics to: {json_path} and {csv_path}")
-    if plot_path is not None:
-        print(f"Saved F0 plot to: {plot_path}")
 
 
 if __name__ == "__main__":
-    main()
+    # Initialize the loss function
+    device = torch.device("cuda:0")
+    f0_loss = F0EvalLoss(
+        hop_length=160,
+        fmin=50.0,
+        fmax=1100.0,
+        model_size='full',
+        voicing_thresh=0.5,
+        weight=1.0
+    ).to(device)

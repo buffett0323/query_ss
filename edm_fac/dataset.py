@@ -1121,9 +1121,8 @@ class EDM_MN_Test_Dataset(Dataset):
                 # for c2 in range(c_amount):
                 for t1 in range(t_amount):
                     for t2 in range(t_amount):
-                        for a1 in range(adsr_amount):
-                            for a2 in range(adsr_amount):
-
+                        for a1 in range(0, 10):
+                            for a2 in range(10, 20):
                                 if t1 == t2 or a1 == a2:
                                     continue
 

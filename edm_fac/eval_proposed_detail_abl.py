@@ -8,136 +8,20 @@ import dac
 import warnings
 import mir_eval
 import numpy as np
-import multiprocessing as mp
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from audiotools import AudioSignal
 from utils import yaml_config_hook
-from evaluate_metrics import MultiScaleSTFTLoss, LogRMSEnvelopeLoss, F0Metrics, eval_f0_from_files, eval_f0_batch, aggregate_f0_metrics
+from evaluate_metrics import MultiScaleSTFTLoss, LogRMSEnvelopeLoss, F0EvalLoss, F0Evaluator
 from dataset import EDM_MN_Test_Dataset
 from dac.nn.loss import MelSpectrogramLoss, L1Loss
-from typing import List, Tuple, Dict
 
 # Filter out specific warnings
 warnings.filterwarnings("ignore", message="stft_data changed shape")
 warnings.filterwarnings("ignore", message="Audio amplitude > 1 clipped when saving")
 
-# Configuration options for F0 multiprocessing:
-# - use_f0_multiprocessing: Enable/disable multiprocessing for F0 computation (default: True)
-# - max_f0_workers: Maximum number of worker processes (default: 8)
-# - min_batch_for_multiprocessing: Minimum batch size to use multiprocessing (default: 4)
-
 LENGTH = 44100*3
-
-
-def extract_f0(y: np.ndarray, sr: int, fmin: float, fmax: float, frame_length: int, hop_length: int) -> np.ndarray:
-    """Extract monophonic F0 using librosa.pyin; returns Hz with NaN for unvoiced."""
-    if y.ndim > 1:
-        y = np.mean(y, axis=0)
-    f0, _, _ = librosa.pyin(
-        y,
-        fmin=fmin,
-        fmax=fmax,
-        sr=sr,
-        frame_length=frame_length,
-        hop_length=hop_length,
-        center=True,
-    )
-    return np.asarray(f0, dtype=float)
-
-
-
-def compute_mir_melody_scores(
-    pred_y: np.ndarray,
-    ref_y: np.ndarray,
-    sr: int,
-    hop_length: int,
-    frame_length: int,
-    fmin: float,
-    fmax: float,
-    cent_tolerance: float,
-) -> Dict[str, float]:
-    """Compute MIR melody metrics using pYIN F0 extraction and mir_eval.
-
-    Returns a dict with keys like 'Overall Accuracy', 'Voicing Recall', etc.
-    """
-    ref_f0 = extract_f0(ref_y, sr, fmin, fmax, frame_length, hop_length)
-    pred_f0 = extract_f0(pred_y, sr, fmin, fmax, frame_length, hop_length)
-
-    n = min(len(ref_f0), len(pred_f0))
-    if n == 0:
-        return {
-            "Voicing Recall": 0.0,
-            "Voicing False Alarm": 0.0,
-            "Raw Pitch Accuracy": 0.0,
-            "Raw Chroma Accuracy": 0.0,
-            "Overall Accuracy": 0.0,
-        }
-
-    ref_f0 = ref_f0[:n]
-    pred_f0 = pred_f0[:n]
-    frames = np.arange(n)
-    times = librosa.frames_to_time(frames, sr=sr, hop_length=hop_length)
-    ref_freq = np.nan_to_num(ref_f0, nan=0.0)
-    est_freq = np.nan_to_num(pred_f0, nan=0.0)
-
-    scores = mir_eval.melody.evaluate(
-        ref_time=times,
-        ref_freq=ref_freq,
-        est_time=times,
-        est_freq=est_freq,
-        cent_tolerance=cent_tolerance,
-    )
-    return scores
-
-
-def compute_f0_worker(args_tuple):
-    """Worker function for multiprocessing F0 computation.
-
-    Args:
-        args_tuple: Tuple containing (pred_y, ref_y, sr, hop_length, frame_length, fmin, fmax, cent_tolerance)
-
-    Returns:
-        Dictionary with F0 metrics
-    """
-    pred_y, ref_y, sr, hop_length, frame_length, fmin, fmax, cent_tolerance = args_tuple
-
-    try:
-        # Input validation
-        if pred_y is None or ref_y is None:
-            raise ValueError("Audio data is None")
-
-        if len(pred_y) == 0 or len(ref_y) == 0:
-            raise ValueError("Audio data is empty")
-
-        # Ensure audio data is 1D
-        if pred_y.ndim > 1:
-            pred_y = pred_y.squeeze()
-        if ref_y.ndim > 1:
-            ref_y = ref_y.squeeze()
-
-        scores = compute_mir_melody_scores(
-            pred_y=pred_y,
-            ref_y=ref_y,
-            sr=sr,
-            hop_length=hop_length,
-            frame_length=frame_length,
-            fmin=fmin,
-            fmax=fmax,
-            cent_tolerance=cent_tolerance,
-        )
-        return scores
-    except Exception as e:
-        # Return default scores if computation fails
-        print(f"Warning: F0 computation failed for one sample: {e}")
-        return {
-            "Voicing Recall": 0.0,
-            "Voicing False Alarm": 0.0,
-            "Raw Pitch Accuracy": 0.0,
-            "Raw Chroma Accuracy": 0.0,
-            "Overall Accuracy": 0.0,
-        }
 
 
 class EDMFACInference:
@@ -201,6 +85,27 @@ class EDMFACInference:
         # 4) L1 waveform loss
         self.l1_eval_loss = L1Loss().to(self.device)
 
+        # 5) F0 Evaluation Loss
+        # self.f0_eval_loss = F0Evaluator(
+        #     ref_hz=440.0,
+        #     fmin=50,
+        #     fmax=1100,
+        #     frame_length=2048,
+        #     hop_length=512
+        # )#.to(self.device)
+        self.f0_eval_loss = F0EvalLoss(
+            hop_length=160, #512,
+            fmin=50,
+            fmax=1100,
+            model_size='tiny', #'full',
+            voicing_thresh=0.5,
+            weight=1.0,
+            device=self.device,
+            sr_in=44100,
+            sr_out=16000,
+            resample_to_16k=True,
+        ).to(self.device)
+
         print(f"EDM-FAC model loaded on {self.device}")
 
 
@@ -259,7 +164,7 @@ class EDMFACInference:
         overall = {"stft": 0.0, "l1": 0.0, "mel": 0.0, "env": 0.0, "num": 0}
 
         # Aggregators for MIR melody F0 metrics
-        f0_overall = {"va": 0.0, "vfa": 0.0, "rpa": 0.0, "rca": 0.0, "oa": 0.0, "num": 0}
+        f0_eval_overall = {"f0_corr": 0.0, "f0_rmse": 0.0}
 
         for batch in tqdm(data_loader, desc="Evaluating"):
             # Move to device
@@ -290,70 +195,24 @@ class EDMFACInference:
             overall["num"] += bs
 
 
-            # # F0 Metrics (mir_eval-based, like eval_mir_test.py) - Using multiprocessing
-            # # Configurable parameters
-            # fmin = getattr(self.args, 'fmin', 50.0)
-            # fmax = getattr(self.args, 'fmax', 2000.0)
-            # frame_length = getattr(self.args, 'frame_length', 2048)
-            # hop_length = self.args.hop_length
-            # cent_tol = getattr(self.args, 'cents_threshold', 50.0)
-
-            # # Compute per-item F0 metrics in the batch using multiprocessing
-            # recon_np = recons.audio_data.detach().cpu().numpy()  # (B, 1, T)
-            # tgt_np = target_audio.audio_data.detach().cpu().numpy()  # (B, 1, T)
-
-            # batch_size = recon_np.shape[0]
-
-            # # Prepare arguments for multiprocessing
-            # f0_args_list = []
-            # for i in range(batch_size):
-            #     pred_y = recon_np[i].squeeze()
-            #     ref_y = tgt_np[i].squeeze()
-            #     args_tuple = (pred_y, ref_y, self.args.sample_rate, hop_length, frame_length, fmin, fmax, cent_tol)
-            #     f0_args_list.append(args_tuple)
-
-            # # Use multiprocessing to compute F0 metrics
-            # use_multiprocessing = getattr(self.args, 'use_f0_multiprocessing', True)
-            # min_batch_for_multiprocessing = getattr(self.args, 'min_batch_for_multiprocessing', 4)  # Only use MP for batches >= 4
-
-            # start_time = time.time()
-
-            # if use_multiprocessing and batch_size >= min_batch_for_multiprocessing:
-            #     num_workers = min(mp.cpu_count(), batch_size, getattr(self.args, 'max_f0_workers', 8))
-            #     if num_workers > 1:
-            #         print(f"Computing F0 metrics using {num_workers} workers...")
-            #         with mp.Pool(processes=num_workers) as pool:
-            #             f0_scores_list = list(tqdm(
-            #                 pool.imap(compute_f0_worker, f0_args_list),
-            #                 total=len(f0_args_list),
-            #                 desc="F0 computation",
-            #                 leave=False
-            #             ))
-            #     else:
-            #         # Fallback to sequential processing for small batches
-            #         f0_scores_list = [compute_f0_worker(args) for args in f0_args_list]
-            # else:
-            #     # Sequential processing for small batches or when MP is disabled
-            #     f0_scores_list = [compute_f0_worker(args) for args in f0_args_list]
-
-            # elapsed_time = time.time() - start_time
-            # if batch_size >= min_batch_for_multiprocessing and use_multiprocessing:
-            #     print(f"F0 computation completed in {elapsed_time:.2f}s for {batch_size} samples")
-
-            # # Aggregate F0 metrics from multiprocessing results
-            # for scores in f0_scores_list:
-            #     va = float(scores.get("Voicing Recall", 0.0))
-            #     vfa = float(scores.get("Voicing False Alarm", 0.0))
-            #     rpa = float(scores.get("Raw Pitch Accuracy", 0.0))
-            #     rca = float(scores.get("Raw Chroma Accuracy", 0.0))
-            #     oa = float(scores.get("Overall Accuracy", 0.0))
-
-            #     f0_overall["va"] += va
-            #     f0_overall["vfa"] += vfa
-            #     f0_overall["rpa"] += rpa
-            #     f0_overall["rca"] += rca
-            #     f0_overall["oa"] += oa
-            #     f0_overall["num"] += 1
+            # Calculate F0 Evaluation Loss
+            # Use multiprocessing for faster F0 evaluation
+            # _, f0_summary = self.f0_eval_loss.evaluate_batch_mp(
+            #     [recons], [target_audio],
+            #     use_dtw=False,
+            #     num_workers=2,  # Use 2 workers for single sample
+            #     min_batch_size=1  # Always use multiprocessing
+            # )
+            # f0_corr = f0_summary["F0CORR_mean"]
+            # f0_rmse = f0_summary["F0RMSE_cents_mean"]
+            # f0_eval_overall["f0_corr"] += float(f0_corr) * bs
+            # f0_eval_overall["f0_rmse"] += float(f0_rmse) * bs
+            # break
+            f0_summary = self.f0_eval_loss.get_metrics(recons, target_audio)
+            f0_corr = f0_summary["f0_corr"]
+            f0_rmse = f0_summary["f0_rmse"]
+            f0_eval_overall["f0_corr"] += float(f0_corr) * bs
+            f0_eval_overall["f0_rmse"] += float(f0_rmse) * bs
 
 
 
@@ -366,14 +225,8 @@ class EDMFACInference:
                 "l1_loss": overall["l1"] / n_all,
                 "mel_loss": overall["mel"] / n_all,
                 "envelope_loss": overall["env"] / n_all,
-                # "f0_mir": {
-                #     "va": f0_overall["va"] / max(1, f0_overall["num"]),
-                #     "vfa": f0_overall["vfa"] / max(1, f0_overall["num"]),
-                #     "rpa": f0_overall["rpa"] / max(1, f0_overall["num"]),
-                #     "rca": f0_overall["rca"] / max(1, f0_overall["num"]),
-                #     "oa": f0_overall["oa"] / max(1, f0_overall["num"]),
-                #     "num_samples": f0_overall["num"],
-                # },
+                "f0_corr": f0_eval_overall["f0_corr"] / n_all,
+                "f0_rmse": f0_eval_overall["f0_rmse"] / n_all,
             },
         }
 
@@ -381,36 +234,6 @@ class EDMFACInference:
         metadata_path = os.path.join(output_dir, f"metadata_{'recon' if recon else 'conv'}.json")
         with open(metadata_path, "w") as f:
             json.dump(results, f, indent=4)
-
-        return results
-
-
-    def evaluate_f0_batch(
-        self,
-        file_pairs: List[Tuple[str, str]],
-        output_dir: str,
-        save_plots: bool = False,
-        **kwargs
-    ) -> Dict:
-
-        # Create output directory
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Run batch F0 evaluation
-        results = eval_f0_batch(
-            file_pairs=file_pairs,
-            output_dir=output_dir,
-            sr=self.args.sample_rate,
-            fmin=getattr(self.args, 'fmin', 50.0),
-            fmax=getattr(self.args, 'fmax', 2000.0),
-            hop_length=self.args.hop_length,
-            frame_length=self.args.frame_length,
-            cents_threshold=getattr(self.args, 'cents_threshold', 50.0),
-            assume_all_voiced=getattr(self.args, 'assume_all_voiced', True),
-            silence_db=getattr(self.args, 'silence_db', -45),
-            save_plots=save_plots,
-            **kwargs
-        )
 
         return results
 
@@ -447,7 +270,7 @@ def main():
     # Build Evaluation Dataset/Loader from Model Config
     test_dataset_recon = EDM_MN_Test_Dataset(
         root_path=args.root_path,
-        duration=args.duration,
+        duration=1.0, # 3.0
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="evaluation",
@@ -466,7 +289,7 @@ def main():
 
     test_dataset = EDM_MN_Test_Dataset(
         root_path=args.root_path,
-        duration=args.duration,
+        duration=1.0, # 3.0
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="evaluation",
@@ -482,12 +305,6 @@ def main():
         pin_memory=True,
         drop_last=False,
     )
-    print(f"Evaluation batch size: {args.bs}")
-    print(f"F0 Multiprocessing: {'Enabled' if args.use_f0_multiprocessing else 'Disabled'}")
-    if args.use_f0_multiprocessing:
-        print(f"Max F0 workers: {args.max_f0_workers}")
-        print(f"Min batch size for multiprocessing: {args.min_batch_for_multiprocessing}")
-    print(f"Available CPU cores: {mp.cpu_count()}")
 
     # Perform evaluation over loader and save metadata
     results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, recon=True)
