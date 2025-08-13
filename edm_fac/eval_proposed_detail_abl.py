@@ -13,7 +13,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from audiotools import AudioSignal
 from utils import yaml_config_hook
-from evaluate_metrics import MultiScaleSTFTLoss, LogRMSEnvelopeLoss, F0EvalLoss, F0Evaluator
+from evaluate_metrics import MultiScaleSTFTLoss, LogRMSEnvelopeLoss, F0EvalLoss
 from dataset import EDM_MN_Test_Dataset
 from dac.nn.loss import MelSpectrogramLoss, L1Loss
 
@@ -164,13 +164,14 @@ class EDMFACInference:
         overall = {"stft": 0.0, "l1": 0.0, "mel": 0.0, "env": 0.0, "num": 0}
 
         # Aggregators for MIR melody F0 metrics
-        f0_eval_overall = {"f0_corr": 0.0, "f0_rmse": 0.0}
+        f0_eval_overall = {"f0_corr": 0.0, "f0_rmse": 0.0, "counter": 0, "high_rmse": [], "nan": []}
 
         for batch in tqdm(data_loader, desc="Evaluating"):
             # Move to device
             orig_audio = batch['orig_audio'].to(self.device)
             ref_audio = batch['ref_audio'].to(self.device)
             target_audio = batch['gt_audio'].to(self.device)
+            metadata = batch['metadata']
 
             out = self.generator.conversion(
                 orig_audio=orig_audio.audio_data,
@@ -208,11 +209,20 @@ class EDMFACInference:
             # f0_eval_overall["f0_corr"] += float(f0_corr) * bs
             # f0_eval_overall["f0_rmse"] += float(f0_rmse) * bs
             # break
-            f0_summary = self.f0_eval_loss.get_metrics(recons, target_audio)
+            f0_summary = self.f0_eval_loss.get_metrics(recons, target_audio, metadata)
             f0_corr = f0_summary["f0_corr"]
             f0_rmse = f0_summary["f0_rmse"]
+            if (f0_corr == 0.0 and f0_rmse == 0.0):
+                f0_eval_overall["high_rmse"].extend(f0_summary["high_rmse_paths"])
+                f0_eval_overall["nan"].extend(f0_summary["nan_paths"])
+                continue
+
+
             f0_eval_overall["f0_corr"] += float(f0_corr) * bs
             f0_eval_overall["f0_rmse"] += float(f0_rmse) * bs
+            f0_eval_overall["counter"] += bs
+            f0_eval_overall["high_rmse"].extend(f0_summary["high_rmse_paths"])
+            f0_eval_overall["nan"].extend(f0_summary["nan_paths"])
 
 
 
@@ -225,8 +235,11 @@ class EDMFACInference:
                 "l1_loss": overall["l1"] / n_all,
                 "mel_loss": overall["mel"] / n_all,
                 "envelope_loss": overall["env"] / n_all,
-                "f0_corr": f0_eval_overall["f0_corr"] / n_all,
-                "f0_rmse": f0_eval_overall["f0_rmse"] / n_all,
+                "f0_corr": f0_eval_overall["f0_corr"] / f0_eval_overall["counter"],
+                "f0_rmse": f0_eval_overall["f0_rmse"] / f0_eval_overall["counter"],
+                "f0_counter": f0_eval_overall["counter"],
+                "high_rmse": f0_eval_overall["high_rmse"],
+                "nan": f0_eval_overall["nan"],
             },
         }
 

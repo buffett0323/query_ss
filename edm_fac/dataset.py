@@ -1100,6 +1100,16 @@ class EDM_MN_Test_Dataset(Dataset):
         self.hop_length = hop_length
         self.recon = recon
 
+        self.adsr_envelopes = {}
+        with open(f'{self.root_path}/adsr_envelopes.json', 'r') as f:
+            self.adsr_envelopes = json.load(f)
+
+        for i in range(20):
+            if i in [0, 1, 6, 8, 10, 12, 14, 16, 18]:
+                self.adsr_envelopes[f"ADSR{i:03d}"]["type"] = "pluck"
+            else:
+                self.adsr_envelopes[f"ADSR{i:03d}"]["type"] = "lead"
+
         # Storing names
         self.paired_data = [] # (Origin Path, Ref Path, Ground Truth Path)
         self._build_paired_index()
@@ -1126,7 +1136,13 @@ class EDM_MN_Test_Dataset(Dataset):
                                 if t1 == t2 or a1 == a2:
                                     continue
 
-                                c2 = random.randint(0, c_amount-1)
+                                if self.adsr_envelopes[f"ADSR{a1:03d}"]["type"] == "pluck" and self.adsr_envelopes[f"ADSR{a2:03d}"]["type"] == "pluck":
+                                    continue
+                                if self.adsr_envelopes[f"ADSR{a1:03d}"]["type"] == "lead" and self.adsr_envelopes[f"ADSR{a2:03d}"]["type"] == "lead":
+                                    continue
+
+                                # c2 = random.randint(0, c_amount-1)
+                                c2 = c1 #(c1+1) % c_amount
                                 orig_path = f"{self.root_path}/T{t1:03d}_ADSR{a1:03d}_C{c1:03d}.wav"
                                 ref_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c2:03d}.wav"
                                 gt_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c1:03d}.wav"
@@ -1160,6 +1176,17 @@ class EDM_MN_Test_Dataset(Dataset):
             'orig_audio': orig_audio,
             'ref_audio': ref_audio,
             'gt_audio': gt_audio,
+            'metadata': {
+                'orig_audio': {
+                    'path': str(orig_path),
+                },
+                'ref_audio': {
+                    'path': str(ref_path),
+                },
+                'gt_audio': {
+                    'path': str(gt_path),
+                },
+            }
         }
 
     @staticmethod
@@ -1169,6 +1196,7 @@ class EDM_MN_Test_Dataset(Dataset):
             'orig_audio': AudioSignal.batch([item['orig_audio'] for item in batch]),
             'ref_audio': AudioSignal.batch([item['ref_audio'] for item in batch]),
             'gt_audio': AudioSignal.batch([item['gt_audio'] for item in batch]),
+            'metadata': [item['metadata'] for item in batch]
         }
 
 
