@@ -182,31 +182,31 @@ class EDMFACInference:
 
             recons = AudioSignal(out["audio"], self.args.sample_rate)
             bs = int(out["audio"].shape[0])
-            
+
             stft_val = self.stft_loss(recons, target_audio)
             l1_val = self.l1_eval_loss(recons, target_audio)
             mel_val = self.mel_loss(recons, target_audio)
             env_val = self.envelope_loss(recons, target_audio)
-            
+
             overall["stft"] += float(stft_val.item()) * bs
             overall["l1"] += float(l1_val.item()) * bs
             overall["mel"] += float(mel_val.item()) * bs
             overall["env"] += float(env_val.item()) * bs
             overall["num"] += bs
-            
-            
+
+
 
             # Calculate F0 Evaluation Loss
             f0_summary = self.f0_eval_loss.get_metrics(recons, target_audio, metadata)
             f0_eval_overall["high_rmse"].extend(f0_summary["high_rmse_paths"])
             f0_eval_overall["nan"].extend(f0_summary["nan_paths"])
-            
+
             f0_corr = [fc.cpu().numpy() for fc in f0_summary["f0_corr"]]
             f0_rmse = [fr.cpu().numpy() for fr in f0_summary["f0_rmse"]]
 
             fc_list, fr_list = [], []
             valid_indices = []
-            
+
             cnt = 0
             for i, (fc, fr) in enumerate(zip(f0_corr, f0_rmse)):
                 # Check for NaN values in both fc and fr
@@ -216,17 +216,17 @@ class EDMFACInference:
                     fc_list.append(fc)
                     fr_list.append(fr)
                     valid_indices.append(i)
-                    
+
             if len(fc_list) == 0:
                 continue
-                    
+
             f0_corr = np.mean(fc_list)
             f0_rmse = np.mean(fr_list)
             bs -= cnt
             print(bs, cnt, f0_corr, f0_rmse)
-            
-            
-            
+
+
+
             # Filter audio signals to remove samples with high F0 RMSE
             # if len(valid_indices) > 0:
             #     valid_indices = torch.tensor(valid_indices, device=self.device)
@@ -234,15 +234,15 @@ class EDMFACInference:
             #     target_audio_filtered = AudioSignal(target_audio.audio_data[valid_indices], self.args.sample_rate)
             # else:
             #     continue
-            
+
             # # Losses - only calculate if we have valid samples
             # stft_val = self.stft_loss(recons_filtered, target_audio_filtered)
             # l1_val = self.l1_eval_loss(recons_filtered, target_audio_filtered)
             # mel_val = self.mel_loss(recons_filtered, target_audio_filtered)
             # env_val = self.envelope_loss(recons_filtered, target_audio_filtered)
-            
-            
-            
+
+
+
             f0_eval_overall["f0_corr"] += float(f0_corr) * bs
             f0_eval_overall["f0_rmse"] += float(f0_rmse) * bs
             f0_eval_overall["counter"] += bs

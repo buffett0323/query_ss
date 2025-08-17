@@ -166,7 +166,7 @@ class EDMFACInference:
 
 
     @torch.no_grad()
-    def evaluate_loader(self, data_loader: DataLoader, output_dir: str, recon: bool = False):
+    def evaluate_loader(self, data_loader: DataLoader, output_dir: str, convert_type: str = "reconstruction"):
         os.makedirs(output_dir, exist_ok=True)
 
         # Aggregators
@@ -184,37 +184,35 @@ class EDMFACInference:
 
             out = self.generator.conversion(
                 orig_audio=orig_audio.audio_data,
-                ref_audio=None if recon else ref_audio.audio_data,
-                convert_type="reconstruction" if recon else "both",
+                ref_audio=None if convert_type == "reconstruction" else ref_audio.audio_data,
+                convert_type=convert_type,
             )
 
             recons = AudioSignal(out["audio"], self.args.sample_rate)
             bs = int(out["audio"].shape[0])
-            
+
             stft_val = self.stft_loss(recons, target_audio)
             l1_val = self.l1_eval_loss(recons, target_audio)
             mel_val = self.mel_loss(recons, target_audio)
             env_val = self.envelope_loss(recons, target_audio)
-            
+
             overall["stft"] += float(stft_val.item()) * bs
             overall["l1"] += float(l1_val.item()) * bs
             overall["mel"] += float(mel_val.item()) * bs
             overall["env"] += float(env_val.item()) * bs
             overall["num"] += bs
-            
-            
 
             # Calculate F0 Evaluation Loss
             f0_summary = self.f0_eval_loss.get_metrics(recons, target_audio, metadata)
             f0_eval_overall["high_rmse"].extend(f0_summary["high_rmse_paths"])
             f0_eval_overall["nan"].extend(f0_summary["nan_paths"])
-            
+
             f0_corr = [fc.cpu().numpy() for fc in f0_summary["f0_corr"]]
             f0_rmse = [fr.cpu().numpy() for fr in f0_summary["f0_rmse"]]
 
             fc_list, fr_list = [], []
             valid_indices = []
-            
+
             cnt = 0
             for i, (fc, fr) in enumerate(zip(f0_corr, f0_rmse)):
                 # Check for NaN values in both fc and fr
@@ -224,17 +222,15 @@ class EDMFACInference:
                     fc_list.append(fc)
                     fr_list.append(fr)
                     valid_indices.append(i)
-            
+
             if len(fc_list) == 0:
                 continue
-            
+
             f0_corr = np.mean(fc_list)
             f0_rmse = np.mean(fr_list)
             bs -= cnt
             print(bs, cnt, f0_corr, f0_rmse)
-            
-            
-            
+
             # Filter audio signals to remove samples with high F0 RMSE
             # if len(valid_indices) > 0:
             #     valid_indices = torch.tensor(valid_indices, device=self.device)
@@ -242,15 +238,13 @@ class EDMFACInference:
             #     target_audio_filtered = AudioSignal(target_audio.audio_data[valid_indices], self.args.sample_rate)
             # else:
             #     continue
-            
+
             # # Losses - only calculate if we have valid samples
             # stft_val = self.stft_loss(recons_filtered, target_audio_filtered)
             # l1_val = self.l1_eval_loss(recons_filtered, target_audio_filtered)
             # mel_val = self.mel_loss(recons_filtered, target_audio_filtered)
             # env_val = self.envelope_loss(recons_filtered, target_audio_filtered)
-            
-            
-            
+
             f0_eval_overall["f0_corr"] += float(f0_corr) * bs
             f0_eval_overall["f0_rmse"] += float(f0_rmse) * bs
             f0_eval_overall["counter"] += bs
@@ -274,7 +268,7 @@ class EDMFACInference:
         }
 
         # Save metadata immediately here as well
-        metadata_path = os.path.join(output_dir, f"metadata_{'recon' if recon else 'conv'}.json")
+        metadata_path = os.path.join(output_dir, f"metadata_{convert_type}.json")
         with open(metadata_path, "w") as f:
             json.dump(results, f, indent=4)
 
@@ -317,7 +311,7 @@ def main():
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="eval_seen",
-        recon=True,
+        convert_type="reconstruction",
     )
 
     test_loader_recon = DataLoader(
@@ -330,28 +324,48 @@ def main():
         drop_last=False,
     )
 
-    test_dataset = EDM_MN_Test_Dataset(
+    test_dataset_both = EDM_MN_Test_Dataset(
         root_path=args.root_path,
         duration=1.0, #3.0,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
         split="eval_seen",
-        recon=False,
+        convert_type="conv_both",
     )
 
-    test_loader = DataLoader(
-        test_dataset,
+    test_loader_both = DataLoader(
+        test_dataset_both,
         shuffle=False,
         batch_size=args.bs, # args.batch_size
         num_workers=16, # args.num_workers
-        collate_fn=test_dataset.collate,
+        collate_fn=test_dataset_both.collate,
+        pin_memory=True,
+        drop_last=False,
+    )
+
+    test_dataset_adsr = EDM_MN_Test_Dataset(
+        root_path=args.root_path,
+        duration=1.0, #3.0,
+        sample_rate=args.sample_rate,
+        hop_length=args.hop_length,
+        split="eval_seen",
+        convert_type="conv_adsr",
+    )
+
+    test_loader_adsr = DataLoader(
+        test_dataset_adsr,
+        shuffle=False,
+        batch_size=args.bs, # args.batch_size
+        num_workers=16, # args.num_workers
+        collate_fn=test_dataset_adsr.collate,
         pin_memory=True,
         drop_last=False,
     )
 
     # Perform evaluation over loader and save metadata
-    # results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, recon=True)
-    results = model.evaluate_loader(test_loader, args.output_dir, recon=False)
+    # results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, convert_type="reconstruction")
+    # results_both = model.evaluate_loader(test_loader_both, args.output_dir, convert_type="conv_both")
+    results_adsr = model.evaluate_loader(test_loader_adsr, args.output_dir, convert_type="conv_adsr")
     print("Evaluation completed!")
 
 

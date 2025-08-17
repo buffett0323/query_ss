@@ -1092,13 +1092,13 @@ class EDM_MN_Test_Dataset(Dataset):
         sample_rate: int = 44100,
         hop_length: int = 512,
         split: str = "train",
-        recon: bool = False,
+        convert_type: str = "reconstruction",
     ):
         self.root_path = Path(os.path.join(root_path, split))
         self.duration = duration
         self.sample_rate = sample_rate
         self.hop_length = hop_length
-        self.recon = recon
+        self.convert_type = convert_type
 
         self.adsr_envelopes = {}
         with open(f'{self.root_path}/adsr_envelopes.json', 'r') as f:
@@ -1117,23 +1117,20 @@ class EDM_MN_Test_Dataset(Dataset):
 
 
     def _build_paired_index(self):
-        with open("info/remove_test_cases.txt", "r") as f:
-            remove_cases = f.readlines()
-            remove_cases = [line.strip() for line in remove_cases]
-        T = [75, 97, 126, 159, 245, 127, 137, 178, 52, 73, 138, 205, 215,
-             141, 230, 235, 158, 238, 66, 104, 171, 212, 65, 123, 170, 98,
-             151, 96, 111, 162, 189, 176, 150, 209, 201, 61, 202, 219, 53,
-             76, 78, 121, 165, 213, 232, 62, 192, 218, 106, 134]
+        T = [52, 53, 61, 62, 65, 66, 73, 75, 76, 78, 96, 97, 98, 104, 106,
+             111, 121, 123, 126, 127, 134, 137, 138, 141, 150, 151, 158, 159,
+             162, 165, 170, 171, 176, 178, 189, 192, 201, 202, 205, 209, 212,
+             213, 215, 218, 219, 230, 232, 235, 238, 245]
         t_amount, adsr_amount, c_amount = len(T), 10, 10
 
-        if self.recon:
+        if self.convert_type == "reconstruction":
             for c in range(c_amount):
                 for t in T:
                     for a in range(adsr_amount):
                         orig_path = f"{self.root_path}/T{t:03d}_ADSR{a:03d}_C{c:03d}.wav"
                         self.paired_data.append((orig_path, orig_path, orig_path))
 
-        else:
+        elif self.convert_type == "conv_both":
             for c1 in range(c_amount):
                 # for c2 in range(c_amount):
                 for t1 in T: #range(t_amount):
@@ -1154,6 +1151,36 @@ class EDM_MN_Test_Dataset(Dataset):
                                 ref_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c2:03d}.wav"
                                 gt_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c1:03d}.wav"
                                 self.paired_data.append((orig_path, ref_path, gt_path))
+
+
+        elif self.convert_type == "conv_adsr":
+            for c1 in range(c_amount):
+                # for c2 in range(c_amount):
+                for t1 in T: #range(t_amount):
+                    for t2 in T: #range(t_amount):
+                        for a1 in range(0,5):
+                            for a2 in range(5,10):
+                                if t1 == t2 or a1 == a2:
+                                    continue
+
+                        # for a1 in range(0, 5):
+                        #     for a2 in range(5, 10):
+                        #         if t1 == t2 or a1 == a2:
+                        #             continue
+
+                        #         if self.adsr_envelopes[f"ADSR{a1:03d}"]["type"] == "pluck" and self.adsr_envelopes[f"ADSR{a2:03d}"]["type"] == "pluck":
+                        #             continue
+                        #         if self.adsr_envelopes[f"ADSR{a1:03d}"]["type"] == "lead" and self.adsr_envelopes[f"ADSR{a2:03d}"]["type"] == "lead":
+                        #             continue
+
+                                # c2 = random.randint(0, c_amount-1)
+                                c2 = (c1+1) % c_amount
+                                orig_path = f"{self.root_path}/T{t1:03d}_ADSR{a1:03d}_C{c1:03d}.wav"
+                                ref_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c2:03d}.wav"
+                                gt_path = f"{self.root_path}/T{t1:03d}_ADSR{a2:03d}_C{c1:03d}.wav"
+                                self.paired_data.append((orig_path, ref_path, gt_path))
+
+
 
         print(f"Total data: {len(self.paired_data)}")
 

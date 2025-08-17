@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 python eval_proposed_seen.py \
+CUDA_VISIBLE_DEVICES=4 python eval_proposed_seen.py \
     --device cuda:0 \
     --bs 32 \
     --config configs/config_proposed_no_ca.yaml \
