@@ -359,16 +359,12 @@ class F0EvalLoss(nn.Module):
             else:
                 nan_paths.append(metadata[i]['gt_audio']['path'])
 
-        # Handle case where no valid metrics were computed
-        if not corr_vals:
-            # Provide fallback values instead of NaN
-            return torch.tensor(0.0, device=device), torch.tensor(0.0, device=device), high_rmse_paths, nan_paths
+        return corr_vals, rmse_vals, high_rmse_paths, nan_paths
+        # # Return mean values
+        # mean_corr = torch.stack(corr_vals).mean()
+        # mean_rmse = torch.stack(rmse_vals).mean()
 
-        # Return mean values
-        mean_corr = torch.stack(corr_vals).mean()
-        mean_rmse = torch.stack(rmse_vals).mean()
-
-        return mean_corr, mean_rmse, high_rmse_paths, nan_paths
+        # return mean_corr, mean_rmse, high_rmse_paths, nan_paths
 
     def get_metrics(self, x: AudioSignal, y: AudioSignal, metadata: List[Dict]):
         """Get detailed F0 metrics without computing loss.
@@ -382,27 +378,12 @@ class F0EvalLoss(nn.Module):
         x_audio = x.audio_data.squeeze()
         y_audio = y.audio_data.squeeze()
 
-        # Ensure we have 1D tensors
-        if x_audio.dim() > 1:
-            x_audio = x_audio.mean(dim=0)
-        if y_audio.dim() > 1:
-            y_audio = y_audio.mean(dim=0)
-
-        # Pad signals to ensure they have the same length
-        max_length = max(x_audio.shape[-1], y_audio.shape[-1])
-        x_audio = F.pad(x_audio, (0, max_length - x_audio.shape[-1]))
-        y_audio = F.pad(y_audio, (0, max_length - y_audio.shape[-1]))
-
-        # Add batch dimension for processing
-        x_batch = x_audio.unsqueeze(0)
-        y_batch = y_audio.unsqueeze(0)
-
         # Compute metrics
-        f0_corr, f0_rmse, high_rmse_paths, nan_paths = self._compute_f0_metrics_simple(x_batch, y_batch, device, metadata)
+        f0_corr, f0_rmse, high_rmse_paths, nan_paths = self._compute_f0_metrics_simple(x_audio, y_audio, device, metadata)
 
         return {
-            "f0_corr": f0_corr.item(),
-            "f0_rmse": f0_rmse.item(),
+            "f0_corr": f0_corr, #.item(),
+            "f0_rmse": f0_rmse, #.item(),
             "hop_ms": 1000 * self.hop_length / self.sr_out,
             "high_rmse_paths": high_rmse_paths,
             "nan_paths": nan_paths

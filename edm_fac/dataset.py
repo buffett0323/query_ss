@@ -1117,11 +1117,18 @@ class EDM_MN_Test_Dataset(Dataset):
 
 
     def _build_paired_index(self):
-        t_amount, adsr_amount, c_amount = 25, 20, 10
+        with open("info/remove_test_cases.txt", "r") as f:
+            remove_cases = f.readlines()
+            remove_cases = [line.strip() for line in remove_cases]
+        T = [75, 97, 126, 159, 245, 127, 137, 178, 52, 73, 138, 205, 215,
+             141, 230, 235, 158, 238, 66, 104, 171, 212, 65, 123, 170, 98,
+             151, 96, 111, 162, 189, 176, 150, 209, 201, 61, 202, 219, 53,
+             76, 78, 121, 165, 213, 232, 62, 192, 218, 106, 134]
+        t_amount, adsr_amount, c_amount = len(T), 10, 10
 
         if self.recon:
             for c in range(c_amount):
-                for t in range(t_amount):
+                for t in T:
                     for a in range(adsr_amount):
                         orig_path = f"{self.root_path}/T{t:03d}_ADSR{a:03d}_C{c:03d}.wav"
                         self.paired_data.append((orig_path, orig_path, orig_path))
@@ -1129,10 +1136,10 @@ class EDM_MN_Test_Dataset(Dataset):
         else:
             for c1 in range(c_amount):
                 # for c2 in range(c_amount):
-                for t1 in range(t_amount):
-                    for t2 in range(t_amount):
-                        for a1 in range(0, 10):
-                            for a2 in range(10, 20):
+                for t1 in T: #range(t_amount):
+                    for t2 in T: #range(t_amount):
+                        for a1 in range(0, 5):
+                            for a2 in range(5, 10):
                                 if t1 == t2 or a1 == a2:
                                     continue
 
@@ -1142,7 +1149,7 @@ class EDM_MN_Test_Dataset(Dataset):
                                     continue
 
                                 # c2 = random.randint(0, c_amount-1)
-                                c2 = c1 #(c1+1) % c_amount
+                                c2 = (c1+1) % c_amount
                                 orig_path = f"{self.root_path}/T{t1:03d}_ADSR{a1:03d}_C{c1:03d}.wav"
                                 ref_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c2:03d}.wav"
                                 gt_path = f"{self.root_path}/T{t2:03d}_ADSR{a2:03d}_C{c1:03d}.wav"
