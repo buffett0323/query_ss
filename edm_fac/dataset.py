@@ -1123,6 +1123,7 @@ class EDM_MN_Test_Dataset(Dataset):
              213, 215, 218, 219, 230, 232, 235, 238, 245]
         t_amount, adsr_amount, c_amount = len(T), 10, 10
 
+        # Baseline Competitor
         if self.convert_type == "reconstruction":
             for c in range(c_amount):
                 for t in T:
@@ -1130,6 +1131,7 @@ class EDM_MN_Test_Dataset(Dataset):
                         orig_path = f"{self.root_path}/T{t:03d}_ADSR{a:03d}_C{c:03d}.wav"
                         self.paired_data.append((orig_path, orig_path, orig_path))
 
+        # Baseline Competitor
         elif self.convert_type == "conv_both":
             for c1 in range(c_amount):
                 # for c2 in range(c_amount):
@@ -1181,7 +1183,8 @@ class EDM_MN_Test_Dataset(Dataset):
                                 self.paired_data.append((orig_path, ref_path, gt_path))
 
 
-
+        # random.shuffle(self.paired_data)
+        # self.paired_data = self.paired_data[:1000]
         print(f"Total data: {len(self.paired_data)}")
 
 

@@ -256,7 +256,7 @@ def main(args, accelerator):
 
     # Load checkpoint if exists
     if args.resume:
-        start_iter = load_checkpoint(args, device, -1, wrapper) or 0
+        start_iter = load_checkpoint(args, device, 400000, wrapper) or 0
         tracker.step = start_iter
         print(f"Resuming from iteration {start_iter}")
     else:
@@ -301,6 +301,8 @@ def main(args, accelerator):
 
             # Save Checkpoint
             if tracker.step % args.save_interval == 0:
+                if tracker.step == 400000:
+                    continue
                 save_checkpoint(args, tracker.step, wrapper)
 
             # Validation
@@ -481,9 +483,9 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
 
-    config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
+    # config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
     # config = yaml_config_hook("configs/config_proposed.yaml")
-    # config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
+    config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
 
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))

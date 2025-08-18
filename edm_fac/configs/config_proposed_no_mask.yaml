@@ -53,7 +53,7 @@ perturb_adsr: True #True
 rule_based_adsr_folding: False
 use_FiLM: False #True
 use_env_loss: False #True
-use_cross_attn: True # False
+use_cross_attn: False # False
 get_midi_only_from_onset: False #False
 mask_delay_frames: 5 # 58ms
 mask_prob: 0.5 # 0.7
