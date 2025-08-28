@@ -128,7 +128,7 @@ def main(args, accelerator):
     print(f"Average STFT Loss: {avg_stft_loss:.4f}")
     print(f"Average Envelope Loss: {avg_envelope_loss:.4f}")
 
-    with open(f"/mnt/gestalt/home/buffett/EDM_FAC_LOG/final_eval/eval_0826_no_mask_abl/eval_results_{convert_type}.txt", "a") as f:
+    with open(f"/home/buffett/nas_data/EDM_FAC_LOG/final_eval/eval_0826_no_ca/eval_results_{convert_type}.txt", "a") as f:
         f.write(f"Average STFT Loss: {avg_stft_loss:.4f}\n")
         f.write(f"Average Envelope Loss: {avg_envelope_loss:.4f}\n")
 
@@ -139,8 +139,8 @@ if __name__ == "__main__":
     parser.add_argument("--conv_type", default="both")
     parser.add_argument("--pair_cnts", default=10, type=int)
     parser.add_argument("--split", default="eval_seen_extreme_adsr") # eval_seen_normal_adsr
-    config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
-    # config = yaml_config_hook("configs/config_proposed_final.yaml")
+    # config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
+    config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
 
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))

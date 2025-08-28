@@ -1,5 +1,5 @@
-# path: /mnt/gestalt/home/buffett # NTU
-path: /home/buffett/nas_data # Sinica
+path: /mnt/gestalt/home/buffett # NTU
+# path: /home/buffett/nas_data # Sinica
 postfix: "0804_ablation"
 note: "Without ADSR Encoder"
 disentanglement: ["reconstruction", "conv_timbre"] # ["reconstruction"]
