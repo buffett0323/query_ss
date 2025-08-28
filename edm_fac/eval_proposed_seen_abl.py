@@ -342,7 +342,7 @@ def main():
     )
 
     # Perform evaluation over loader and save metadata
-    # results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, recon=True)
+    results_recon = model.evaluate_loader(test_loader_recon, args.output_dir, recon=True)
     results = model.evaluate_loader(test_loader, args.output_dir, recon=False)
     print("Evaluation completed!")
 

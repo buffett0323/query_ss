@@ -242,7 +242,7 @@ def main(args, accelerator):
         duration=args.duration,
         sample_rate=args.sample_rate,
         hop_length=args.hop_length,
-        split="evaluation",
+        split="eval_seen_normal_adsr",
         perturb_content=args.perturb_content,
         perturb_adsr=args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
@@ -256,7 +256,7 @@ def main(args, accelerator):
 
     # Load checkpoint if exists
     if args.resume:
-        start_iter = load_checkpoint(args, device, 400000, wrapper) or 0
+        start_iter = load_checkpoint(args, device, -1, wrapper) or 0
         tracker.step = start_iter
         print(f"Resuming from iteration {start_iter}")
     else:
@@ -287,9 +287,11 @@ def main(args, accelerator):
     train_step = tracker.log("Train", "value", history=False)(
         tracker.track("Train", args.num_iters, completed=tracker.step)(train_step)
     )
-    validate = tracker.track("Validation",
-                             int(args.num_iters / args.validate_interval),
-                             completed=int(tracker.step / args.validate_interval))(validate)
+    validate = tracker.log("Validation", "value", history=False)(
+        tracker.track("Validation",
+                    int(args.num_iters / args.validate_interval),
+                    completed=int(tracker.step / args.validate_interval))(validate)
+    )
     save_checkpoint = when(lambda: accelerator.local_rank == 0)(save_checkpoint)
     save_samples = when(lambda: accelerator.local_rank == 0)(save_samples)
 
@@ -301,8 +303,6 @@ def main(args, accelerator):
 
             # Save Checkpoint
             if tracker.step % args.save_interval == 0:
-                if tracker.step == 400000:
-                    continue
                 save_checkpoint(args, tracker.step, wrapper)
 
             # Validation
@@ -354,9 +354,9 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
     recons = AudioSignal(out["audio"], args.sample_rate)
 
     # Output Loss
-    output["gen/stft-loss"] = wrapper.stft_loss(recons, target_audio)
+    output[f"gen/stft-loss_{conv_type}"] = wrapper.stft_loss(recons, target_audio)
     output["gen/l1-loss"] = wrapper.l1_loss(recons, target_audio)
-    output[f"gen/mel-loss_{conv_type}"] = wrapper.mel_loss(recons, target_audio) # Add for convert type
+    output["gen/mel-loss"] = wrapper.mel_loss(recons, target_audio)
 
     # Envelope Loss
     if args.use_env_loss:
@@ -369,8 +369,12 @@ def validate_step(args, accelerator, batch, wrapper, conv_type):
     # timbre_gt = batch['ref_timbre'] if conv_type in ["timbre", "both"] else batch['orig_timbre']
 
     output["pred/content_loss"] = wrapper.content_loss(out["pred_pitch"], pitch_gt)
-    # output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_gt)
-    # output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_gt)
+
+    timbre_id_gt = batch['ref_timbre'] if conv_type in ["timbre", "both"] else batch['orig_timbre']
+    output["pred/timbre_acc"] = wrapper.supervised_acc(out["pred_timbre_id"], timbre_id_gt)
+
+    adsr_id_gt = batch['ref_adsr'] if conv_type in ["adsr", "both"] else batch['orig_adsr']
+    output["pred/adsr_acc"] = wrapper.supervised_acc(out["pred_adsr_id"], adsr_id_gt)
 
     return {k: v for k, v in sorted(output.items())}
 
@@ -482,10 +486,7 @@ def train_step_paired(args, accelerator, batch, wrapper, current_iter):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
-
-    config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
-    # config = yaml_config_hook("configs/config_proposed.yaml")
-    # config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
+    config = yaml_config_hook("configs/config_proposed_final.yaml")
 
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))

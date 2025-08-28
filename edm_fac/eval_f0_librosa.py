@@ -2,17 +2,17 @@ import librosa
 import numpy as np
 
 def f0_rmse(
-    pred_wav, 
-    gt_wav, 
-    sr=44100, 
+    pred_wav,
+    gt_wav,
+    sr=44100,
     fmin=50.0,
-    fmax=2000.0, 
-    frame_length=2048, 
+    fmax=2000.0,
+    frame_length=2048,
     hop_length=512
 ):
     """
     Compute F0 RMSE between predicted audio and ground truth audio using librosa.pyin.
-    
+
     Parameters:
     -----------
     pred_wav : str
@@ -27,7 +27,7 @@ def f0_rmse(
         Frame length for STFT
     hop_length : int
         Hop length for STFT
-    
+
     Returns:
     --------
     rmse : float
