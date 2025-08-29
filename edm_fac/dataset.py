@@ -1101,6 +1101,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
         get_midi_only_from_onset: bool = False,
         disentanglement_mode: List[str] = ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"],
         pair_cnts: int = 1,
+        reconstruction: bool = False,
     ):
         self.root_path = Path(os.path.join(root_path, split))
         self.midi_path = Path(os.path.join(midi_path, "evaluation", "midi"))
@@ -1119,7 +1120,8 @@ class EDM_MN_Val_Total_Dataset(Dataset):
         self.get_midi_only_from_onset = get_midi_only_from_onset
         self.disentanglement_mode = disentanglement_mode
         self.pair_cnts = pair_cnts
-
+        self.reconstruction = reconstruction
+        
         if self.get_midi_only_from_onset:
             print(f"Mask onset after: {self.mask_delay} seconds")
 
@@ -1142,80 +1144,94 @@ class EDM_MN_Val_Total_Dataset(Dataset):
 
 
     def _build_paired_index(self):
+        if self.reconstruction:
+            print("Reconstruction mode")
+            for counter, data in tqdm(enumerate(self.metadata), desc=f"Building paired index for Multi-Notes {self.split}"):
+                wav_path = data['file_path']
+                timbre_id = data['timbre_index']
+                adsr_id = data['adsr_index']
+                midi_id = data['midi_index']
 
-        # Build paired index for MN
-        for counter, data in tqdm(enumerate(self.metadata), desc=f"Building paired index for Multi-Notes {self.split}"):
-            wav_path = data['file_path']
-            timbre_id = data['timbre_index']
-            adsr_id = data['adsr_index']
-            midi_id = data['midi_index']
-
-            self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"] = counter
-            self.single_data.append((
-                timbre_id, midi_id, adsr_id, wav_path
-            ))
-
-        print(f"Total single data: {len(self.single_data)}")
-
-        # Pre-compute all possible reference matches efficiently
-        print("Pre-computing all possible reference matches...")
-        self.all_reference_matches = []
-
-        # Create lookup dictionaries for faster matching
-        timbre_groups = {}
-        content_groups = {}
-        adsr_groups = {}
-
-        for idx, (timbre_id, midi_id, adsr_id, _) in enumerate(self.single_data):
-            if timbre_id not in timbre_groups:
-                timbre_groups[timbre_id] = []
-            if midi_id not in content_groups:
-                content_groups[midi_id] = []
-            if adsr_id not in adsr_groups:
-                adsr_groups[adsr_id] = []
-
-            timbre_groups[timbre_id].append(idx)
-            content_groups[midi_id].append(idx)
-            adsr_groups[adsr_id].append(idx)
-
-        # Pre-compute valid reference matches for each data point
-        for idx, (timbre_id, midi_id, adsr_id, _) in enumerate(tqdm(self.single_data, desc="Computing reference matches")):
-            # Get all indices that have different timbre, content, and ADSR
-            invalid_indices = set()
-
-            # Add indices with same timbre
-            invalid_indices.update(timbre_groups[timbre_id])
-            # Add indices with same content
-            invalid_indices.update(content_groups[midi_id])
-            # Add indices with same ADSR
-            invalid_indices.update(adsr_groups[adsr_id])
-
-            # Valid references are all indices not in invalid_indices
-            valid_refs = [i for i in range(len(self.single_data)) if i not in invalid_indices]
-            self.all_reference_matches.append(valid_refs)
-
-        print(f"Pre-computed {len(self.all_reference_matches)} reference match lists")
-        print(f"Average possible matches per item: {sum(len(matches) for matches in self.all_reference_matches) / len(self.all_reference_matches):.1f}")
-
-        # Now create paired data using pre-computed matches
-        for _ in range(self.pair_cnts):
-            for idx, (timbre_id, midi_id, adsr_id, wav_path) in enumerate(self.single_data):
-                # Get a random reference from pre-computed valid matches
-                ref_idx = random.choice(self.all_reference_matches[idx])
-                ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.single_data[ref_idx]
-
+                self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"] = counter
                 self.paired_data.append((
-                    timbre_id, midi_id, adsr_id, wav_path,
-                    ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path
+                    timbre_id, midi_id, adsr_id, wav_path
                 ))
 
-        print(f"Total paired data: {len(self.paired_data)}")
+        else:
+            # Build paired index for MN
+            for counter, data in tqdm(enumerate(self.metadata), desc=f"Building paired index for Multi-Notes {self.split}"):
+                wav_path = data['file_path']
+                timbre_id = data['timbre_index']
+                adsr_id = data['adsr_index']
+                midi_id = data['midi_index']
 
-        # # Write paired data to txt file for reference
-        # with open('/home/buffett/nas_data/EDM_FAC_LOG/eval_paired_data.txt', 'w') as f:
-        #     for pair in self.paired_data:
-        #         timbre_id, midi_id, adsr_id, wav_path, ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = pair
-        #         f.write(f"{wav_path} {ref_wav_path}\n")
+                self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"] = counter
+                self.single_data.append((
+                    timbre_id, midi_id, adsr_id, wav_path
+                ))
+
+            print(f"Total single data: {len(self.single_data)}")
+
+            # Pre-compute all possible reference matches efficiently
+            print("Pre-computing all possible reference matches...")
+            self.all_reference_matches = []
+
+            # Create lookup dictionaries for faster matching
+            timbre_groups = {}
+            content_groups = {}
+            adsr_groups = {}
+
+            for idx, (timbre_id, midi_id, adsr_id, _) in enumerate(self.single_data):
+                if timbre_id not in timbre_groups:
+                    timbre_groups[timbre_id] = []
+                if midi_id not in content_groups:
+                    content_groups[midi_id] = []
+                if adsr_id not in adsr_groups:
+                    adsr_groups[adsr_id] = []
+
+                timbre_groups[timbre_id].append(idx)
+                content_groups[midi_id].append(idx)
+                adsr_groups[adsr_id].append(idx)
+
+            # Pre-compute valid reference matches for each data point
+            for idx, (timbre_id, midi_id, adsr_id, _) in enumerate(tqdm(self.single_data, desc="Computing reference matches")):
+                # Get all indices that have different timbre, content, and ADSR
+                invalid_indices = set()
+
+                # Add indices with same timbre
+                invalid_indices.update(timbre_groups[timbre_id])
+                # Add indices with same content
+                invalid_indices.update(content_groups[midi_id])
+                # Add indices with same ADSR
+                invalid_indices.update(adsr_groups[adsr_id])
+
+                # Valid references are all indices not in invalid_indices
+                valid_refs = [i for i in range(len(self.single_data)) if i not in invalid_indices]
+                self.all_reference_matches.append(valid_refs)
+                
+
+            print(f"Pre-computed {len(self.all_reference_matches)} reference match lists")
+            print(f"Average possible matches per item: {sum(len(matches) for matches in self.all_reference_matches) / len(self.all_reference_matches):.1f}")
+
+            # Now create paired data using pre-computed matches
+            for i in range(self.pair_cnts):
+                for idx, (timbre_id, midi_id, adsr_id, wav_path) in enumerate(self.single_data):
+                    # Get a random reference from pre-computed valid matches
+                    ref_idx = random.choice(self.all_reference_matches[idx])
+                    ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.single_data[ref_idx]
+
+                    self.paired_data.append((
+                        timbre_id, midi_id, adsr_id, wav_path,
+                        ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path
+                    ))
+
+            print(f"Total paired data: {len(self.paired_data)}")
+
+            # # Write paired data to txt file for reference
+            # with open('/home/buffett/nas_data/EDM_FAC_LOG/eval_paired_data.txt', 'w') as f:
+            #     for pair in self.paired_data:
+            #         timbre_id, midi_id, adsr_id, wav_path, ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = pair
+            #         f.write(f"{wav_path} {ref_wav_path}\n")
 
 
 
@@ -1235,66 +1251,87 @@ class EDM_MN_Val_Total_Dataset(Dataset):
 
 
     def __getitem__(self, idx):
-        # 1. Original: T5, C6, ADSR5
-        # timbre_id, midi_id, adsr_id, wav_path  = self.paired_data[idx]
-        # orig_audio = self._load_audio(wav_path, 0.0)
-        # ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
-        # ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.paired_data[ref_idx]
-        # ref_audio = self._load_audio(ref_wav_path, 0.0)
-        timbre_id, midi_id, adsr_id, wav_path, ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.paired_data[idx]
-        orig_audio = self._load_audio(wav_path, 0.0)
-        ref_audio = self._load_audio(ref_wav_path, 0.0)
-
-
-        target_timbre_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
-        target_adsr_idx = self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
-        target_both_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
-
-        # target_content = self._load_audio(self.paired_data[target_content_idx][3], ref_offset_pick)
-        target_timbre = self._load_audio(self.paired_data[target_timbre_idx][3], 0.0)
-        target_adsr = self._load_audio(self.paired_data[target_adsr_idx][3], 0.0)
-        target_both = self._load_audio(self.paired_data[target_both_idx][3], 0.0)
-
-        return {
-            'orig_audio': orig_audio,
-            'ref_audio': ref_audio,
-            'target_timbre': target_timbre,
-            'target_adsr': target_adsr,
-            'target_both': target_both,
-
-            'metadata': {
-                'orig_audio': {
-                    'timbre_id': timbre_id,
-                    'content_id': midi_id,
-                    'adsr_id': adsr_id,
-                    'path': str(wav_path)
-                },
-                'ref_audio': {
-                    'timbre_id': ref_timbre_id,
-                    'content_id': ref_midi_id,
-                    'adsr_id': ref_adsr_id,
-                    'path': str(ref_wav_path),
-                },
-                'target_timbre': {
-                    'timbre_id': self.paired_data[target_timbre_idx][0],
-                    'content_id': self.paired_data[target_timbre_idx][1],
-                    'adsr_id': self.paired_data[target_timbre_idx][2],
-                    'path': str(self.paired_data[target_timbre_idx][3]),
-                },
-                'target_adsr': {
-                    'timbre_id': self.paired_data[target_adsr_idx][0],
-                    'content_id': self.paired_data[target_adsr_idx][1],
-                    'adsr_id': self.paired_data[target_adsr_idx][2],
-                    'path': str(self.paired_data[target_adsr_idx][3]),
-                },
-                'target_both': {
-                    'timbre_id': self.paired_data[target_both_idx][0],
-                    'content_id': self.paired_data[target_both_idx][1],
-                    'adsr_id': self.paired_data[target_both_idx][2],
-                    'path': str(self.paired_data[target_both_idx][3]),
-                },
+        if self.reconstruction:
+            timbre_id, midi_id, adsr_id, wav_path = self.paired_data[idx]
+            orig_audio = self._load_audio(wav_path, 0.0)
+            return {
+                'orig_audio': orig_audio,
+                'ref_audio': orig_audio,
+                'target_timbre': orig_audio,
+                'target_adsr': orig_audio,
+                'target_both': orig_audio,
+                
+                'metadata': {
+                    'orig_audio': {
+                        'timbre_id': timbre_id,
+                        'content_id': midi_id,
+                        'adsr_id': adsr_id,
+                        'path': str(wav_path)
+                    },
+                }
             }
-        }
+        
+        else:
+            # 1. Original: T5, C6, ADSR5
+            # timbre_id, midi_id, adsr_id, wav_path  = self.paired_data[idx]
+            # orig_audio = self._load_audio(wav_path, 0.0)
+            # ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
+            # ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.paired_data[ref_idx]
+            # ref_audio = self._load_audio(ref_wav_path, 0.0)
+            timbre_id, midi_id, adsr_id, wav_path, ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.paired_data[idx]
+            orig_audio = self._load_audio(wav_path, 0.0)
+            ref_audio = self._load_audio(ref_wav_path, 0.0)
+
+
+            target_timbre_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
+            target_adsr_idx = self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
+            target_both_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
+
+            # target_content = self._load_audio(self.paired_data[target_content_idx][3], ref_offset_pick)
+            target_timbre = self._load_audio(self.paired_data[target_timbre_idx][3], 0.0)
+            target_adsr = self._load_audio(self.paired_data[target_adsr_idx][3], 0.0)
+            target_both = self._load_audio(self.paired_data[target_both_idx][3], 0.0)
+
+            return {
+                'orig_audio': orig_audio,
+                'ref_audio': ref_audio,
+                'target_timbre': target_timbre,
+                'target_adsr': target_adsr,
+                'target_both': target_both,
+
+                'metadata': {
+                    'orig_audio': {
+                        'timbre_id': timbre_id,
+                        'content_id': midi_id,
+                        'adsr_id': adsr_id,
+                        'path': str(wav_path)
+                    },
+                    'ref_audio': {
+                        'timbre_id': ref_timbre_id,
+                        'content_id': ref_midi_id,
+                        'adsr_id': ref_adsr_id,
+                        'path': str(ref_wav_path),
+                    },
+                    'target_timbre': {
+                        'timbre_id': self.paired_data[target_timbre_idx][0],
+                        'content_id': self.paired_data[target_timbre_idx][1],
+                        'adsr_id': self.paired_data[target_timbre_idx][2],
+                        'path': str(self.paired_data[target_timbre_idx][3]),
+                    },
+                    'target_adsr': {
+                        'timbre_id': self.paired_data[target_adsr_idx][0],
+                        'content_id': self.paired_data[target_adsr_idx][1],
+                        'adsr_id': self.paired_data[target_adsr_idx][2],
+                        'path': str(self.paired_data[target_adsr_idx][3]),
+                    },
+                    'target_both': {
+                        'timbre_id': self.paired_data[target_both_idx][0],
+                        'content_id': self.paired_data[target_both_idx][1],
+                        'adsr_id': self.paired_data[target_both_idx][2],
+                        'path': str(self.paired_data[target_both_idx][3]),
+                    },
+                }
+            }
 
     @staticmethod
     def collate(batch: List[Dict]) -> Dict:

@@ -3,6 +3,8 @@ import warnings
 import argparse
 import os
 import torch
+import soundfile as sf
+import json
 warnings.simplefilter('ignore')
 
 from modules.commons import *
@@ -64,19 +66,26 @@ class Wrapper:
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
         self.envelope_loss = LogRMSEnvelopeLoss().to(accelerator.device)
-
+        
         # Val dataset
         self.val_paired_data = val_paired_data
+
+
+def load_audio(path: str) -> AudioSignal:
+    signal, _ = sf.read(
+        path,
+        start=0,
+        frames=int(3*44100)
+    )
+    return AudioSignal(signal, 44100)
 
 
 def main(args, accelerator):
     device = accelerator.device
     util.seed(args.seed)
     print(f"Using device: {device}")
-
-    convert_type = args.conv_type
-    print(f"Convert type: {convert_type}")
-
+    print(f"Convert type: {args.conv_type}")
+    
     val_paired_data = EDM_MN_Val_Total_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
@@ -91,7 +100,7 @@ def main(args, accelerator):
         mask_delay_frames=args.mask_delay_frames,
         disentanglement_mode=args.disentanglement,
         pair_cnts=args.pair_cnts,
-        reconstruction=True if convert_type == "reconstruction" else False,
+        reconstruction=True if args.conv_type == "reconstruction" else False,
     )
 
     val_paired_loader = accelerator.prepare_dataloader(
@@ -101,66 +110,64 @@ def main(args, accelerator):
         batch_size=args.batch_size,
         collate_fn=val_paired_data.collate,
     )
+
     wrapper = Wrapper(args, accelerator, val_paired_data)
     load_checkpoint(args, device, args.iter, wrapper)
-
-    # Start iteration
-    total_stft_loss = []
-    total_envelope_loss = []
+    
+    # Losses
+    stft_loss_each, envelope_loss_each = [], []
+    loss_names = []
+    
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
+        target_audio = batch[f'target_{args.conv_type}']
+        metadata = batch['metadata']
         
-        if convert_type == "reconstruction":
-            target_audio = batch['orig_audio']
-            with torch.no_grad():
-                out = wrapper.generator.conversion(
-                    orig_audio=batch['orig_audio'].audio_data,
-                    ref_audio=None,
-                    convert_type=convert_type,
-                )
+        # Load proposed model
+        with torch.no_grad():
+            out = wrapper.generator.conversion(
+                orig_audio=batch['orig_audio'].audio_data,
+                ref_audio=batch['ref_audio'].audio_data,
+                convert_type=args.conv_type,
+            )
 
-            recons = AudioSignal(out["audio"], args.sample_rate)
-            stft_loss = wrapper.stft_loss(recons, target_audio)
-            envelope_loss = wrapper.envelope_loss(recons, target_audio)
-            total_stft_loss.append(stft_loss)
-            total_envelope_loss.append(envelope_loss)
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
+        recons = AudioSignal(out["audio"], args.sample_rate)
         
-        else:
-            target_audio = batch[f'target_{convert_type}']
-            with torch.no_grad():
-                out = wrapper.generator.conversion(
-                    orig_audio=batch['orig_audio'].audio_data,
-                    ref_audio=batch['ref_audio'].audio_data,
-                    convert_type=convert_type,
-                )
-
-            recons = AudioSignal(out["audio"], args.sample_rate)
-            stft_loss = wrapper.stft_loss(recons, target_audio)
-            envelope_loss = wrapper.envelope_loss(recons, target_audio)
-            total_stft_loss.append(stft_loss)
-            total_envelope_loss.append(envelope_loss)
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
-
-    # Summary
-    avg_stft_loss = sum(total_stft_loss) / len(total_stft_loss)
-    avg_envelope_loss = sum(total_envelope_loss) / len(total_envelope_loss)
-    print(f"Average STFT Loss: {avg_stft_loss:.4f}")
-    print(f"Average Envelope Loss: {avg_envelope_loss:.4f}")
-
-    with open(f"/home/buffett/nas_data/EDM_FAC_LOG/final_eval/eval_0826_no_ca/eval_results_{convert_type}.txt", "a") as f:
-        f.write(f"Average STFT Loss: {avg_stft_loss:.4f}\n")
-        f.write(f"Average Envelope Loss: {avg_envelope_loss:.4f}\n")
+        for j in range(args.batch_size):
+            stft_loss = wrapper.stft_loss(recons[j], target_audio[j])
+            envelope_loss = wrapper.envelope_loss(recons[j], target_audio[j])
+            stft_loss_each.append(stft_loss)
+            envelope_loss_each.append(envelope_loss)
+            loss_names.append(metadata[j])
+        
+    
+    # print(stft_loss_each[:5])
+    # print(envelope_loss_each[:5])
+    # print(loss_names[:5])
+    
+    # Save the metadata
+    total_metadata = []
+    for st, env, name in zip(stft_loss_each, envelope_loss_each, loss_names):
+        total_metadata.append({
+            "stft_loss": st.item() if hasattr(st, 'item') else float(st),
+            "envelope_loss": env.item() if hasattr(env, 'item') else float(env),
+            "name": name,
+        })
+        
+    with open(os.path.join(args.save_json_dir, "metadata.json"), "w") as f:
+        json.dump(total_metadata, f)
+    
+    
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
-    parser.add_argument("--conv_type", default="both")
-    parser.add_argument("--pair_cnts", default=10, type=int)
-    parser.add_argument("--iter", default=-1, type=int)
+    parser.add_argument("--iter", default=400000, type=int)
+    parser.add_argument("--pair_cnts", default=1, type=int)
     parser.add_argument("--split", default="eval_seen_extreme_adsr") # eval_seen_normal_adsr
-    # config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
+    parser.add_argument("--conv_type", default="both")
+    parser.add_argument("--save_json_dir", default="/home/buffett/nas_data/EDM_FAC_LOG/demo_website")
     config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
 
     for k, v in config.items():
