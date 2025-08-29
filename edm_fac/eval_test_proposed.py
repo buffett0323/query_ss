@@ -109,7 +109,7 @@ def main(args, accelerator):
     total_envelope_loss = []
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
-        
+
         if convert_type == "reconstruction":
             target_audio = batch['orig_audio']
             with torch.no_grad():
@@ -125,7 +125,7 @@ def main(args, accelerator):
             total_stft_loss.append(stft_loss)
             total_envelope_loss.append(envelope_loss)
             print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
-        
+
         else:
             target_audio = batch[f'target_{convert_type}']
             with torch.no_grad():

@@ -66,7 +66,7 @@ class Wrapper:
         # Losses
         self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
         self.envelope_loss = LogRMSEnvelopeLoss().to(accelerator.device)
-        
+
         # Val dataset
         self.val_paired_data = val_paired_data
 
@@ -85,7 +85,7 @@ def main(args, accelerator):
     util.seed(args.seed)
     print(f"Using device: {device}")
     print(f"Convert type: {args.conv_type}")
-    
+
     val_paired_data = EDM_MN_Val_Total_Dataset(
         root_path=args.root_path,
         midi_path=args.midi_path,
@@ -113,16 +113,16 @@ def main(args, accelerator):
 
     wrapper = Wrapper(args, accelerator, val_paired_data)
     load_checkpoint(args, device, args.iter, wrapper)
-    
+
     # Losses
     stft_loss_each, envelope_loss_each = [], []
     loss_names = []
-    
+
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
         target_audio = batch[f'target_{args.conv_type}']
         metadata = batch['metadata']
-        
+
         # Load proposed model
         with torch.no_grad():
             out = wrapper.generator.conversion(
@@ -132,19 +132,19 @@ def main(args, accelerator):
             )
 
         recons = AudioSignal(out["audio"], args.sample_rate)
-        
+
         for j in range(args.batch_size):
             stft_loss = wrapper.stft_loss(recons[j], target_audio[j])
             envelope_loss = wrapper.envelope_loss(recons[j], target_audio[j])
             stft_loss_each.append(stft_loss)
             envelope_loss_each.append(envelope_loss)
             loss_names.append(metadata[j])
-        
-    
+
+
     # print(stft_loss_each[:5])
     # print(envelope_loss_each[:5])
     # print(loss_names[:5])
-    
+
     # Save the metadata
     total_metadata = []
     for st, env, name in zip(stft_loss_each, envelope_loss_each, loss_names):
@@ -153,11 +153,11 @@ def main(args, accelerator):
             "envelope_loss": env.item() if hasattr(env, 'item') else float(env),
             "name": name,
         })
-        
+
     with open(os.path.join(args.save_json_dir, "metadata.json"), "w") as f:
         json.dump(total_metadata, f)
-    
-    
+
+
 
 
 

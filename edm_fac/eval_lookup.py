@@ -2,7 +2,7 @@ import json
 import os
 
 path = "/home/buffett/nas_data/EDM_FAC_LOG/demo_website"
-amount = 20
+amount = 32
 
 
 with open(os.path.join(path, "metadata.json"), "r") as f:

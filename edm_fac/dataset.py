@@ -1121,7 +1121,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
         self.disentanglement_mode = disentanglement_mode
         self.pair_cnts = pair_cnts
         self.reconstruction = reconstruction
-        
+
         if self.get_midi_only_from_onset:
             print(f"Mask onset after: {self.mask_delay} seconds")
 
@@ -1208,7 +1208,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
                 # Valid references are all indices not in invalid_indices
                 valid_refs = [i for i in range(len(self.single_data)) if i not in invalid_indices]
                 self.all_reference_matches.append(valid_refs)
-                
+
 
             print(f"Pre-computed {len(self.all_reference_matches)} reference match lists")
             print(f"Average possible matches per item: {sum(len(matches) for matches in self.all_reference_matches) / len(self.all_reference_matches):.1f}")
@@ -1260,7 +1260,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
                 'target_timbre': orig_audio,
                 'target_adsr': orig_audio,
                 'target_both': orig_audio,
-                
+
                 'metadata': {
                     'orig_audio': {
                         'timbre_id': timbre_id,
@@ -1270,7 +1270,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
                     },
                 }
             }
-        
+
         else:
             # 1. Original: T5, C6, ADSR5
             # timbre_id, midi_id, adsr_id, wav_path  = self.paired_data[idx]
