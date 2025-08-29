@@ -75,6 +75,7 @@ def main(args, accelerator):
     print(f"Using device: {device}")
 
     convert_type = args.conv_type
+    print(f"Convert type: {convert_type}")
 
     val_paired_data = EDM_MN_Val_Total_Dataset(
         root_path=args.root_path,
@@ -89,7 +90,8 @@ def main(args, accelerator):
         get_midi_only_from_onset=args.get_midi_only_from_onset,
         mask_delay_frames=args.mask_delay_frames,
         disentanglement_mode=args.disentanglement,
-        pair_cnts=args.pair_cnts
+        pair_cnts=args.pair_cnts,
+        reconstruction=True if convert_type == "reconstruction" else False,
     )
 
     val_paired_loader = accelerator.prepare_dataloader(
@@ -100,27 +102,45 @@ def main(args, accelerator):
         collate_fn=val_paired_data.collate,
     )
     wrapper = Wrapper(args, accelerator, val_paired_data)
-    load_checkpoint(args, device, -1, wrapper)
+    load_checkpoint(args, device, args.iter, wrapper)
 
     # Start iteration
     total_stft_loss = []
     total_envelope_loss = []
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
-        target_audio = batch[f'target_{convert_type}']
-        with torch.no_grad():
-            out = wrapper.generator.conversion(
-                orig_audio=batch['orig_audio'].audio_data,
-                ref_audio=batch['ref_audio'].audio_data,
-                convert_type=convert_type,
-            )
 
-        recons = AudioSignal(out["audio"], args.sample_rate)
-        stft_loss = wrapper.stft_loss(recons, target_audio)
-        envelope_loss = wrapper.envelope_loss(recons, target_audio)
-        total_stft_loss.append(stft_loss)
-        total_envelope_loss.append(envelope_loss)
-        print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
+        if convert_type == "reconstruction":
+            target_audio = batch['orig_audio']
+            with torch.no_grad():
+                out = wrapper.generator.conversion(
+                    orig_audio=batch['orig_audio'].audio_data,
+                    ref_audio=None,
+                    convert_type=convert_type,
+                )
+
+            recons = AudioSignal(out["audio"], args.sample_rate)
+            stft_loss = wrapper.stft_loss(recons, target_audio)
+            envelope_loss = wrapper.envelope_loss(recons, target_audio)
+            total_stft_loss.append(stft_loss)
+            total_envelope_loss.append(envelope_loss)
+            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
+
+        else:
+            target_audio = batch[f'target_{convert_type}']
+            with torch.no_grad():
+                out = wrapper.generator.conversion(
+                    orig_audio=batch['orig_audio'].audio_data,
+                    ref_audio=batch['ref_audio'].audio_data,
+                    convert_type=convert_type,
+                )
+
+            recons = AudioSignal(out["audio"], args.sample_rate)
+            stft_loss = wrapper.stft_loss(recons, target_audio)
+            envelope_loss = wrapper.envelope_loss(recons, target_audio)
+            total_stft_loss.append(stft_loss)
+            total_envelope_loss.append(envelope_loss)
+            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
 
     # Summary
     avg_stft_loss = sum(total_stft_loss) / len(total_stft_loss)
@@ -138,6 +158,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
     parser.add_argument("--conv_type", default="both")
     parser.add_argument("--pair_cnts", default=10, type=int)
+    parser.add_argument("--iter", default=-1, type=int)
     parser.add_argument("--split", default="eval_seen_extreme_adsr") # eval_seen_normal_adsr
     config = yaml_config_hook("configs/config_mn_ablation.yaml")
 
