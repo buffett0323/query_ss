@@ -3,8 +3,6 @@ import warnings
 import argparse
 import os
 import torch
-import json
-import random
 import numpy as np
 import torch
 import soundfile as sf
@@ -43,62 +41,32 @@ class EDM_MN_Val_Total_Dataset(Dataset):
         midi_path: str,
         duration: float = 1.0,
         sample_rate: int = 44100,
-        hop_length: int = 512,
-        min_note: int = 21,
-        max_note: int = 108,
-        mask_delay_frames: int = 3, # About 3 frames
         split: str = "train",
-        perturb_content: bool = True,
-        perturb_adsr: bool = True,
-        perturb_timbre: bool = True,
-        get_midi_only_from_onset: bool = False,
-        disentanglement_mode: List[str] = ["reconstruction", "conv_both", "conv_adsr", "conv_timbre"],
-        pair_cnts: int = 1,
         reconstruction: bool = False,
     ):
         self.root_path = Path(os.path.join(root_path, split))
         self.midi_path = Path(os.path.join(midi_path, "evaluation", "midi"))
         self.duration = duration
         self.sample_rate = sample_rate
-        self.hop_length = hop_length
-        self.min_note = min_note
-        self.max_note = max_note
-        self.mask_delay_frames = mask_delay_frames
-        self.mask_delay = round(self.mask_delay_frames * hop_length / sample_rate, 4)
-        self.n_notes = max_note - min_note + 1
         self.split = split
-        self.perturb_content = perturb_content
-        self.perturb_adsr = perturb_adsr
-        self.perturb_timbre = perturb_timbre
-        self.get_midi_only_from_onset = get_midi_only_from_onset
-        self.disentanglement_mode = disentanglement_mode
-        self.pair_cnts = pair_cnts
         self.reconstruction = reconstruction
-
-        if self.get_midi_only_from_onset:
-            print(f"Mask onset after: {self.mask_delay} seconds")
-
-
-
-        # Pre-load metadata
-        with open(f'{self.root_path}/metadata.json', 'r') as f:
-            self.metadata = json.load(f)
-            # Shuffle metadata
-            random.shuffle(self.metadata)
-
-        # Create ID mappings for all three levels
-        self.ids_to_item_idx = {}
 
         # Storing names
         self.paired_data = []
-        self.single_data = []
         self._build_paired_index()
 
 
 
     def _build_paired_index(self):
         if self.reconstruction:
-            self.paired_data = []
+            with open("info/test_cases.txt", "r") as f:
+                for line in f:
+                    if line.startswith("Original:") or line.startswith("Reference:") or line.startswith("Target:"):
+                        self.paired_data.append(
+                            os.path.join(self.root_path, line.strip().split()[-1] + ".wav")
+                        )
+                print(f"Paired data: {len(self.paired_data)}")
+
         else:
             with open("info/test_cases.txt", "r") as f:
                 origs, refs, targets = [], [], []
@@ -115,7 +83,11 @@ class EDM_MN_Val_Total_Dataset(Dataset):
                         targets.append(
                             os.path.join(self.root_path, line.strip().split()[-1] + ".wav")
                         )
-                self.paired_data = list(zip(origs, refs, targets))
+
+                for org, rf, tg in zip(origs, refs, targets):
+                    self.paired_data.append((org, rf, tg))
+                print(f"Paired data: {len(self.paired_data)}")
+
 
     def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
         signal, _ = sf.read(
@@ -133,79 +105,25 @@ class EDM_MN_Val_Total_Dataset(Dataset):
 
     def __getitem__(self, idx):
         if self.reconstruction:
-            timbre_id, midi_id, adsr_id, wav_path = self.paired_data[idx]
+            wav_path = self.paired_data[idx]
             orig_audio = self._load_audio(wav_path, 0.0)
+
             return {
                 'orig_audio': orig_audio,
                 'ref_audio': orig_audio,
-                'target_timbre': orig_audio,
-                'target_adsr': orig_audio,
-                'target_both': orig_audio,
-
-                'metadata': {
-                    'orig_audio': {
-                        'timbre_id': timbre_id,
-                        'content_id': midi_id,
-                        'adsr_id': adsr_id,
-                        'path': str(wav_path)
-                    },
-                }
+                'target_audio': orig_audio
             }
 
         else:
-            timbre_id, midi_id, adsr_id, wav_path, ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.paired_data[idx]
-            orig_audio = self._load_audio(wav_path, 0.0)
-            ref_audio = self._load_audio(ref_wav_path, 0.0)
-
-
-            target_timbre_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
-            target_adsr_idx = self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
-            target_both_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{ref_adsr_id:03d}_C{midi_id:03d}"]
-
-            # target_content = self._load_audio(self.paired_data[target_content_idx][3], ref_offset_pick)
-            target_timbre = self._load_audio(self.paired_data[target_timbre_idx][3], 0.0)
-            target_adsr = self._load_audio(self.paired_data[target_adsr_idx][3], 0.0)
-            target_both = self._load_audio(self.paired_data[target_both_idx][3], 0.0)
+            org, rf, tg = self.paired_data[idx]
+            orig_audio = self._load_audio(org, 0.0)
+            ref_audio = self._load_audio(rf, 0.0)
+            target_audio = self._load_audio(tg, 0.0)
 
             return {
                 'orig_audio': orig_audio,
                 'ref_audio': ref_audio,
-                'target_timbre': target_timbre,
-                'target_adsr': target_adsr,
-                'target_both': target_both,
-
-                'metadata': {
-                    'orig_audio': {
-                        'timbre_id': timbre_id,
-                        'content_id': midi_id,
-                        'adsr_id': adsr_id,
-                        'path': str(wav_path)
-                    },
-                    'ref_audio': {
-                        'timbre_id': ref_timbre_id,
-                        'content_id': ref_midi_id,
-                        'adsr_id': ref_adsr_id,
-                        'path': str(ref_wav_path),
-                    },
-                    'target_timbre': {
-                        'timbre_id': self.paired_data[target_timbre_idx][0],
-                        'content_id': self.paired_data[target_timbre_idx][1],
-                        'adsr_id': self.paired_data[target_timbre_idx][2],
-                        'path': str(self.paired_data[target_timbre_idx][3]),
-                    },
-                    'target_adsr': {
-                        'timbre_id': self.paired_data[target_adsr_idx][0],
-                        'content_id': self.paired_data[target_adsr_idx][1],
-                        'adsr_id': self.paired_data[target_adsr_idx][2],
-                        'path': str(self.paired_data[target_adsr_idx][3]),
-                    },
-                    'target_both': {
-                        'timbre_id': self.paired_data[target_both_idx][0],
-                        'content_id': self.paired_data[target_both_idx][1],
-                        'adsr_id': self.paired_data[target_both_idx][2],
-                        'path': str(self.paired_data[target_both_idx][3]),
-                    },
-                }
+                'target_audio': target_audio
             }
 
     @staticmethod
@@ -214,10 +132,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
         return {
             'orig_audio': AudioSignal.batch([item['orig_audio'] for item in batch]),
             'ref_audio': AudioSignal.batch([item['ref_audio'] for item in batch]),
-            'target_timbre': AudioSignal.batch([item['target_timbre'] for item in batch]),
-            'target_adsr': AudioSignal.batch([item['target_adsr'] for item in batch]),
-            'target_both': AudioSignal.batch([item['target_both'] for item in batch]),
-            'metadata': [item['metadata'] for item in batch]
+            'target_audio': AudioSignal.batch([item['target_audio'] for item in batch]),
         }
 
 
@@ -279,15 +194,7 @@ def main(args, accelerator):
         midi_path=args.midi_path,
         duration=3, #args.duration,
         sample_rate=args.sample_rate,
-        hop_length=args.hop_length,
         split=args.split,
-        perturb_content=args.perturb_content,
-        perturb_adsr=args.perturb_adsr,
-        perturb_timbre=args.perturb_timbre,
-        get_midi_only_from_onset=args.get_midi_only_from_onset,
-        mask_delay_frames=args.mask_delay_frames,
-        disentanglement_mode=args.disentanglement,
-        pair_cnts=args.pair_cnts,
         reconstruction=True if convert_type == "reconstruction" else False,
     )
 
@@ -302,8 +209,7 @@ def main(args, accelerator):
     load_checkpoint(args, device, args.iter, wrapper)
 
     # Start iteration
-    total_stft_loss = []
-    total_envelope_loss = []
+    counter = 1
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
 
@@ -316,15 +222,23 @@ def main(args, accelerator):
                     convert_type=convert_type,
                 )
 
-            recons = AudioSignal(out["audio"], args.sample_rate)
-            stft_loss = wrapper.stft_loss(recons, target_audio)
-            envelope_loss = wrapper.envelope_loss(recons, target_audio)
-            total_stft_loss.append(stft_loss)
-            total_envelope_loss.append(envelope_loss)
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
+            orig_audio = AudioSignal(batch['orig_audio'].audio_data.cpu(), args.sample_rate)
+            recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
+            recons_gt = AudioSignal(target_audio.audio_data.cpu(), args.sample_rate)
+
+
+            for j in range(args.batch_size):
+                recon_path = os.path.join(args.audio_save_path, f'{counter:02d}_recon_{args.model_name}.wav')
+                recon_gt_path = os.path.join(args.audio_save_path, f'{counter:02d}_gt.wav')
+                orig_path = os.path.join(args.audio_save_path, f'{counter:02d}_orig.wav')
+
+                recons[j].write(recon_path)
+                recons_gt[j].write(recon_gt_path)
+                orig_audio[j].write(orig_path)
+                counter += 1
 
         else:
-            target_audio = batch[f'target_{convert_type}']
+            target_audio = batch['target_audio']
             with torch.no_grad():
                 out = wrapper.generator.conversion(
                     orig_audio=batch['orig_audio'].audio_data,
@@ -332,31 +246,39 @@ def main(args, accelerator):
                     convert_type=convert_type,
                 )
 
-            recons = AudioSignal(out["audio"], args.sample_rate)
-            stft_loss = wrapper.stft_loss(recons, target_audio)
-            envelope_loss = wrapper.envelope_loss(recons, target_audio)
-            total_stft_loss.append(stft_loss)
-            total_envelope_loss.append(envelope_loss)
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
+            orig_audio = AudioSignal(batch['orig_audio'].audio_data.cpu(), args.sample_rate)
+            ref_audio = AudioSignal(batch['ref_audio'].audio_data.cpu(), args.sample_rate)
+            recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
+            recons_gt = AudioSignal(target_audio.audio_data.cpu(), args.sample_rate)
 
-    # Summary
-    avg_stft_loss = sum(total_stft_loss) / len(total_stft_loss)
-    avg_envelope_loss = sum(total_envelope_loss) / len(total_envelope_loss)
-    print(f"Average STFT Loss: {avg_stft_loss:.4f}")
-    print(f"Average Envelope Loss: {avg_envelope_loss:.4f}")
+            for j in range(args.batch_size):
+                single_recon = AudioSignal(recons.audio_data[j], args.sample_rate)
+                single_recon_gt = AudioSignal(recons_gt.audio_data[j], args.sample_rate)
+                single_orig = AudioSignal(orig_audio.audio_data[j], args.sample_rate)
+                single_ref = AudioSignal(ref_audio.audio_data[j], args.sample_rate)
 
-    with open(f"/home/buffett/nas_data/EDM_FAC_LOG/final_eval/eval_0826_no_ca/eval_results_{convert_type}.txt", "a") as f:
-        f.write(f"Average STFT Loss: {avg_stft_loss:.4f}\n")
-        f.write(f"Average Envelope Loss: {avg_envelope_loss:.4f}\n")
 
+                recon_path = os.path.join(args.audio_save_path, f'{counter:02d}_recon_{args.model_name}.wav')
+                recon_gt_path = os.path.join(args.audio_save_path, f'{counter:02d}_gt.wav')
+                orig_path = os.path.join(args.audio_save_path, f'{counter:02d}_orig.wav')
+                ref_path = os.path.join(args.audio_save_path, f'{counter:02d}_ref.wav')
+
+                single_recon.write(recon_path)
+                single_recon_gt.write(recon_gt_path)
+                single_orig.write(orig_path)
+                single_ref.write(ref_path)
+                counter += 1
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
     parser.add_argument("--conv_type", default="both")
-    parser.add_argument("--pair_cnts", default=10, type=int)
     parser.add_argument("--iter", default=-1, type=int)
     parser.add_argument("--split", default="eval_seen_extreme_adsr") # eval_seen_normal_adsr
+    parser.add_argument("--model_name", default="proposed")
+    parser.add_argument("--audio_save_path",
+                        default="/home/buffett/nas_data/EDM_FAC_LOG/demo_website/sample_audio")
+
     # config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
     config = yaml_config_hook("configs/config_proposed_no_ca.yaml")
 

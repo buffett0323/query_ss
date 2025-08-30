@@ -34,24 +34,15 @@ class Wrapper:
         self.disentanglement = args.disentanglement # training
         self.convert_type = args.convert_type # validation
 
-        self.generator = dac.model.MyDAC(
+        self.generator = dac.model.ABL_DAC(
             encoder_dim=args.encoder_dim,
             encoder_rates=args.encoder_rates,
             latent_dim=args.latent_dim,
             decoder_dim=args.decoder_dim,
             decoder_rates=args.decoder_rates,
-            adsr_enc_dim=args.adsr_enc_dim,
-            adsr_enc_ver=args.adsr_enc_ver,
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
-            adsr_classes=args.adsr_classes,
             pitch_nums=args.max_note - args.min_note + 1, # 88
-            use_gr_content=args.use_gr_content,
-            use_gr_adsr=args.use_gr_adsr,
-            use_gr_timbre=args.use_gr_timbre,
-            use_FiLM=args.use_FiLM,
-            rule_based_adsr_folding=args.rule_based_adsr_folding,
-            use_cross_attn=args.use_cross_attn,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
