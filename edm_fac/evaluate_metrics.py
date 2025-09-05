@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from torch import nn
 from audiotools import AudioSignal, STFTParams
 import typing
-from typing import List, Dict
+from typing import List
 
 # 1. MSTFT Loss
 class MultiScaleSTFTLoss(nn.Module):
@@ -295,7 +295,7 @@ class F0EvalLoss(nn.Module):
 
         return self.weight * loss
 
-    def _compute_f0_metrics_simple(self, ref_wavs: torch.Tensor, est_wavs: torch.Tensor, device: torch.device, metadata: List[Dict]):
+    def _compute_f0_metrics_simple(self, ref_wavs: torch.Tensor, est_wavs: torch.Tensor, device: torch.device):
         """Compute F0 correlation and RMSE metrics using the simplified approach from eval_f0_test.py."""
         assert ref_wavs.shape == est_wavs.shape, "ref/est shape must match (B,T)"
         B, T = ref_wavs.shape
@@ -320,8 +320,6 @@ class F0EvalLoss(nn.Module):
 
         # Process each sample
         corr_vals, rmse_vals = [], []
-        high_rmse_paths = []
-        nan_paths = []
 
         for i in range(B):
             # Extract F0 for reference and estimated
@@ -351,22 +349,18 @@ class F0EvalLoss(nn.Module):
                 e0 = e - e.mean()
                 corr = (r0 @ e0) / (torch.sqrt((r0**2).sum()*(e0**2).sum()) + 1e-12)
 
-                corr_vals.append(corr)
-                rmse_vals.append(rmse_c)
+                if rmse_c <= 100:
+                    corr_vals.append(corr)
+                    rmse_vals.append(rmse_c)
 
-                if rmse_c > 100.0:
-                    high_rmse_paths.append(metadata[i]['gt_audio']['path'])
-            else:
-                nan_paths.append(metadata[i]['gt_audio']['path'])
-
-        return corr_vals, rmse_vals, high_rmse_paths, nan_paths
+        return corr_vals, rmse_vals
         # # Return mean values
         # mean_corr = torch.stack(corr_vals).mean()
         # mean_rmse = torch.stack(rmse_vals).mean()
 
         # return mean_corr, mean_rmse, high_rmse_paths, nan_paths
 
-    def get_metrics(self, x: AudioSignal, y: AudioSignal, metadata: List[Dict]):
+    def get_metrics(self, x: AudioSignal, y: AudioSignal):
         """Get detailed F0 metrics without computing loss.
 
         Returns
@@ -379,14 +373,11 @@ class F0EvalLoss(nn.Module):
         y_audio = y.audio_data.squeeze()
 
         # Compute metrics
-        f0_corr, f0_rmse, high_rmse_paths, nan_paths = self._compute_f0_metrics_simple(x_audio, y_audio, device, metadata)
+        f0_corr, f0_rmse = self._compute_f0_metrics_simple(x_audio, y_audio, device)
 
         return {
             "f0_corr": f0_corr, #.item(),
             "f0_rmse": f0_rmse, #.item(),
-            "hop_ms": 1000 * self.hop_length / self.sr_out,
-            "high_rmse_paths": high_rmse_paths,
-            "nan_paths": nan_paths
         }
 
 

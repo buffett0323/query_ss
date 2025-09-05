@@ -34,15 +34,24 @@ class Wrapper:
         self.disentanglement = args.disentanglement # training
         self.convert_type = args.convert_type # validation
 
-        self.generator = dac.model.ABL_DAC(
+        self.generator = dac.model.MyDAC(
             encoder_dim=args.encoder_dim,
             encoder_rates=args.encoder_rates,
             latent_dim=args.latent_dim,
             decoder_dim=args.decoder_dim,
             decoder_rates=args.decoder_rates,
+            adsr_enc_dim=args.adsr_enc_dim,
+            adsr_enc_ver=args.adsr_enc_ver,
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
+            adsr_classes=args.adsr_classes,
             pitch_nums=args.max_note - args.min_note + 1, # 88
+            use_gr_content=args.use_gr_content,
+            use_gr_adsr=args.use_gr_adsr,
+            use_gr_timbre=args.use_gr_timbre,
+            use_FiLM=args.use_FiLM,
+            rule_based_adsr_folding=args.rule_based_adsr_folding,
+            use_cross_attn=args.use_cross_attn,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
@@ -111,7 +120,7 @@ def main(args, accelerator):
     total_stft_loss = []
     total_envelope_loss = []
     total_f0_loss = []
-
+    
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
 
@@ -132,7 +141,7 @@ def main(args, accelerator):
             print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
 
         else:
-            target_audio = batch['target_both']
+            target_audio = batch['target_both'] #[f'target_{convert_type}']
             with torch.no_grad():
                 out = wrapper.generator.conversion(
                     orig_audio=batch['orig_audio'].audio_data,
@@ -145,12 +154,11 @@ def main(args, accelerator):
             envelope_loss = wrapper.envelope_loss(recons, target_audio)
             f0_loss = wrapper.f0_eval_loss.get_metrics(recons, target_audio)
             f0_loss = [f.item() for f in f0_loss["f0_rmse"] if f is not None]
-
+            
             total_stft_loss.append(stft_loss)
             total_envelope_loss.append(envelope_loss)
-            if len(f0_loss) > 0:
-                total_f0_loss += f0_loss
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}, F0 Loss: {np.mean(f0_loss) if len(f0_loss) > 0 else None:.4f}")
+            total_f0_loss += f0_loss
+            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}, F0 Loss: {np.mean(f0_loss):.4f}")
 
     # Summary
     avg_stft_loss = sum(total_stft_loss) / len(total_stft_loss)
@@ -160,20 +168,20 @@ def main(args, accelerator):
     print(f"Average Envelope Loss: {avg_envelope_loss:.4f}")
     print(f"Average F0 Loss: {avg_f0_loss:.4f}")
 
-    with open(f"/mnt/gestalt/home/buffett/EDM_FAC_LOG/final_eval/eval_0826_abl/eval_results_{convert_type}.txt", "a") as f:
+    with open(f"/mnt/gestalt/home/buffett/EDM_FAC_LOG/final_eval/eval_table2/eval_results_{convert_type}.txt", "a") as f:
         f.write(f"Average STFT Loss: {avg_stft_loss:.4f}\n")
         f.write(f"Average Envelope Loss: {avg_envelope_loss:.4f}\n")
         f.write(f"Average F0 Loss: {avg_f0_loss:.4f}\n")
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
-    parser.add_argument("--conv_type", default="timbre")
+    parser.add_argument("--conv_type", default="both")
     parser.add_argument("--pair_cnts", default=10, type=int)
     parser.add_argument("--iter", default=-1, type=int)
     parser.add_argument("--split", default="eval_seen_extreme_adsr") # eval_seen_normal_adsr
-    config = yaml_config_hook("configs/config_mn_ablation.yaml")
+    config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
+    # config = yaml_config_hook("configs/config_proposed_final.yaml")
 
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
