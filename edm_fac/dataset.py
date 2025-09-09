@@ -1174,7 +1174,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
 
             # Pre-compute all possible reference matches efficiently
             print("Pre-computing all possible reference matches...")
-            self.all_reference_matches = []
+            all_reference_matches = []
 
             # Create lookup dictionaries for faster matching
             timbre_groups = {}
@@ -1207,17 +1207,22 @@ class EDM_MN_Val_Total_Dataset(Dataset):
 
                 # Valid references are all indices not in invalid_indices
                 valid_refs = [i for i in range(len(self.single_data)) if i not in invalid_indices]
-                self.all_reference_matches.append(valid_refs)
+                all_reference_matches.append(valid_refs)
 
 
-            print(f"Pre-computed {len(self.all_reference_matches)} reference match lists")
-            print(f"Average possible matches per item: {sum(len(matches) for matches in self.all_reference_matches) / len(self.all_reference_matches):.1f}")
+            print(f"Pre-computed {len(all_reference_matches)} reference match lists")
+            print(f"Average possible matches per item: {sum(len(matches) for matches in all_reference_matches) / len(all_reference_matches):.1f}")
+
+
+            del timbre_groups
+            del content_groups
+            del adsr_groups
 
             # Now create paired data using pre-computed matches
             for i in range(self.pair_cnts):
                 for idx, (timbre_id, midi_id, adsr_id, wav_path) in enumerate(self.single_data):
                     # Get a random reference from pre-computed valid matches
-                    ref_idx = random.choice(self.all_reference_matches[idx])
+                    ref_idx = random.choice(all_reference_matches[idx])
                     ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = self.single_data[ref_idx]
 
                     self.paired_data.append((
@@ -1226,6 +1231,10 @@ class EDM_MN_Val_Total_Dataset(Dataset):
                     ))
 
             print(f"Total paired data: {len(self.paired_data)}")
+
+
+            # Clean up reference match data to free memory
+            del all_reference_matches
 
             # # Write paired data to txt file for reference
             # with open('/home/buffett/nas_data/EDM_FAC_LOG/eval_paired_data.txt', 'w') as f:

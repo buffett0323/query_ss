@@ -120,7 +120,7 @@ def main(args, accelerator):
     total_stft_loss = []
     total_envelope_loss = []
     total_f0_loss = []
-    
+
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
 
@@ -154,11 +154,12 @@ def main(args, accelerator):
             envelope_loss = wrapper.envelope_loss(recons, target_audio)
             f0_loss = wrapper.f0_eval_loss.get_metrics(recons, target_audio)
             f0_loss = [f.item() for f in f0_loss["f0_rmse"] if f is not None]
-            
+
             total_stft_loss.append(stft_loss)
             total_envelope_loss.append(envelope_loss)
-            total_f0_loss += f0_loss
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}, F0 Loss: {np.mean(f0_loss):.4f}")
+            if len(f0_loss) > 0:
+                total_f0_loss += f0_loss
+                print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}, F0 Loss: {np.mean(f0_loss) if len(f0_loss) > 0 else None:.4f}")
 
     # Summary
     avg_stft_loss = sum(total_stft_loss) / len(total_stft_loss)

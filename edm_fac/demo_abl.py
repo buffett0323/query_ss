@@ -22,8 +22,6 @@ from utils import (
 )
 import dac
 from torch.utils.data import Dataset
-import json
-import random
 from pathlib import Path
 from typing import List, Dict
 import soundfile as sf
@@ -41,7 +39,7 @@ class EDM_MN_Val_Total_Dataset(Dataset):
         self.duration = duration
         self.reconstruction = reconstruction
         self.sample_rate = sample_rate
-        
+
         # Storing names
         self.paired_data = []
         self.single_data = []
@@ -169,9 +167,9 @@ class Wrapper:
 
         # Val dataset
         self.val_paired_data = val_paired_data
-        
 
-        
+
+
 def main(args, accelerator):
     device = accelerator.device
     util.seed(args.seed)
@@ -221,8 +219,8 @@ def main(args, accelerator):
         else:
             target_audio = batch[f'target_{convert_type}']
             metadata = batch['metadata']
-            
-            
+
+
             with torch.no_grad():
                 out = wrapper.generator.conversion(
                     orig_audio=batch['orig_audio'].audio_data,
@@ -231,11 +229,11 @@ def main(args, accelerator):
                 )
 
             recons = AudioSignal(out["audio"].cpu(), args.sample_rate)
-            
+
             for i in range(len(metadata)):
                 single_recon = AudioSignal(recons.audio_data[i], args.sample_rate)
                 single_recon.write(f"{args.save_audio_path}/{metadata[i]['id']:02d}_recon_abl.wav")
-                
+
             # stft_loss = wrapper.stft_loss(recons, target_audio)
             # envelope_loss = wrapper.envelope_loss(recons, target_audio)
             # total_stft_loss.append(stft_loss)

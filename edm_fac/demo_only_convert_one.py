@@ -34,15 +34,24 @@ class Wrapper:
         self.disentanglement = args.disentanglement # training
         self.convert_type = args.convert_type # validation
 
-        self.generator = dac.model.ABL_DAC(
+        self.generator = dac.model.MyDAC(
             encoder_dim=args.encoder_dim,
             encoder_rates=args.encoder_rates,
             latent_dim=args.latent_dim,
             decoder_dim=args.decoder_dim,
             decoder_rates=args.decoder_rates,
+            adsr_enc_dim=args.adsr_enc_dim,
+            adsr_enc_ver=args.adsr_enc_ver,
             sample_rate=args.sample_rate,
             timbre_classes=args.timbre_classes,
+            adsr_classes=args.adsr_classes,
             pitch_nums=args.max_note - args.min_note + 1, # 88
+            use_gr_content=args.use_gr_content,
+            use_gr_adsr=args.use_gr_adsr,
+            use_gr_timbre=args.use_gr_timbre,
+            use_FiLM=args.use_FiLM,
+            rule_based_adsr_folding=args.rule_based_adsr_folding,
+            use_cross_attn=args.use_cross_attn,
         ).to(accelerator.device)
 
         self.optimizer_g = torch.optim.AdamW(self.generator.parameters(), lr=args.base_lr)
@@ -53,20 +62,8 @@ class Wrapper:
         self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=1.0)
 
         # Losses
-        self.stft_loss = MultiScaleSTFTLoss().to(accelerator.device)
-        self.envelope_loss = LogRMSEnvelopeLoss().to(accelerator.device)
-        self.f0_eval_loss = F0EvalLoss(
-            hop_length=160, #512,
-            fmin=50,
-            fmax=1100,
-            model_size='tiny', #'full',
-            voicing_thresh=0.5,
-            weight=1.0,
-            device=accelerator.device,
-            sr_in=44100,
-            sr_out=16000,
-            resample_to_16k=True,
-        ).to(accelerator.device)
+        self.stft_loss = MultiScaleSTFTLoss()#.to(accelerator.device)
+        self.envelope_loss = LogRMSEnvelopeLoss()#.to(accelerator.device)
 
         # Val dataset
         self.val_paired_data = val_paired_data
@@ -111,28 +108,17 @@ def main(args, accelerator):
     total_stft_loss = []
     total_envelope_loss = []
     total_f0_loss = []
-
+    counter = 0
+    
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
 
         if convert_type == "reconstruction":
-            target_audio = batch['orig_audio']
-            with torch.no_grad():
-                out = wrapper.generator.conversion(
-                    orig_audio=batch['orig_audio'].audio_data,
-                    ref_audio=None,
-                    convert_type=convert_type,
-                )
-
-            recons = AudioSignal(out["audio"], args.sample_rate)
-            stft_loss = wrapper.stft_loss(recons, target_audio)
-            envelope_loss = wrapper.envelope_loss(recons, target_audio)
-            total_stft_loss.append(stft_loss)
-            total_envelope_loss.append(envelope_loss)
-            print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}")
+            pass
 
         else:
-            target_audio = batch['target_both']
+            target_audio = batch[f'target_{convert_type}']
+            metadata = batch['metadata']
             with torch.no_grad():
                 out = wrapper.generator.conversion(
                     orig_audio=batch['orig_audio'].audio_data,
@@ -141,41 +127,40 @@ def main(args, accelerator):
                 )
 
             recons = AudioSignal(out["audio"], args.sample_rate)
-            stft_loss = wrapper.stft_loss(recons, target_audio)
-            envelope_loss = wrapper.envelope_loss(recons, target_audio)
-            f0_loss = wrapper.f0_eval_loss.get_metrics(recons, target_audio)
-            f0_loss = [f.item() for f in f0_loss["f0_rmse"] if f is not None]
-
-            total_stft_loss.append(stft_loss)
-            total_envelope_loss.append(envelope_loss)
-            if len(f0_loss) > 0:
-                total_f0_loss += f0_loss
-                print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}, F0 Loss: {np.mean(f0_loss):.4f}")
-            else:
-                print(f"Batch {i}: STFT Loss: {stft_loss:.4f}, Envelope Loss: {envelope_loss:.4f}, F0 Loss: None")
-
-    # Summary
-    avg_stft_loss = sum(total_stft_loss) / len(total_stft_loss)
-    avg_envelope_loss = sum(total_envelope_loss) / len(total_envelope_loss)
-    avg_f0_loss = sum(total_f0_loss) / len(total_f0_loss)
-    print(f"Average STFT Loss: {avg_stft_loss:.4f}")
-    print(f"Average Envelope Loss: {avg_envelope_loss:.4f}")
-    print(f"Average F0 Loss: {avg_f0_loss:.4f}")
-
-    with open(f"/mnt/gestalt/home/buffett/EDM_FAC_LOG/final_eval/eval_0826_abl/eval_results_{convert_type}.txt", "a") as f:
-        f.write(f"Average STFT Loss: {avg_stft_loss:.4f}\n")
-        f.write(f"Average Envelope Loss: {avg_envelope_loss:.4f}\n")
-        f.write(f"Average F0 Loss: {avg_f0_loss:.4f}\n")
-
+            
+            for i in range(len(metadata)):
+                single_orig = AudioSignal(batch['orig_audio'].audio_data[i].cpu(), args.sample_rate)
+                single_ref = AudioSignal(batch['ref_audio'].audio_data[i].cpu(), args.sample_rate)
+                single_target = AudioSignal(target_audio.audio_data[i].cpu(), args.sample_rate)
+                single_recon = AudioSignal(recons.audio_data[i].cpu(), args.sample_rate)
+                
+                stft_loss = wrapper.stft_loss(single_recon, single_target)
+                envelope_loss = wrapper.envelope_loss(single_recon, single_target)
+                
+                if stft_loss < 3 and envelope_loss <= 0.1:
+                    counter += 1
+                    single_recon.write(f"{args.save_audio_path}/{counter:02d}_{convert_type}.wav")
+                    single_target.write(f"{args.save_audio_path}/{counter:02d}_gt.wav")
+                    single_orig.write(f"{args.save_audio_path}/{counter:02d}_orig.wav")
+                    single_ref.write(f"{args.save_audio_path}/{counter:02d}_ref.wav")
+            
+            
+                if counter >= 10:
+                    break
+                
+            if counter >= 10:
+                break
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EDM-FAC")
-    parser.add_argument("--conv_type", default="timbre")
+    parser.add_argument("--conv_type", default="both")
     parser.add_argument("--pair_cnts", default=10, type=int)
     parser.add_argument("--iter", default=-1, type=int)
     parser.add_argument("--split", default="eval_seen_extreme_adsr") # eval_seen_normal_adsr
-    config = yaml_config_hook("configs/config_mn_ablation.yaml")
+    parser.add_argument("--save_audio_path", default="/mnt/gestalt/home/buffett/EDM_FAC_LOG/demo_website/sample_audio")
+    config = yaml_config_hook("configs/config_proposed_no_mask.yaml")
+    # config = yaml_config_hook("configs/config_proposed_final.yaml")
 
     for k, v in config.items():
         parser.add_argument(f"--{k}", default=v, type=type(v))
