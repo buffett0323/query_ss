@@ -614,6 +614,420 @@ class EDM_MN_Dataset(Dataset):
         }
 
 
+class EDM_MN_Dataset_Abl(Dataset):
+    """
+    Use RMS Curve to analyze the ADSR
+    Please follow the order of the dataset:
+        Timbre, Content, ADSR
+    """
+    def __init__(
+        self,
+        root_path: str,
+        midi_path: str,
+        duration: float = 1.0,
+        sample_rate: int = 44100,
+        hop_length: int = 512,
+        min_note: int = 21,
+        max_note: int = 108,
+        mask_delay_frames: int = 3, # About 3 frames
+        split: str = "train",
+        perturb_content: bool = True,
+        perturb_adsr: bool = True,
+        perturb_timbre: bool = True,
+        get_midi_only_from_onset: bool = False,
+        mask_prob: float = 0.0,
+        disentanglement_mode: List[str] = ["reconstruction", "conv_timbre"],
+    ):
+        self.root_path = Path(os.path.join(root_path, split))
+        self.midi_path = Path(os.path.join(midi_path, split, "midi"))
+        self.duration = duration
+        self.sample_rate = sample_rate
+        self.hop_length = hop_length
+        self.min_note = min_note
+        self.max_note = max_note
+        self.mask_delay_frames = mask_delay_frames
+        self.mask_delay = round(self.mask_delay_frames * hop_length / sample_rate, 4)
+        self.n_notes = max_note - min_note + 1
+        self.split = split
+        self.perturb_content = perturb_content
+        self.perturb_adsr = perturb_adsr
+        self.perturb_timbre = perturb_timbre
+        self.get_midi_only_from_onset = get_midi_only_from_onset
+        self.mask_prob = mask_prob
+        self.disentanglement_mode = disentanglement_mode
+        self.eps = 1e-7
+
+        if self.get_midi_only_from_onset:
+            print(f"Mask onset after: {self.mask_delay} seconds")
+
+
+        # Pre-load metadata
+        with open(f'{self.root_path}/metadata.json', 'r') as f:
+            self.metadata = json.load(f)
+            # Shuffle metadata
+            random.shuffle(self.metadata)
+
+        with open(f'{self.root_path}/midi_files.json', 'r') as f:
+            self.midi_metadata = json.load(f)
+
+
+        # Get envelopes metadata
+        with open(f'info/envelopes_{split}_final.json', 'r') as f:
+            envelopes = json.load(f)
+
+        self.envelopes = {}
+        for envelope in envelopes:
+            self.envelopes[envelope['id']] = {
+                "attack": envelope['attack'],
+                'decay': envelope['decay'],
+                'hold': envelope['hold'],
+                'sustain': envelope['sustain'],
+                'release': envelope['release'],
+                'length': envelope['length'],
+                'stem': envelope['stem']
+            }
+
+        # Get midi metadata
+        with open(f'{self.root_path}/midi_files.json', 'r') as f:
+            self.midi_metadata = json.load(f)
+
+        # Create ID mappings for all three levels
+        self.timbre_to_files = {}
+        self.content_to_files = {}
+        self.adsr_to_files = {}
+        self.ids_to_item_idx = {}
+
+        # Storing names
+        self.paired_data = []
+        self._build_paired_index()
+
+
+    def _build_paired_index(self):
+        # Build paired index for MN
+        counter = 0
+        for data in tqdm(self.metadata, desc=f"Building paired index for Multi-Notes {self.split}"):
+            wav_path = data['file_path']
+            timbre_id = data['timbre_index']
+            adsr_id = data['adsr_index']
+            midi_id = data['midi_index']
+            midi_key = f"C{midi_id:03d}"
+
+            if timbre_id not in self.timbre_to_files:
+                self.timbre_to_files[timbre_id] = []
+            self.timbre_to_files[timbre_id].append(counter)
+
+            if midi_id not in self.content_to_files:
+                self.content_to_files[midi_id] = []
+            self.content_to_files[midi_id].append(counter)
+
+            if adsr_id not in self.adsr_to_files:
+                self.adsr_to_files[adsr_id] = []
+            self.adsr_to_files[adsr_id].append(counter)
+
+
+            midi_path = os.path.join(
+                self.midi_path,
+                self.midi_metadata[midi_key]['filename']
+            )
+
+            self.paired_data.append((timbre_id, midi_id, adsr_id, wav_path, midi_path))
+            self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"] = counter
+            counter += 1
+
+        print(f"Total data: {len(self.paired_data)}")
+        print(f"Total Timbre: {len(self.timbre_to_files)}, Total Content: {len(self.content_to_files)}, Total ADSR: {len(self.adsr_to_files)}")
+
+
+    def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
+        signal, _ = sf.read(
+            file_path,
+            start=int(offset*self.sample_rate),
+            frames=int(self.duration*self.sample_rate)
+        )
+        # signal = signal.mean(axis=1, keepdims=False)
+        return AudioSignal(signal, self.sample_rate)
+
+
+    # From Multi-Notes
+    def _get_random_match_content(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
+        possible_matches = [
+            idx for idx in self.content_to_files[content_id]
+                if self.paired_data[idx][0] != timbre_id and \
+                    self.paired_data[idx][2] != adsr_id
+        ]
+        return random.choice(possible_matches)
+
+    # From Multi-Notes
+    def _get_random_match_timbre(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
+        possible_matches = [
+            idx for idx in self.timbre_to_files[timbre_id]
+                if self.paired_data[idx][1] != content_id and \
+                    self.paired_data[idx][2] != adsr_id
+        ]
+        return random.choice(possible_matches)
+
+
+    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float, offset: float = 0.0) -> torch.Tensor:
+        """Convert MIDI file to pitch sequence tensor starting from offset"""
+        try:
+            pm = pretty_midi.PrettyMIDI(str(midi_path))
+            n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
+            pitch_sequence = np.zeros((n_frames, self.n_notes))
+
+            for instrument in pm.instruments:
+                for note in instrument.notes:
+                    # Adjust note timing by subtracting offset
+                    note_start = note.start - offset
+                    note_end = note.end - offset
+
+                    # Skip notes that end before our offset window starts
+                    if note_end <= 0:
+                        continue
+
+                    # Skip notes that start after our duration window ends
+                    if note_start >= duration:
+                        continue
+
+                    # Clamp note timing to our duration window
+                    note_start = max(0, note_start)
+                    note_end = min(duration, note_end)
+
+                    start_frame = int(note_start * self.sample_rate / self.hop_length)
+                    end_frame = int(note_end * self.sample_rate / self.hop_length)
+
+                    start_frame = max(0, min(start_frame, n_frames-1))
+                    end_frame = max(0, min(end_frame, n_frames-1))
+
+                    note_idx = note.pitch - self.min_note
+
+                    if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
+                        pitch_sequence[start_frame:end_frame+1, note_idx] = 1
+
+            return torch.FloatTensor(pitch_sequence)
+
+        except Exception as e:
+            print(f"Error processing MIDI file {midi_path}: {e}")
+            n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
+            return torch.zeros((n_frames, self.n_notes))
+
+
+
+    def _pad(self, wav: torch.Tensor) -> torch.Tensor:
+        length = wav.size(-1)
+        pad = (math.ceil(length / self.hop_length) * self.hop_length) - length
+        return F.pad(wav, (0, pad))
+
+
+    def _load_adsr_curve(self, wav: torch.Tensor) -> torch.Tensor:
+        wav = self._pad(wav)
+        rms = torch.sqrt(
+            F.avg_pool1d(wav**2, kernel_size=self.hop_length, stride=self.hop_length) + self.eps
+        )
+        log_rms = torch.log(rms + self.eps)
+        return log_rms
+
+
+    def _map_midi_adsr_to_pitch(self, midi_path: Path, target_audio: AudioSignal,
+                                offset: float, adsr_threshold: float = -3) -> torch.Tensor:
+        '''
+        Load ADSR curve and revise the target pitch sequence.
+        For each note, only activate the pitch if the ADSR value is above the threshold.
+        '''
+        # 1. Load ADSR curve
+        adsr_curve = self._load_adsr_curve(target_audio.audio_data).squeeze()
+
+        pm = pretty_midi.PrettyMIDI(str(midi_path))
+        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
+        pitch_sequence = np.zeros((n_frames, self.n_notes))
+
+        for instrument in pm.instruments:
+            for note in instrument.notes:
+                # Adjust note timing by subtracting offset
+                note_start = note.start - offset
+                note_end = note.end - offset
+
+                # Skip notes that end before our offset window starts
+                if note_end <= 0:
+                    continue
+
+                # Skip notes that start after our duration window ends
+                if note_start >= self.duration:
+                    continue
+
+                # Clamp note timing to our duration window
+                note_start = max(0, note_start)
+                note_end = min(self.duration, note_end)
+
+                start_frame = int(note_start * self.sample_rate / self.hop_length)
+                end_frame = int(note_end * self.sample_rate / self.hop_length)
+
+                start_frame = max(0, min(start_frame, n_frames-1))
+                end_frame = max(0, min(end_frame, n_frames-1))
+
+                note_idx = note.pitch - self.min_note
+
+                if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
+                    # Apply ADSR mask
+                    for frame in range(start_frame, end_frame + 1):
+                        if adsr_curve[frame] > adsr_threshold:
+                            pitch_sequence[frame, note_idx] = 1
+
+        return torch.FloatTensor(pitch_sequence)
+
+
+    # From validation
+    def _get_random_match_total(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
+        possible_matches = [
+            idx for idx in range(len(self.paired_data))
+                if self.paired_data[idx][0] != timbre_id and \
+                    self.paired_data[idx][1] != content_id and \
+                    self.paired_data[idx][2] == adsr_id # Revision
+        ]
+        return random.choice(possible_matches)
+
+
+    # Perturbation or not for the Encoder input
+    def _get_encoder_input(self, timbre_id: int, midi_id: int, adsr_id: int, idx: int) -> Tuple[int, int, int]:
+        if self.perturb_timbre: # T1, C2, A2
+            timbre_match_idx = self._get_random_match_timbre(timbre_id, midi_id, adsr_id)
+        else:
+            timbre_match_idx = idx
+
+        if self.perturb_content: # T4, C1, A4
+            content_match_idx = self._get_random_match_content(timbre_id, midi_id, adsr_id)
+        else:
+            content_match_idx = idx
+
+        if self.perturb_adsr: # T3, C3, A1
+            adsr_match_idx = self._get_random_match_adsr(timbre_id, midi_id, adsr_id)
+        else:
+            adsr_match_idx = idx
+
+        return timbre_match_idx, content_match_idx, adsr_match_idx
+
+
+    def _get_onset(self, idx: int):
+        _, midi_id, _, _, _ = self.paired_data[idx]
+        midi_map = self.midi_metadata[f"C{midi_id:03d}"]
+        onset_pick = np.random.choice(midi_map['onset_seconds'])
+        onset_list = midi_map['onset_all_seconds']
+        return onset_pick, onset_list
+
+
+
+    def __len__(self):
+        return len(self.paired_data)
+
+
+    def __getitem__(self, idx):
+        # 0. Choose mode to disentangle
+        if len(self.disentanglement_mode) > 1:
+            mode = random.choice(self.disentanglement_mode)
+        else:
+            mode = self.disentanglement_mode[0]
+
+        # 1. Original: T1, C1, A1
+        timbre_id, midi_id, adsr_id, wav_path, midi_path = self.paired_data[idx]
+        offset_pick, offset = self._get_onset(idx)
+        orig_audio = self._load_audio(wav_path, offset_pick)
+
+        # 2. Reference for conversion tasks
+        if mode == "reconstruction":
+            ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path = \
+                timbre_id, midi_id, adsr_id, wav_path
+        else:
+            ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
+            ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path, _ = self.paired_data[ref_idx]
+            ref_offset_pick, ref_offset = self._get_onset(ref_idx)
+            assert ref_adsr_id == adsr_id, "Ref ADSR ID does not match the original ADSR ID"
+
+        # 3. Encoders' input
+        if mode == "reconstruction": # Reconstruction
+            timbre_match_idx, content_match_idx, adsr_match_idx = \
+                self._get_encoder_input(timbre_id, midi_id, adsr_id, idx)
+
+            # Load audio
+            timbre_match = self._load_audio(self.paired_data[timbre_match_idx][3], 0.0)
+            content_match = self._load_audio(self.paired_data[content_match_idx][3], offset_pick)
+
+        else:
+            timbre_id = ref_timbre_id
+
+            ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
+            
+            timbre_match = ref_audio
+            content_match = orig_audio
+            
+            
+
+
+        # 4. Decoder's output GT
+        if mode == "reconstruction":
+            target_idx = idx
+            target_audio = orig_audio
+        else:
+            target_idx = self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
+            target_audio = self._load_audio(self.paired_data[target_idx][3], offset_pick)
+
+        # 5. Pitch sequence
+        target_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
+
+
+        assert self.paired_data[idx][2] == adsr_id, "Paired data ADSR ID does not match the original ADSR ID"
+        assert self.paired_data[target_idx][2] == adsr_id, "Target data ADSR ID does not match the original ADSR ID"
+        assert ref_adsr_id == adsr_id, "Ref data ADSR ID does not match the original ADSR ID"
+        
+        return {
+            'target': target_audio,         # T1, C1, A1
+            'pitch': target_pitch,
+            # 'adsr_pitch': adsr_pitch,
+
+            'timbre_match': timbre_match,   # T1, C2, A1
+            'content_match': content_match, # T3, C1, A1
+
+            'timbre_id': timbre_id,
+            'midi_id': midi_id,
+
+            'metadata': {
+                'mode': mode,
+                'origin': {
+                    'timbre_id': self.paired_data[idx][0],
+                    'content_id': self.paired_data[idx][1],
+                    'adsr_id': self.paired_data[idx][2],
+                    'path': str(self.paired_data[idx][3]),
+                },
+                'ref': {
+                    'timbre_id': ref_timbre_id,
+                    'content_id': ref_midi_id,
+                    'adsr_id': ref_adsr_id,
+                    'path': str(ref_wav_path),
+                },
+                'target': {
+                    'timbre_id': timbre_id,
+                    'content_id': midi_id,
+                    'adsr_id': adsr_id,
+                    'path': str(self.paired_data[target_idx][3]),
+                },
+            }
+        }
+
+    @staticmethod
+    def collate(batch: List[Dict]) -> Dict:
+        return {
+            'target': AudioSignal.batch([item['target'] for item in batch]),
+            'pitch': torch.stack([item['pitch'] for item in batch]),
+            # 'adsr_pitch': torch.stack([item['adsr_pitch'] for item in batch]),
+
+            'timbre_match': AudioSignal.batch([item['timbre_match'] for item in batch]),
+            'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
+
+            'timbre_id': torch.tensor([item['timbre_id'] for item in batch], dtype=torch.long),
+            'midi_id': torch.tensor([item['midi_id'] for item in batch], dtype=torch.long),
+
+            'metadata': [item['metadata'] for item in batch]
+        }
+
+
 
 class EDM_MN_Val_Dataset(Dataset):
     def __init__(
@@ -1081,6 +1495,300 @@ class EDM_MN_Val_Dataset(Dataset):
             'metadata': [item['metadata'] for item in batch]
         }
 
+
+
+class EDM_MN_Val_Dataset_Abl(Dataset):
+    def __init__(
+        self,
+        root_path: str,
+        midi_path: str,
+        duration: float = 1.0,
+        sample_rate: int = 44100,
+        hop_length: int = 512,
+        min_note: int = 21,
+        max_note: int = 108,
+        mask_delay_frames: int = 3, # About 3 frames
+        split: str = "train",
+        perturb_content: bool = True,
+        perturb_adsr: bool = False,
+        perturb_timbre: bool = True,
+        get_midi_only_from_onset: bool = False,
+        disentanglement_mode: List[str] = ["reconstruction", "conv_timbre"],
+    ):
+        self.root_path = Path(os.path.join(root_path, split))
+        self.midi_path = Path(os.path.join(midi_path, "evaluation", "midi"))
+        self.duration = duration
+        self.sample_rate = sample_rate
+        self.hop_length = hop_length
+        self.min_note = min_note
+        self.max_note = max_note
+        self.mask_delay_frames = mask_delay_frames
+        self.mask_delay = round(self.mask_delay_frames * hop_length / sample_rate, 4)
+        self.n_notes = max_note - min_note + 1
+        self.split = split
+        self.perturb_content = perturb_content
+        self.perturb_adsr = False #perturb_adsr
+        self.perturb_timbre = perturb_timbre
+        self.get_midi_only_from_onset = get_midi_only_from_onset
+        self.disentanglement_mode = disentanglement_mode
+
+        if self.get_midi_only_from_onset:
+            print(f"Mask onset after: {self.mask_delay} seconds")
+
+
+
+        # Pre-load metadata
+        with open(f'{self.root_path}/metadata.json', 'r') as f:
+            self.metadata = json.load(f)
+            # Shuffle metadata
+            random.shuffle(self.metadata)
+
+        # TODO
+        with open(f'{self.root_path}/midi_files.json', 'r') as f:
+            self.midi_metadata = json.load(f)
+
+        # TODO: Get envelopes metadata
+        with open('info/envelopes_evaluation_final.json', 'r') as f:
+            envelopes = json.load(f)
+
+        self.envelopes = {}
+        for envelope in envelopes:
+            self.envelopes[envelope['id']] = {
+                "attack": envelope['attack'],
+                'decay': envelope['decay'],
+                'hold': envelope['hold'],
+                'sustain': envelope['sustain'],
+                'release': envelope['release'],
+                'length': envelope['length'],
+                'stem': envelope['stem']
+            }
+
+        # Get midi metadata
+        with open(f'{self.root_path}/midi_files.json', 'r') as f:
+            self.midi_metadata = json.load(f)
+
+        # Create ID mappings for all three levels
+        self.timbre_to_files = {}
+        self.content_to_files = {}
+        self.adsr_to_files = {}
+        self.ids_to_item_idx = {}
+
+        # Storing names
+        self.paired_data = []
+        self._build_paired_index()
+
+
+
+    def _build_paired_index(self):
+
+        # Build paired index for MN
+        counter = 0
+        for data in tqdm(self.metadata, desc=f"Building paired index for Multi-Notes {self.split}"):
+            wav_path = data['file_path']
+            timbre_id = data['timbre_index']
+            adsr_id = data['adsr_index']
+            midi_id = data['midi_index']
+            midi_key = f"C{midi_id:03d}"
+
+            if timbre_id not in self.timbre_to_files:
+                self.timbre_to_files[timbre_id] = []
+            self.timbre_to_files[timbre_id].append(counter)
+
+            if midi_id not in self.content_to_files:
+                self.content_to_files[midi_id] = []
+            self.content_to_files[midi_id].append(counter)
+
+            if adsr_id not in self.adsr_to_files:
+                self.adsr_to_files[adsr_id] = []
+            self.adsr_to_files[adsr_id].append(counter)
+
+
+            midi_path = os.path.join(
+                self.midi_path,
+                self.midi_metadata[midi_key]['filename']
+            )
+
+            self.paired_data.append((timbre_id, midi_id, adsr_id, wav_path, midi_path))
+            self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"] = counter
+            counter += 1
+
+        print(f"Total data: {len(self.paired_data)}")
+        print(f"Total Timbre: {len(self.timbre_to_files)}, Total Content: {len(self.content_to_files)}, Total ADSR: {len(self.adsr_to_files)}")
+
+
+    def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
+        signal, _ = sf.read(
+            file_path,
+            start=int(offset*self.sample_rate),
+            frames=int(self.duration*self.sample_rate)
+        )
+        # signal = signal.mean(axis=1, keepdims=False)
+        return AudioSignal(signal, self.sample_rate)
+
+
+    def _midi_to_pitch_sequence(self, midi_path: Path, duration: float, offset: float = 0.0) -> torch.Tensor:
+        """Convert MIDI file to pitch sequence tensor starting from offset"""
+        try:
+            pm = pretty_midi.PrettyMIDI(str(midi_path))
+            n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
+            pitch_sequence = np.zeros((n_frames, self.n_notes))
+
+            for instrument in pm.instruments:
+                for note in instrument.notes:
+                    # Adjust note timing by subtracting offset
+                    note_start = note.start - offset
+                    note_end = note.end - offset
+
+                    # Skip notes that end before our offset window starts
+                    if note_end <= 0:
+                        continue
+
+                    # Skip notes that start after our duration window ends
+                    if note_start >= duration:
+                        continue
+
+                    # Clamp note timing to our duration window
+                    note_start = max(0, note_start)
+                    note_end = min(duration, note_end)
+
+                    start_frame = int(note_start * self.sample_rate / self.hop_length)
+                    end_frame = int(note_end * self.sample_rate / self.hop_length)
+
+                    start_frame = max(0, min(start_frame, n_frames-1))
+                    end_frame = max(0, min(end_frame, n_frames-1))
+
+                    note_idx = note.pitch - self.min_note
+
+                    if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
+                        pitch_sequence[start_frame:end_frame+1, note_idx] = 1
+
+            return torch.FloatTensor(pitch_sequence)
+
+        except Exception as e:
+            print(f"Error processing MIDI file {midi_path}: {e}")
+            n_frames = math.ceil(duration * self.sample_rate / self.hop_length)
+            return torch.zeros((n_frames, self.n_notes))
+
+
+    # From validation
+    def _get_random_match_total(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
+        possible_matches = [
+            idx for idx in range(len(self.paired_data))
+                if self.paired_data[idx][0] != timbre_id and \
+                    self.paired_data[idx][1] != content_id and \
+                    self.paired_data[idx][2] == adsr_id
+        ]
+        return random.choice(possible_matches)
+
+
+    def _get_onset(self, idx: int):
+        _, midi_id, _, _, _ = self.paired_data[idx]
+        midi_map = self.midi_metadata[f"C{midi_id:03d}"]
+        onset_pick = np.random.choice(midi_map['onset_seconds'])
+        onset_list = midi_map['onset_all_seconds']
+        return onset_pick, onset_list
+
+
+    def __len__(self):
+        return len(self.paired_data)
+
+
+    def __getitem__(self, idx):
+        # 1. Original: T5, C6, ADSR5
+        timbre_id, midi_id, adsr_id, wav_path, midi_path = self.paired_data[idx]
+        offset_pick, offset_list = self._get_onset(idx)
+        orig_audio = self._load_audio(wav_path, offset_pick)
+        # orig_onset = self._get_onset_period(offset_pick, offset_list)
+
+        # 2. Reference: T3, C7, ADSR8
+        ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
+        ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path, _ = self.paired_data[ref_idx]
+        assert ref_adsr_id == adsr_id, "Ref ADSR ID does not match the original ADSR ID"
+        
+        ref_offset_pick, ref_offset = self._get_onset(ref_idx)
+        ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
+        # ref_onset = self._get_onset_period(ref_offset_pick, ref_offset)
+
+        # 3. Get target content, timbre, and adsr transfer ground truth
+        """
+        Target_content: T5, C7, ADSR5
+        Target_timbre: T3, C6, ADSR5
+        Target_adsr: T5, C6, ADSR8
+        """
+        # target_content_idx = self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{ref_midi_id:03d}"]
+        target_timbre_idx = self.ids_to_item_idx[f"T{ref_timbre_id:03d}_ADSR{adsr_id:03d}_C{midi_id:03d}"]
+
+        # target_content = self._load_audio(self.paired_data[target_content_idx][3], ref_offset_pick)
+        target_timbre = self._load_audio(self.paired_data[target_timbre_idx][3], offset_pick)
+
+        # 4. Get target pitch
+        orig_pitch = self._midi_to_pitch_sequence(midi_path, self.duration, offset=offset_pick)
+        # ref_pitch = self._midi_to_pitch_sequence(ref_midi_path, self.duration, offset=ref_offset_pick)
+
+        # 5. Content match --> Mask out 30ms after each note starts
+        content_match = orig_audio
+
+        return {
+            'orig_audio': orig_audio,
+            'ref_audio': ref_audio,
+            'content_match': content_match,
+
+            # 'orig_onset': orig_onset,
+            # 'ref_onset': ref_onset,
+
+            'orig_midi': midi_id,
+            'ref_midi': ref_midi_id,
+            'orig_timbre': timbre_id,
+            'ref_timbre': ref_timbre_id,
+            'orig_adsr': adsr_id,
+            'ref_adsr': ref_adsr_id,
+
+            'orig_pitch': orig_pitch,
+            
+            'target_timbre': target_timbre,
+
+            'metadata': {
+                'orig_audio': {
+                    'timbre_id': timbre_id,
+                    'content_id': midi_id,
+                    'adsr_id': adsr_id,
+                    'path': str(wav_path)
+                },
+                'ref_audio': {
+                    'timbre_id': ref_timbre_id,
+                    'content_id': ref_midi_id,
+                    'adsr_id': ref_adsr_id,
+                    'path': str(ref_wav_path),
+                },
+                'target_timbre': {
+                    'timbre_id': self.paired_data[target_timbre_idx][0],
+                    'content_id': self.paired_data[target_timbre_idx][1],
+                    'adsr_id': self.paired_data[target_timbre_idx][2],
+                    'path': str(self.paired_data[target_timbre_idx][3]),
+                },
+            }
+        }
+
+    @staticmethod
+    def collate(batch: List[Dict]) -> Dict:
+        """Custom collate function for batching"""
+        return {
+            'orig_audio': AudioSignal.batch([item['orig_audio'] for item in batch]),
+            'ref_audio': AudioSignal.batch([item['ref_audio'] for item in batch]),
+            'content_match': AudioSignal.batch([item['content_match'] for item in batch]),
+
+            'orig_pitch': torch.stack([item['orig_pitch'] for item in batch]),
+
+            'orig_midi': torch.tensor([item['orig_midi'] for item in batch], dtype=torch.long),
+            'ref_midi': torch.tensor([item['ref_midi'] for item in batch], dtype=torch.long),
+            'orig_timbre': torch.tensor([item['orig_timbre'] for item in batch], dtype=torch.long),
+            'ref_timbre': torch.tensor([item['ref_timbre'] for item in batch], dtype=torch.long),
+            'orig_adsr': torch.tensor([item['orig_adsr'] for item in batch], dtype=torch.long),
+            'ref_adsr': torch.tensor([item['ref_adsr'] for item in batch], dtype=torch.long),
+            
+            'target_timbre': AudioSignal.batch([item['target_timbre'] for item in batch]),
+            'metadata': [item['metadata'] for item in batch]
+        }
 
 
 class EDM_MN_Val_Total_Dataset(Dataset):

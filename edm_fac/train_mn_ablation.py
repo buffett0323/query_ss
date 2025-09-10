@@ -19,7 +19,7 @@ from audiotools import ml
 from audiotools.ml.decorators import Tracker, timer, when
 from audiotools.core import util
 
-from dataset import EDM_MN_Dataset, EDM_MN_Val_Dataset
+from dataset import EDM_MN_Dataset_Abl, EDM_MN_Val_Dataset_Abl
 from utils import (
     yaml_config_hook, get_infinite_loader, save_checkpoint, load_checkpoint, log_rms
 )
@@ -193,7 +193,7 @@ def main(args, accelerator):
     )
 
     # Build datasets and dataloaders
-    train_paired_data = EDM_MN_Dataset(
+    train_paired_data = EDM_MN_Dataset_Abl(
         root_path=args.root_path,
         midi_path=args.midi_path,
         duration=args.duration,
@@ -201,7 +201,7 @@ def main(args, accelerator):
         hop_length=args.hop_length,
         split="train",
         perturb_content=args.perturb_content,
-        perturb_adsr=args.perturb_adsr,
+        perturb_adsr=False, #args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         get_midi_only_from_onset=args.get_midi_only_from_onset,
         mask_delay_frames=args.mask_delay_frames,
@@ -209,7 +209,7 @@ def main(args, accelerator):
         disentanglement_mode=args.disentanglement,
     )
 
-    val_paired_data = EDM_MN_Val_Dataset(
+    val_paired_data = EDM_MN_Val_Dataset_Abl(
         root_path=args.root_path,
         midi_path=args.midi_path,
         duration=args.duration,
@@ -217,7 +217,7 @@ def main(args, accelerator):
         hop_length=args.hop_length,
         split="evaluation",
         perturb_content=args.perturb_content,
-        perturb_adsr=args.perturb_adsr,
+        perturb_adsr=False, #args.perturb_adsr,
         perturb_timbre=args.perturb_timbre,
         get_midi_only_from_onset=args.get_midi_only_from_onset,
         mask_delay_frames=args.mask_delay_frames,
