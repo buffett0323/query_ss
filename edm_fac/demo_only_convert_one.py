@@ -105,11 +105,8 @@ def main(args, accelerator):
     load_checkpoint(args, device, args.iter, wrapper)
 
     # Start iteration
-    total_stft_loss = []
-    total_envelope_loss = []
-    total_f0_loss = []
     counter = 0
-    
+
     for i, paired_batch in tqdm(enumerate(val_paired_loader), desc="Evaluating", total=len(val_paired_loader)):
         batch = util.prepare_batch(paired_batch, accelerator.device)
 
@@ -127,27 +124,27 @@ def main(args, accelerator):
                 )
 
             recons = AudioSignal(out["audio"], args.sample_rate)
-            
+
             for i in range(len(metadata)):
                 single_orig = AudioSignal(batch['orig_audio'].audio_data[i].cpu(), args.sample_rate)
                 single_ref = AudioSignal(batch['ref_audio'].audio_data[i].cpu(), args.sample_rate)
                 single_target = AudioSignal(target_audio.audio_data[i].cpu(), args.sample_rate)
                 single_recon = AudioSignal(recons.audio_data[i].cpu(), args.sample_rate)
-                
+
                 stft_loss = wrapper.stft_loss(single_recon, single_target)
                 envelope_loss = wrapper.envelope_loss(single_recon, single_target)
-                
+
                 if stft_loss < 3 and envelope_loss <= 0.1:
                     counter += 1
                     single_recon.write(f"{args.save_audio_path}/{counter:02d}_{convert_type}.wav")
                     single_target.write(f"{args.save_audio_path}/{counter:02d}_gt.wav")
                     single_orig.write(f"{args.save_audio_path}/{counter:02d}_orig.wav")
                     single_ref.write(f"{args.save_audio_path}/{counter:02d}_ref.wav")
-            
-            
+
+
                 if counter >= 10:
                     break
-                
+
             if counter >= 10:
                 break
 

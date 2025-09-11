@@ -895,11 +895,11 @@ class EDM_MN_Dataset_Abl(Dataset):
             timbre_id = ref_timbre_id
 
             ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
-            
+
             timbre_match = ref_audio
             content_match = orig_audio
-            
-            
+
+
 
 
         # 4. Decoder's output GT
@@ -917,7 +917,7 @@ class EDM_MN_Dataset_Abl(Dataset):
         assert self.paired_data[idx][2] == adsr_id, "Paired data ADSR ID does not match the original ADSR ID"
         assert self.paired_data[target_idx][2] == adsr_id, "Target data ADSR ID does not match the original ADSR ID"
         assert ref_adsr_id == adsr_id, "Ref data ADSR ID does not match the original ADSR ID"
-        
+
         return {
             'target': target_audio,         # T1, C1, A1
             'pitch': target_pitch,
@@ -1645,7 +1645,7 @@ class EDM_MN_Val_Dataset_Abl(Dataset):
         ref_idx = self._get_random_match_total(timbre_id, midi_id, adsr_id)
         ref_timbre_id, ref_midi_id, ref_adsr_id, ref_wav_path, _ = self.paired_data[ref_idx]
         assert ref_adsr_id == adsr_id, "Ref ADSR ID does not match the original ADSR ID"
-        
+
         ref_offset_pick, ref_offset = self._get_onset(ref_idx)
         ref_audio = self._load_audio(ref_wav_path, ref_offset_pick)
         # ref_onset = self._get_onset_period(ref_offset_pick, ref_offset)
@@ -1685,7 +1685,7 @@ class EDM_MN_Val_Dataset_Abl(Dataset):
             'ref_adsr': ref_adsr_id,
 
             'orig_pitch': orig_pitch,
-            
+
             'target_timbre': target_timbre,
 
             'metadata': {
@@ -1726,7 +1726,7 @@ class EDM_MN_Val_Dataset_Abl(Dataset):
             'ref_timbre': torch.tensor([item['ref_timbre'] for item in batch], dtype=torch.long),
             'orig_adsr': torch.tensor([item['orig_adsr'] for item in batch], dtype=torch.long),
             'ref_adsr': torch.tensor([item['ref_adsr'] for item in batch], dtype=torch.long),
-            
+
             'target_timbre': AudioSignal.batch([item['target_timbre'] for item in batch]),
             'metadata': [item['metadata'] for item in batch]
         }
