@@ -694,7 +694,6 @@ class EDM_MN_Dataset_Abl(Dataset):
         # Create ID mappings for all three levels
         self.timbre_to_files = {}
         self.content_to_files = {}
-        self.adsr_to_files = {}
         self.ids_to_item_idx = {}
 
         # Storing names
@@ -712,17 +711,13 @@ class EDM_MN_Dataset_Abl(Dataset):
             midi_id = data['midi_index']
             midi_key = f"C{midi_id:03d}"
 
-            if timbre_id not in self.timbre_to_files:
-                self.timbre_to_files[timbre_id] = []
-            self.timbre_to_files[timbre_id].append(counter)
+            # if timbre_id not in self.timbre_to_files:
+            #     self.timbre_to_files[timbre_id] = []
+            # self.timbre_to_files[timbre_id].append(counter)
 
-            if midi_id not in self.content_to_files:
-                self.content_to_files[midi_id] = []
-            self.content_to_files[midi_id].append(counter)
-
-            if adsr_id not in self.adsr_to_files:
-                self.adsr_to_files[adsr_id] = []
-            self.adsr_to_files[adsr_id].append(counter)
+            # if midi_id not in self.content_to_files:
+            #     self.content_to_files[midi_id] = []
+            # self.content_to_files[midi_id].append(counter)
 
 
             midi_path = os.path.join(
@@ -735,7 +730,7 @@ class EDM_MN_Dataset_Abl(Dataset):
             counter += 1
 
         print(f"Total data: {len(self.paired_data)}")
-        print(f"Total Timbre: {len(self.timbre_to_files)}, Total Content: {len(self.content_to_files)}, Total ADSR: {len(self.adsr_to_files)}")
+        print(f"Total Timbre: {len(self.timbre_to_files)}, Total Content: {len(self.content_to_files)}")
 
 
     def _load_audio(self, file_path: Path, offset: float = 0.0) -> AudioSignal:
@@ -750,21 +745,27 @@ class EDM_MN_Dataset_Abl(Dataset):
 
     # From Multi-Notes
     def _get_random_match_content(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
-        possible_matches = [
-            idx for idx in self.content_to_files[content_id]
-                if self.paired_data[idx][0] != timbre_id and \
-                    self.paired_data[idx][2] != adsr_id
-        ]
-        return random.choice(possible_matches)
+        timb = random.randint(0, 249)
+        return self.ids_to_item_idx[f"T{timb:03d}_ADSR{adsr_id:03d}_C{content_id:03d}"]
+        
+        # possible_matches = [
+        #     idx for idx in self.content_to_files[content_id]
+        #         if self.paired_data[idx][0] != timbre_id and \
+        #             self.paired_data[idx][2] == adsr_id
+        # ]
+        # return random.choice(possible_matches)
 
     # From Multi-Notes
     def _get_random_match_timbre(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
-        possible_matches = [
-            idx for idx in self.timbre_to_files[timbre_id]
-                if self.paired_data[idx][1] != content_id and \
-                    self.paired_data[idx][2] != adsr_id
-        ]
-        return random.choice(possible_matches)
+        content = random.randint(0, 99)
+        return self.ids_to_item_idx[f"T{timbre_id:03d}_ADSR{adsr_id:03d}_C{content:03d}"]
+        
+        # possible_matches = [
+        #     idx for idx in self.timbre_to_files[timbre_id]
+        #         if self.paired_data[idx][1] != content_id and \
+        #             self.paired_data[idx][2] == adsr_id
+        # ]
+        # return random.choice(possible_matches)
 
 
     def _midi_to_pitch_sequence(self, midi_path: Path, duration: float, offset: float = 0.0) -> torch.Tensor:
@@ -811,79 +812,19 @@ class EDM_MN_Dataset_Abl(Dataset):
             return torch.zeros((n_frames, self.n_notes))
 
 
-
-    def _pad(self, wav: torch.Tensor) -> torch.Tensor:
-        length = wav.size(-1)
-        pad = (math.ceil(length / self.hop_length) * self.hop_length) - length
-        return F.pad(wav, (0, pad))
-
-
-    def _load_adsr_curve(self, wav: torch.Tensor) -> torch.Tensor:
-        wav = self._pad(wav)
-        rms = torch.sqrt(
-            F.avg_pool1d(wav**2, kernel_size=self.hop_length, stride=self.hop_length) + self.eps
-        )
-        log_rms = torch.log(rms + self.eps)
-        return log_rms
-
-
-    def _map_midi_adsr_to_pitch(self, midi_path: Path, target_audio: AudioSignal,
-                                offset: float, adsr_threshold: float = -3) -> torch.Tensor:
-        '''
-        Load ADSR curve and revise the target pitch sequence.
-        For each note, only activate the pitch if the ADSR value is above the threshold.
-        '''
-        # 1. Load ADSR curve
-        adsr_curve = self._load_adsr_curve(target_audio.audio_data).squeeze()
-
-        pm = pretty_midi.PrettyMIDI(str(midi_path))
-        n_frames = math.ceil(self.duration * self.sample_rate / self.hop_length)
-        pitch_sequence = np.zeros((n_frames, self.n_notes))
-
-        for instrument in pm.instruments:
-            for note in instrument.notes:
-                # Adjust note timing by subtracting offset
-                note_start = note.start - offset
-                note_end = note.end - offset
-
-                # Skip notes that end before our offset window starts
-                if note_end <= 0:
-                    continue
-
-                # Skip notes that start after our duration window ends
-                if note_start >= self.duration:
-                    continue
-
-                # Clamp note timing to our duration window
-                note_start = max(0, note_start)
-                note_end = min(self.duration, note_end)
-
-                start_frame = int(note_start * self.sample_rate / self.hop_length)
-                end_frame = int(note_end * self.sample_rate / self.hop_length)
-
-                start_frame = max(0, min(start_frame, n_frames-1))
-                end_frame = max(0, min(end_frame, n_frames-1))
-
-                note_idx = note.pitch - self.min_note
-
-                if 0 <= note_idx < self.n_notes and start_frame <= end_frame:
-                    # Apply ADSR mask
-                    for frame in range(start_frame, end_frame + 1):
-                        if adsr_curve[frame] > adsr_threshold:
-                            pitch_sequence[frame, note_idx] = 1
-
-        return torch.FloatTensor(pitch_sequence)
-
-
     # From validation
     def _get_random_match_total(self, timbre_id: int, content_id: int, adsr_id: int) -> int:
-        possible_matches = [
-            idx for idx in range(len(self.paired_data))
-                if self.paired_data[idx][0] != timbre_id and \
-                    self.paired_data[idx][1] != content_id and \
-                    self.paired_data[idx][2] == adsr_id # Revision
-        ]
-        return random.choice(possible_matches)
+        timb = random.randint(0, 249)
+        content = random.randint(0, 99)
+        return self.ids_to_item_idx[f"T{timb:03d}_ADSR{adsr_id:03d}_C{content:03d}"]
+        
+        # possible_matches = [
+        #     idx for idx in range(len(self.paired_data))
+        #         if self.paired_data[idx][0] != timbre_id and \
+        #             self.paired_data[idx][1] != content_id and \
+        #             self.paired_data[idx][2] == adsr_id # Revision
+        # ]
+        # return random.choice(possible_matches)
 
 
     # Perturbation or not for the Encoder input
